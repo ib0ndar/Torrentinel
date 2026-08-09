@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg"></a>
+  <a href="https://hub.docker.com/r/bah0/torrentinel"><img alt="Docker image" src="https://img.shields.io/docker/v/bah0/torrentinel?sort=semver&amp;label=image"></a>
   <img alt="Node.js 22 or newer" src="https://img.shields.io/badge/node-%3E%3D22.20-5FA04E.svg">
   <img alt="Podman" src="https://img.shields.io/badge/container-Podman-892CA0.svg">
 </p>
@@ -88,6 +89,58 @@ Tracker adapters live under `server/trackers/plugins/`. Each plugin declares its
 - authentication, custom-mirror, artwork, and snapshot-version behavior.
 
 The scheduler consumes only these shared contracts, keeping collections, baselines, change events, and notifications independent of individual tracker implementations.
+
+## Quick start with Docker
+
+Requirements:
+
+- Docker Engine 24 or newer with the Docker Compose plugin;
+- outbound network access from the containers;
+- enough shared memory for the private browser sidecar.
+
+The published image supports both `linux/amd64` and `linux/arm64`. Clone the repository and start the supplied Compose deployment:
+
+```sh
+git clone https://github.com/ib0ndar/Torrentinel.git
+cd Torrentinel
+docker compose up -d
+```
+
+This starts `bah0/torrentinel:v0.1.0` and a private FlareSolverr sidecar. Only Torrentinel is published, on [http://localhost:8080](http://localhost:8080). Application state and the SQLite database use the separate `torrentinel_app` and `torrentinel_db` named volumes.
+
+To use another host port or an externally reachable address, provide them when starting the deployment:
+
+```sh
+TORRENTINEL_PORT=8999 \
+PUBLIC_URL=https://torrentinel.example.com \
+docker compose up -d
+```
+
+Useful commands:
+
+```sh
+docker compose pull
+docker compose up -d
+docker compose logs -f torrentinel
+docker compose down
+```
+
+`docker compose down` preserves both named volumes. Do not add `--volumes` unless you intend to delete all application state and the database.
+
+To run only the application container without RuTracker browser resolution:
+
+```sh
+docker run -d \
+  --name torrentinel \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v torrentinel_app:/var/lib/torrentinel \
+  -v torrentinel_db:/data \
+  -e PUBLIC_URL=http://localhost:8080 \
+  bah0/torrentinel:v0.1.0
+```
+
+Open [http://localhost:8080](http://localhost:8080) and sign in with `admin` / `admin`. Torrentinel requires the default password to be changed immediately.
 
 ## Quick start with Podman
 

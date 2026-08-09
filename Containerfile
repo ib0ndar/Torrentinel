@@ -13,6 +13,19 @@ RUN npm run build && npm prune --omit=dev
 
 FROM docker.io/library/node:22-bookworm-slim AS runtime
 
+ARG VERSION=dev
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="Torrentinel" \
+      org.opencontainers.image.description="A private, self-hosted sentinel for torrent release changes" \
+      org.opencontainers.image.url="https://github.com/ib0ndar/Torrentinel" \
+      org.opencontainers.image.source="https://github.com/ib0ndar/Torrentinel" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.version="$VERSION" \
+      org.opencontainers.image.revision="$VCS_REF" \
+      org.opencontainers.image.created="$BUILD_DATE"
+
 ENV NODE_ENV=production \
     PORT=8080 \
     DATA_DIR=/data \

@@ -1,0 +1,32 @@
+services:
+  torrentinel:
+    image: bah0/torrentinel:v0.1.0
+    container_name: torrentinel
+    restart: unless-stopped
+    depends_on:
+      flaresolverr:
+        condition: service_started
+    ports:
+      - "${TORRENTINEL_PORT:-8080}:8080"
+    environment:
+      FLARESOLVERR_URL: http://flaresolverr:8191/v1
+      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
+    volumes:
+      - torrentinel_app:/var/lib/torrentinel
+      - torrentinel_db:/data
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
+    container_name: torrentinel_flaresolverr
+    restart: unless-stopped
+    shm_size: 512m
+    environment:
+      LOG_LEVEL: info
+    tmpfs:
+      - /config:size=64m,mode=0700
+
+volumes:
+  torrentinel_app:
+    name: torrentinel_app
+  torrentinel_db:
+    name: torrentinel_db
