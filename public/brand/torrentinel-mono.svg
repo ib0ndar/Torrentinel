@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Torrentinel">
+  <!-- Single-colour build: inherits currentColor. For stencils, embroidery, one-colour print. -->
+  <g fill="none" stroke="currentColor">
+    <path d="M128 34 L209.4 81 L209.4 175 L128 222 L46.6 175 L46.6 81 Z"
+          stroke-width="22" stroke-dasharray="66 28" stroke-dashoffset="80" stroke-linecap="butt"/>
+  </g>
+  <circle cx="128" cy="34" r="12" fill="currentColor"/>
+  <path d="M110 64 H146 V114 H176 L128 184 L80 114 H110 Z" fill="currentColor"/>
+</svg>

@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.env
+data
+app-data
+*.db*
+*.key
+*.pem
+*.p12
+*.pfx
+secrets
+.playwright-cli
+coverage
+output
+.DS_Store
+*.log

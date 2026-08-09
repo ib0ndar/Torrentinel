@@ -1,0 +1,15 @@
+{
+  "name": "Torrentinel",
+  "short_name": "Torrentinel",
+  "description": "Always watching the swarm.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1020",
+  "theme_color": "#0B1020",
+  "icons": [
+    { "src": "/brand/png/app-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/png/app-icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/brand/png/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand/torrentinel-mark.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

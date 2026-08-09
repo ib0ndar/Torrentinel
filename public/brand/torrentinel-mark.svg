@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Torrentinel">
+  <defs>
+    <linearGradient id="t-grad" x1="0.08" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="0.55" stop-color="#4F7DF3"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Aperture: six blades, gaps centred on the vertices -->
+  <path d="M128 34 L209.4 81 L209.4 175 L128 222 L46.6 175 L46.6 81 Z"
+        fill="none" stroke="url(#t-grad)" stroke-width="22"
+        stroke-dasharray="66 28" stroke-dashoffset="80" stroke-linecap="butt"/>
+
+  <!-- Detection ping, seated in the top gap -->
+  <circle cx="128" cy="34" r="12" fill="#FBBF24"/>
+
+  <!-- Torrent download arrow -->
+  <path d="M110 64 H146 V114 H176 L128 184 L80 114 H110 Z" fill="url(#t-grad)"/>
+</svg>

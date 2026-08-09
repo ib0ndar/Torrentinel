@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="ti-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M12 3 19.79 7.5 19.79 16.5 12 21 4.21 16.5 4.21 7.5Z"
+      stroke-dasharray="6.2 2.8" stroke-dashoffset="7.6" stroke-linecap="butt"/>
+<path d="M10.6 7.8h2.8v4h2.2L12 16.1 8.4 11.8h2.2z" fill="currentColor" stroke="none"/>
+<circle cx="12" cy="3" r="1.5" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ti-hexagon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M12 3 19.79 7.5 19.79 16.5 12 21 4.21 16.5 4.21 7.5Z"/>
+  </symbol>
+  <symbol id="ti-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M12 3.5v10"/><path d="M8 9.8 12 13.8 16 9.8"/><path d="M4 19.5h16"/>
+  </symbol>
+  <symbol id="ti-seed-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M12 13.8V3.8"/><path d="M8 7.8 12 3.8 16 7.8"/><path d="M4 19.5h16"/>
+  </symbol>
+  <symbol id="ti-magnet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M4 19.8v-7.6a8 8 0 0 1 16 0v7.6"/>
+<path d="M9 19.8v-7.6a3 3 0 0 1 6 0v7.6"/>
+<path d="M4 16.1h5"/><path d="M15 16.1h5"/>
+  </symbol>
+  <symbol id="ti-swarm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="12" cy="12" r="2.6"/>
+<circle cx="12" cy="4.2" r="1.7"/><circle cx="18.8" cy="16" r="1.7"/><circle cx="5.2" cy="16" r="1.7"/>
+<path d="M12 9.4V5.9"/><path d="m14.3 13.4 3 1.7"/><path d="m9.7 13.4-3 1.7"/>
+  </symbol>
+  <symbol id="ti-tracker" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<rect x="3.2" y="4.5" width="17.6" height="6" rx="1.6"/>
+<rect x="3.2" y="13.5" width="17.6" height="6" rx="1.6"/>
+<path d="M6.6 7.5h.01"/><path d="M6.6 16.5h.01"/>
+  </symbol>
+  <symbol id="ti-monitor-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M2.5 12S6 6.4 12 6.4 21.5 12 21.5 12 18 17.6 12 17.6 2.5 12 2.5 12z"/>
+<circle cx="12" cy="12" r="2.8"/>
+  </symbol>
+  <symbol id="ti-radar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="12" cy="12" r="8.6"/>
+<circle cx="12" cy="12" r="4.2"/>
+<path d="m12 12 6.1-6.1"/>
+<circle cx="15.9" cy="15.6" r="1.4" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ti-keyword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M9.6 3.6 7.6 20.4"/><path d="M16.4 3.6 14.4 20.4"/>
+<path d="M4.2 9h15.6"/><path d="M3.6 15h15.6"/>
+  </symbol>
+  <symbol id="ti-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M2.5 12h4l2.6-6.6 4.4 13.2 2.6-6.6h4.4"/>
+  </symbol>
+  <symbol id="ti-rss" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M4.6 12.4a7 7 0 0 1 7 7"/>
+<path d="M4.6 5.6a13.8 13.8 0 0 1 13.8 13.8"/>
+<circle cx="5.1" cy="18.9" r="1.5" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ti-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M18 9.6a6 6 0 1 0-12 0c0 5.4-2.5 7-2.5 7h17s-2.5-1.6-2.5-7"/>
+<path d="M13.8 19.8a2.1 2.1 0 0 1-3.6 0"/>
+  </symbol>
+  <symbol id="ti-bell-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M17.6 11c0 4.6 2.4 5.6 2.4 5.6H4s2.5-1.6 2.5-7a5.5 5.5 0 0 1 7.3-5.2"/>
+<path d="M13.8 19.8a2.1 2.1 0 0 1-3.6 0"/>
+<circle cx="18.6" cy="5.6" r="2.7" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ti-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M12 3.9 21.4 19.9H2.6z"/>
+<path d="M12 9.6v4.4"/>
+<circle cx="12" cy="17" r="1.05" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ti-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="12" cy="12" r="8.8"/><path d="m8 12.2 2.8 2.8 5.2-5.6"/>
+  </symbol>
+  <symbol id="ti-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="10.5" cy="10.5" r="6.8"/><path d="m15.4 15.4 5.1 5.1"/>
+  </symbol>
+  <symbol id="ti-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M3.6 5h16.8l-6.6 7.8v5.4l-3.7 2v-7.4z"/>
+  </symbol>
+  <symbol id="ti-add" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="12" cy="12" r="8.8"/><path d="M12 8.1v7.8"/><path d="M8.1 12h7.8"/>
+  </symbol>
+  <symbol id="ti-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<rect x="6.4" y="4.6" width="4" height="14.8" rx="1.4"/>
+<rect x="13.6" y="4.6" width="4" height="14.8" rx="1.4"/>
+  </symbol>
+  <symbol id="ti-resume" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M7.6 4.9 19 12 7.6 19.1z"/>
+  </symbol>
+  <symbol id="ti-sync" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M20.4 12a8.4 8.4 0 0 1-14.5 5.9"/>
+<path d="M3.6 12a8.4 8.4 0 0 1 14.5-5.9"/>
+<path d="M18.2 2.4v3.9h-3.9"/><path d="M5.8 21.6v-3.9h3.9"/>
+  </symbol>
+  <symbol id="ti-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M4 6.6h16"/><path d="M9.5 6.6V4.3h5v2.3"/>
+<path d="M6.3 6.6 7.1 20.2h9.8l.8-13.6"/>
+<path d="M10.3 10.4v6"/><path d="M13.7 10.4v6"/>
+  </symbol>
+  <symbol id="ti-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M10 13.6a4.6 4.6 0 0 0 6.7.4l2.5-2.5a4.6 4.6 0 0 0-6.5-6.5l-1.4 1.4"/>
+<path d="M14 10.4a4.6 4.6 0 0 0-6.7-.4l-2.5 2.5a4.6 4.6 0 0 0 6.5 6.5l1.4-1.4"/>
+  </symbol>
+  <symbol id="ti-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="12" cy="12" r="8.8"/><path d="M12 6.9V12l3.4 2"/>
+  </symbol>
+  <symbol id="ti-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M3.6 12a8.5 8.5 0 1 0 2.7-6.2"/>
+<path d="M3.3 4.1v4.1h4.1"/>
+<path d="M12 7.6V12l3 1.8"/>
+  </symbol>
+  <symbol id="ti-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="m12 3.7 2.6 5.5 6 .9-4.3 4.2 1 6-5.3-2.8-5.3 2.8 1-6-4.3-4.2 6-.9z"/>
+  </symbol>
+  <symbol id="ti-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M12 3.3 4.6 6.2v5.6c0 4.5 3 7.9 7.4 9.1 4.4-1.2 7.4-4.6 7.4-9.1V6.2z"/>
+<path d="m8.9 12 2.4 2.4 4.1-4.3"/>
+  </symbol>
+  <symbol id="ti-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+<path d="M3.4 7.2h9.4"/><path d="M17.6 7.2h3"/>
+<circle cx="15.2" cy="7.2" r="2.4"/>
+<path d="M3.4 16.8h3.4"/><path d="M11.6 16.8h9"/>
+<circle cx="9.2" cy="16.8" r="2.4"/>
+  </symbol>
+</svg>

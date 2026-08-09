@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Torrentinel">
+  <!-- Favicon / small-size build: heavier strokes, ping merged into the silhouette -->
+  <defs>
+    <linearGradient id="f-grad" x1="0.08" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="0.55" stop-color="#4F7DF3"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <path d="M128 40 L203 83 L203 173 L128 216 L53 173 L53 83 Z"
+        fill="none" stroke="url(#f-grad)" stroke-width="30"
+        stroke-dasharray="56 31" stroke-dashoffset="71" stroke-linecap="butt"/>
+  <circle cx="128" cy="40" r="16" fill="#FBBF24"/>
+  <path d="M107 68 H149 V116 H180 L128 188 L76 116 H107 Z" fill="url(#f-grad)"/>
+</svg>
