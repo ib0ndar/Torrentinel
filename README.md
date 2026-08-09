@@ -33,6 +33,22 @@ Torrentinel does not host, index, or download copyrighted material. Use it only 
 - Native TypeScript tracker plugins designed for future extension.
 - Rootless Podman deployment with two persistent named volumes.
 
+## Screenshots
+
+These screenshots use fictional demo subscriptions and contain no production account data.
+
+### Monitor workspace
+
+![Torrentinel monitor workspace with collections, direct subscriptions, and phrase-based rules](docs/screenshots/monitor-workspace.png)
+
+### Subscription details
+
+![Direct subscription details with cover art, release links, monitoring state, and change history](docs/screenshots/subscription-details.png)
+
+### Administration and tracker diagnostics
+
+![Administration interface with polling controls and tracker diagnostic logs](docs/screenshots/administration-diagnostics.png)
+
 ## Supported trackers
 
 | Tracker | Direct links | Rules | Authentication | Rule source |
