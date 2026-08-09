@@ -171,7 +171,6 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .subscription-row--unread .subscription-main strong { font-weight: 760; }
 .subscription-main small { overflow: hidden; color: var(--dim); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .type-icon { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); }
-.type-icon--rule { color: var(--accent); background: rgba(34,211,238,.07); border-color: rgba(34,211,238,.18); }
 .type-icon--updated { color: var(--warning); background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.2); }
 .updated-marker { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 10px rgba(251,191,36,.65); }
 .tracker-stack { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
