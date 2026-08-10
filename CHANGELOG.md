@@ -2,6 +2,13 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.2.2] - 2026-08-10
+
+### Fixed
+
+- Versioned the external SVG icon-sprite URL so browsers cannot combine a new interface bundle with an older cached sprite after an upgrade.
+- Restored the unread circle-and-dot icon for clients that had cached the pre-0.2.1 sprite.
+
 ## [0.2.1] - 2026-08-10
 
 ### Added
@@ -45,6 +52,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.2.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.2
 [0.2.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.1.0

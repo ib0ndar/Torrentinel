@@ -31,6 +31,7 @@ type Toast = { id: number; message: string; tone: "good" | "bad" };
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
 const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_VERSION}`;
+const ICON_SPRITE_URL = `/brand/ui/sprite.svg?v=${encodeURIComponent(APP_VERSION)}`;
 
 const DEFAULT_IGNORED_PHRASES = [
   "Trailer",
@@ -982,7 +983,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     check: "check",
     unread: "unread",
   };
-  return <svg className={`icon icon--${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><use href={`/brand/ui/sprite.svg#ti-${symbols[name]}`} /></svg>;
+  return <svg className={`icon icon--${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><use href={`${ICON_SPRITE_URL}#ti-${symbols[name]}`} /></svg>;
 }
 
 type Notify = (message: string, tone?: Toast["tone"]) => void;
