@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import packageManifest from "../package.json";
 import { api, ApiError, jsonBody } from "./api";
 import type {
   AdminMirror,
@@ -26,6 +27,10 @@ import type {
 } from "./types";
 
 type Toast = { id: number; message: string; tone: "good" | "bad" };
+
+const APP_VERSION = packageManifest.version;
+const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
+const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_VERSION}`;
 
 const DEFAULT_IGNORED_PHRASES = [
   "Trailer",
@@ -240,6 +245,15 @@ function AppShell({ user, setUser, notify, path, navigate, renderPage }: { user:
           <span><strong>{user.username}</strong><small>Sign out</small></span>
           <Icon name="arrow" size={15} />
         </button>
+        <a
+          className="app-version"
+          href={RELEASE_URL}
+          target="_blank"
+          rel="noreferrer"
+          title={APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`}
+        >
+          v{APP_VERSION}
+        </a>
       </aside>
       <div className="app-stage">{renderPage(intervalMinutes)}</div>
     </div>
@@ -403,7 +417,15 @@ function SubscriptionRow({ item, index, onOpen, onChanged, notify }: { item: Sub
         <span className="time-cell">{item.lastCheckedAt ? relativeTime(item.lastCheckedAt) : "Pending"}</span>
         <span className="row-status">{item.lastError ? <span className="state state--error">Needs attention</span> : !item.enabled ? <span className="state">Paused</span> : item.isUpdated ? <span className="state state--updated">Updated</span> : !item.initialized ? <span className="state state--pending">Learning</span> : <span className="state state--good">Watching</span>}</span>
       </button>
-      <button type="button" className={`read-toggle ${item.isUnread ? "read-toggle--unread" : ""}`} aria-label={item.isUnread ? "Mark read" : "Mark unread"} title={item.isUnread ? "Mark read" : "Mark unread"} onClick={markRead}><Icon name={item.isUnread ? "check" : "star"} size={16} /></button>
+      <button
+        type="button"
+        className={`read-toggle ${item.isUnread ? "read-toggle--unread" : ""}`}
+        aria-label={item.isUnread ? "Unread. Mark read" : "Read. Mark unread"}
+        title={item.isUnread ? "Unread — click to mark read" : "Read — click to mark unread"}
+        onClick={markRead}
+      >
+        <Icon name={item.isUnread ? "unread" : "check"} size={18} />
+      </button>
     </div>
   );
 }
@@ -934,7 +956,7 @@ function BrandMark({ size = 32 }: { size?: number }) {
   return <img className="brand-mark" src="/brand/torrentinel-mark.svg" width={size} height={size} alt="" aria-hidden="true" />;
 }
 
-type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert" | "check" | "star";
+type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert" | "check" | "unread";
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const symbols: Record<IconName, string> = {
     monitor: "monitor-eye",
@@ -958,7 +980,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     close: "add",
     bellAlert: "bell-alert",
     check: "check",
-    star: "star",
+    unread: "unread",
   };
   return <svg className={`icon icon--${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><use href={`/brand/ui/sprite.svg#ti-${symbols[name]}`} /></svg>;
 }

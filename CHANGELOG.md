@@ -2,6 +2,18 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.2.1] - 2026-08-10
+
+### Added
+
+- The currently running version is displayed beneath the account control in the desktop sidebar and links to its GitHub release.
+- Container builds embed their source revision, which appears in the version tooltip for precise build identification.
+
+### Changed
+
+- Read state now uses a muted circular check, while unread state uses a matching luminous circle with a center dot.
+- Read/unread controls now announce both their current state and toggle action to assistive technology.
+
 ## [0.2.0] - 2026-08-10
 
 ### Added
@@ -33,5 +45,6 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.2.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.1.0

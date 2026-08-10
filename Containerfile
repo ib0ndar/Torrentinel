@@ -1,5 +1,8 @@
 FROM docker.io/library/node:22-bookworm-slim AS build
 
+ARG VCS_REF=development
+ENV VITE_APP_REVISION=$VCS_REF
+
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*

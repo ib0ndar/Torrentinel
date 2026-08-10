@@ -106,7 +106,7 @@ cd Torrentinel
 docker compose up -d
 ```
 
-This starts `bah0/torrentinel:v0.2.0` and a private FlareSolverr sidecar. Only Torrentinel is published, on [http://localhost:8080](http://localhost:8080). Application state and the SQLite database use the separate `torrentinel_app` and `torrentinel_db` named volumes.
+This starts `bah0/torrentinel:v0.2.1` and a private FlareSolverr sidecar. Only Torrentinel is published, on [http://localhost:8080](http://localhost:8080). Application state and the SQLite database use the separate `torrentinel_app` and `torrentinel_db` named volumes.
 
 To use another host port or an externally reachable address, provide them when starting the deployment:
 
@@ -137,7 +137,7 @@ docker run -d \
   -v torrentinel_app:/var/lib/torrentinel \
   -v torrentinel_db:/data \
   -e PUBLIC_URL=http://localhost:8080 \
-  bah0/torrentinel:v0.2.0
+  bah0/torrentinel:v0.2.1
 ```
 
 Open [http://localhost:8080](http://localhost:8080) and sign in with `admin` / `admin`. Torrentinel requires the default password to be changed immediately.
