@@ -277,7 +277,6 @@ export function registerRoutes(
       if (!adapter.direct) return reply.code(400).send({ error: "This tracker does not support direct subscriptions" });
       trackers = [adapter.manifest.key];
       directUrl = input.url;
-      name = input.name?.trim() || "";
     } else {
       const unsupported = input.trackerKeys.find((key) => !trackerRegistry.get(key)?.rules);
       if (unsupported) return reply.code(400).send({ error: `${unsupported} does not support rule subscriptions` });
@@ -351,7 +350,7 @@ export function registerRoutes(
     }
 
     const updates: Record<string, unknown> = {
-      name: current.type === "rule" ? "" : input.name ?? current.name,
+      name: current.type === "rule" ? "" : current.name,
       collection_id: input.collectionId ?? current.collection_id,
       enabled: input.enabled === undefined ? current.enabled : input.enabled ? 1 : 0,
       updated_at: nowIso(),
@@ -656,7 +655,6 @@ const subscriptionCreateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("direct"),
     collectionId: z.string().min(1),
-    name: z.string().trim().max(160).optional(),
     url: urlSchema,
   }),
   z.object({
@@ -668,7 +666,6 @@ const subscriptionCreateSchema = z.discriminatedUnion("type", [
   }),
 ]);
 const subscriptionUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(160).optional(),
   collectionId: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
   url: urlSchema.optional(),
@@ -767,6 +764,9 @@ function serializeCollection(value: unknown) {
 
 function serializeSubscription(row: SubscriptionDbRow) {
   const currentSnapshot = jsonObject(row.current_snapshot);
+  const currentTitle = typeof currentSnapshot?.title === "string" && currentSnapshot.title.trim()
+    ? currentSnapshot.title
+    : undefined;
   const requiredTerms = jsonArray(row.required_terms);
   return {
     id: row.id,
@@ -775,7 +775,7 @@ function serializeSubscription(row: SubscriptionDbRow) {
     type: row.type,
     label: row.type === "rule"
       ? ruleLabel(requiredTerms)
-      : row.name || (typeof currentSnapshot?.title === "string" ? currentSnapshot.title : "Direct subscription"),
+      : currentTitle || row.name || "Direct subscription",
     directUrl: row.direct_url,
     requiredTerms,
     ignoredTerms: jsonArray(row.ignored_terms),

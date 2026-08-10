@@ -395,7 +395,7 @@ function SubscriptionRow({ item, index, onOpen, onChanged, notify }: { item: Sub
           <span className={`type-icon type-icon--${item.type} ${item.isUpdated ? "type-icon--updated" : ""}`}><Icon name={item.isUpdated ? "bellAlert" : item.type === "direct" ? "link" : "rule"} size={17} /></span>
           <span>
             {item.type === "rule" ? <PhraseDisplay phrases={item.requiredTerms} /> : <strong>{item.label}</strong>}
-            <small>{item.type === "rule" ? item.ignoredTerms.length ? `Excludes ${item.ignoredTerms.join(", ")}` : "Matches every required phrase" : item.currentSnapshot?.title || item.directUrl}</small>
+            <small>{item.type === "rule" ? item.ignoredTerms.length ? `Excludes ${item.ignoredTerms.join(", ")}` : "Matches every required phrase" : item.directUrl}</small>
           </span>
           {item.isUpdated && <span className="updated-marker" title="Updated" />}
         </span>
@@ -423,7 +423,6 @@ function NewCollection({ onClose, onCreated, notify }: { onClose: () => void; on
 
 function CreateSubscription({ collection, onClose, onCreated, notify }: { collection: Collection; onClose: () => void; onCreated: () => Promise<void>; notify: Notify }) {
   const [type, setType] = useState<"direct" | "rule">("direct");
-  const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [required, setRequired] = useState<string[]>([]);
   const [ignored, setIgnored] = useState<string[]>([...DEFAULT_IGNORED_PHRASES]);
@@ -436,7 +435,7 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true);
     const payload = type === "direct"
-      ? { type, collectionId: collection.id, name: name || undefined, url }
+      ? { type, collectionId: collection.id, url }
       : { type, collectionId: collection.id, trackerKeys: selectedTrackers, requiredTerms: required, ignoredTerms: ignored };
     try {
       await api("/api/subscriptions", { method: "POST", ...jsonBody(payload) });
@@ -450,7 +449,6 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
       <form onSubmit={submit}>
         {type === "direct" ? <>
           <Field label="Tracker page URL" hint="Kinozal, Rutor, or RuTracker"><input type="url" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} autoFocus required /></Field>
-          <Field label="Display name" hint="Optional — the tracker title is used after the first check"><input value={name} onChange={(event) => setName(event.target.value)} maxLength={160} /></Field>
           <InfoLine icon="clock">The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.</InfoLine>
         </> : <>
           <Field label="Trackers"><div className="tracker-picker">{trackers.map((tracker) => <label key={tracker.key} className={selectedTrackers.includes(tracker.key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={selectedTrackers.includes(tracker.key)} onChange={() => setSelectedTrackers((current) => current.includes(tracker.key) ? current.filter((key) => key !== tracker.key) : [...current, tracker.key])} /><TrackerTag tracker={tracker.key} /><span>{tracker.displayName}</span>{!tracker.credentialsConfigured && tracker.key !== "rutor" && <small>credentials missing</small>}</label>)}</div></Field>
@@ -538,7 +536,6 @@ function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: 
 }
 
 function EditSubscriptionForm({ item, busy, onCancel, onSave }: { item: Subscription; busy: boolean; onCancel: () => void; onSave: (payload: Record<string, unknown>) => Promise<void> }) {
-  const [name, setName] = useState(item.type === "direct" ? item.label : "");
   const [url, setUrl] = useState(item.directUrl || "");
   const [required, setRequired] = useState<string[]>(item.requiredTerms);
   const [ignored, setIgnored] = useState<string[]>(item.ignoredTerms);
@@ -547,19 +544,18 @@ function EditSubscriptionForm({ item, busy, onCancel, onSave }: { item: Subscrip
   async function submit(event: FormEvent) {
     event.preventDefault();
     const payload = item.type === "direct"
-      ? { name, url }
+      ? { url }
       : { requiredTerms: required, ignoredTerms: ignored, trackerKeys };
     await onSave(payload);
   }
 
   return <form className="edit-subscription" onSubmit={submit}>
-    {item.type === "direct" && <Field label="Display name"><input value={name} onChange={(event) => setName(event.target.value)} maxLength={160} required /></Field>}
     {item.type === "direct" ? <Field label="Tracker page URL"><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required /></Field> : <>
       <Field label="Trackers"><div className="tracker-picker">{(["kinozal", "rutor", "rutracker"] as TrackerKey[]).map((tracker) => <label key={tracker} className={trackerKeys.includes(tracker) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={trackerKeys.includes(tracker)} onChange={() => setTrackerKeys((current) => current.includes(tracker) ? current.filter((key) => key !== tracker) : [...current, tracker])} /><TrackerTag tracker={tracker} /><span>{trackerName(tracker)}</span></label>)}</div></Field>
       <Field label="Required phrases" hint="Press Enter to add"><PhraseInput ariaLabel="Required phrases" value={required} onChange={setRequired} placeholder="Type a phrase and press Enter" /></Field>
       <Field label="Ignored phrases" hint="Press Enter to add"><PhraseInput ariaLabel="Ignored phrases" value={ignored} onChange={setIgnored} placeholder="Type a phrase and press Enter" /></Field>
     </>}
-    <div className="inline-actions"><button type="button" className="button button--quiet" onClick={onCancel}>Cancel</button><button className="button button--primary" disabled={busy || (item.type === "direct" && !name.trim()) || (item.type === "rule" && (!required.length || !trackerKeys.length))}>Save changes</button></div>
+    <div className="inline-actions"><button type="button" className="button button--quiet" onClick={onCancel}>Cancel</button><button className="button button--primary" disabled={busy || (item.type === "rule" && (!required.length || !trackerKeys.length))}>Save changes</button></div>
   </form>;
 }
 

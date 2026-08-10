@@ -166,6 +166,43 @@ describe("authenticated API", () => {
       expect(db.prepare("SELECT DISTINCT name FROM subscriptions WHERE type = 'rule'").all())
         .toEqual([{ name: "" }]);
 
+      const directSubscriptionId = "900002";
+      const currentDirectSnapshot = {
+        trackerKey: "rutor",
+        externalId: "900002",
+        title: "Series / Episodes 1-3 of 10",
+        url: "https://rutor.is/torrent/900002/example",
+        fingerprint: "current-direct-fingerprint",
+      };
+      db.prepare(`
+        INSERT INTO subscriptions (
+          id, user_id, collection_id, type, name, direct_url, initialized,
+          current_fingerprint, current_snapshot, created_at, updated_at
+        ) VALUES (?, ?, ?, 'direct', ?, ?, 1, ?, ?, ?, ?)
+      `).run(
+        directSubscriptionId, login.json().user.id, privateCollectionId,
+        "Series / Episodes 1-2 of 10", currentDirectSnapshot.url,
+        currentDirectSnapshot.fingerprint, JSON.stringify(currentDirectSnapshot),
+        "2026-01-03T00:00:00.000Z", "2026-01-03T00:00:00.000Z",
+      );
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'rutor')")
+        .run(directSubscriptionId);
+
+      const listWithCurrentDirectTitle = await app.inject({
+        method: "GET",
+        url: `/api/subscriptions?collectionId=${privateCollectionId}`,
+        headers: { cookie: adminCookie },
+      });
+      expect(listWithCurrentDirectTitle.json().subscriptions.find(
+        (subscription: { id: string }) => subscription.id === directSubscriptionId,
+      )).toMatchObject({ label: currentDirectSnapshot.title });
+      const directDetails = await app.inject({
+        method: "GET",
+        url: `/api/subscriptions/${directSubscriptionId}`,
+        headers: { cookie: adminCookie },
+      });
+      expect(directDetails.json().subscription).toMatchObject({ label: currentDirectSnapshot.title });
+
       const createdUser = await app.inject({
         method: "POST",
         url: "/api/admin/users",

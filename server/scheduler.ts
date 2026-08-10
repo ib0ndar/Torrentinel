@@ -215,8 +215,7 @@ export class Scheduler {
         outcome = "baseline";
         this.db.prepare(`
           UPDATE subscriptions
-          SET name = CASE WHEN name = '' THEN ? ELSE name END,
-              initialized = 1, current_fingerprint = ?, current_snapshot = ?,
+          SET name = ?, initialized = 1, current_fingerprint = ?, current_snapshot = ?,
               last_checked_at = ?, last_error = NULL, updated_at = ?
           WHERE id = ?
         `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
@@ -233,15 +232,13 @@ export class Scheduler {
 
       if (previousDirectSnapshotWasTemporaryUnavailable(row.current_snapshot)) {
         outcome = "rebaseline";
-        const placeholderName = `RuTracker topic #${snapshot.externalId}`;
         this.db.prepare(`
           UPDATE subscriptions
-          SET name = CASE WHEN name = '' OR name = ? THEN ? ELSE name END,
-              initialized = 1, current_fingerprint = ?, current_snapshot = ?,
+          SET name = ?, initialized = 1, current_fingerprint = ?, current_snapshot = ?,
               last_checked_at = ?, last_error = NULL, updated_at = ?
           WHERE id = ?
         `).run(
-          placeholderName, snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot),
+          snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot),
           checkedAt, checkedAt, row.id,
         );
         return;
@@ -251,10 +248,10 @@ export class Scheduler {
         outcome = "cover-backfill";
         this.db.prepare(`
           UPDATE subscriptions
-          SET current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
+          SET name = ?, current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
               last_error = NULL, updated_at = ?
           WHERE id = ?
-        `).run(snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
+        `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
         return;
       }
 
@@ -262,10 +259,10 @@ export class Scheduler {
         outcome = "schema-upgrade";
         this.db.prepare(`
           UPDATE subscriptions
-          SET current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
+          SET name = ?, current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
               last_error = NULL, updated_at = ?
           WHERE id = ?
-        `).run(snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
+        `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
         return;
       }
 
@@ -278,10 +275,10 @@ export class Scheduler {
         this.db.transaction(() => {
           this.db.prepare(`
             UPDATE subscriptions
-            SET current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
+            SET name = ?, current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
                 last_changed_at = ?, last_error = NULL, is_updated = 1, updated_at = ?
             WHERE id = ?
-          `).run(currentSnapshot.fingerprint, JSON.stringify(currentSnapshot), checkedAt, checkedAt, checkedAt, row.id);
+          `).run(currentSnapshot.title, currentSnapshot.fingerprint, JSON.stringify(currentSnapshot), checkedAt, checkedAt, checkedAt, row.id);
           this.db.prepare(`
             INSERT INTO subscription_events
               (id, subscription_id, user_id, kind, summary, payload, created_at)
@@ -297,8 +294,8 @@ export class Scheduler {
       } else {
         outcome = "unchanged";
         this.db.prepare(`
-          UPDATE subscriptions SET last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
-        `).run(checkedAt, checkedAt, row.id);
+          UPDATE subscriptions SET name = ?, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
+        `).run(snapshot.title, checkedAt, checkedAt, row.id);
       }
     } catch (error) {
       observationError = error;

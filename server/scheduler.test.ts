@@ -1,13 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  Scheduler,
   directSnapshotIsTemporarilyUnavailable,
   directSnapshotRequiresSilentSchemaUpgrade,
   previousDirectSnapshotLacksCoverObservation,
   previousDirectSnapshotWasTemporaryUnavailable,
   titleMatches,
 } from "./scheduler.js";
+import { createDatabase } from "./db.js";
+import { SecretVault } from "./secrets.js";
 import { escapeTelegram } from "./telegram.js";
+import type { TelegramService } from "./telegram.js";
+import type { DirectSnapshot } from "./types.js";
 import { fingerprintRelease } from "./trackers/core/parsing.js";
+import { trackerRegistry } from "./trackers/index.js";
 
 describe("rule matching", () => {
   it("requires every required phrase without case sensitivity", () => {
@@ -76,5 +82,69 @@ describe("change and notification helpers", () => {
     };
     expect(directSnapshotRequiresSilentSchemaUpgrade(JSON.stringify({ metadata: { coverObserved: true } }), current)).toBe(true);
     expect(directSnapshotRequiresSilentSchemaUpgrade(JSON.stringify({ metadata: { snapshotVersion: 1 } }), current)).toBe(false);
+  });
+});
+
+describe("direct subscription title synchronization", () => {
+  it("updates the display title on scheduled changes and repairs stale titles on manual checks", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    const previous: DirectSnapshot = {
+      trackerKey: "rutor",
+      externalId: "900001",
+      title: "Series / Episodes 1-2 of 10",
+      url: "https://rutor.is/torrent/900001/example",
+      metadata: { snapshotVersion: 1, coverObserved: true },
+      fingerprint: "previous-fingerprint",
+    };
+    const current: DirectSnapshot = {
+      ...previous,
+      title: "Series / Episodes 1-3 of 10",
+      fingerprint: "current-fingerprint",
+    };
+    db.prepare(`
+      INSERT INTO subscriptions (
+        id, user_id, collection_id, type, name, direct_url, initialized,
+        current_fingerprint, current_snapshot, created_at, updated_at
+      ) VALUES (?, ?, ?, 'direct', ?, ?, 1, ?, ?, ?, ?)
+    `).run(
+      "900001", user.id, collection.id, previous.title, previous.url,
+      previous.fingerprint, JSON.stringify(previous), timestamp, timestamp,
+    );
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'rutor')")
+      .run("900001");
+
+    const plugin = trackerRegistry.get("rutor");
+    if (!plugin?.direct) throw new Error("Rutor direct monitor is unavailable");
+    const fetchSnapshot = vi.spyOn(plugin.direct, "fetchSnapshot").mockResolvedValue(current);
+    const notifyRelease = vi.fn(async () => undefined);
+    const telegram = { notifyRelease } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 7)));
+
+    try {
+      const scheduled = await scheduler.run("test");
+      expect(scheduled.changed).toBe(1);
+      expect(db.prepare("SELECT name FROM subscriptions WHERE id = '900001'").get())
+        .toEqual({ name: current.title });
+      const event = db.prepare("SELECT summary, payload FROM subscription_events WHERE subscription_id = '900001'")
+        .get() as { summary: string; payload: string };
+      expect(event.summary).toContain("title changed");
+      expect(JSON.parse(event.payload)).toMatchObject({
+        previous: { title: previous.title },
+        current: { title: current.title },
+      });
+      expect(notifyRelease).toHaveBeenCalledTimes(1);
+
+      db.prepare("UPDATE subscriptions SET name = ? WHERE id = '900001'").run(previous.title);
+      await scheduler.checkSubscription("900001", user.id);
+      expect(db.prepare("SELECT name FROM subscriptions WHERE id = '900001'").get())
+        .toEqual({ name: current.title });
+      expect(notifyRelease).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSnapshot.mockRestore();
+      db.close();
+    }
   });
 });
