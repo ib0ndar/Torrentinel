@@ -2,13 +2,6 @@
 
 All notable changes to Torrentinel are documented in this file.
 
-## [0.2.3] - 2026-08-11
-
-### Changed
-
-- Reworked the public README into a shorter, more conventional project overview focused on features, screenshots, installation, configuration, architecture, development, and licensing.
-- Simplified operational and contribution language while retaining the setup and backup information needed by self-hosting users.
-
 ## [0.2.2] - 2026-08-10
 
 ### Fixed
@@ -59,7 +52,6 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
-[0.2.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.3
 [0.2.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.2
 [0.2.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.0
