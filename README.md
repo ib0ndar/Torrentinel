@@ -3,102 +3,58 @@
 </p>
 
 <p align="center">
-  A private, self-hosted sentinel for torrent release changes.
+  A private, self-hosted monitor for torrent release changes.
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg"></a>
   <a href="https://hub.docker.com/r/bah0/torrentinel"><img alt="Docker image" src="https://img.shields.io/docker/v/bah0/torrentinel?sort=semver&amp;label=image"></a>
-  <img alt="Node.js 22 or newer" src="https://img.shields.io/badge/node-%3E%3D22.20-5FA04E.svg">
-  <img alt="Podman" src="https://img.shields.io/badge/container-Podman-892CA0.svg">
+  <a href="https://github.com/ib0ndar/Torrentinel/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/ib0ndar/Torrentinel"></a>
 </p>
 
-Torrentinel watches selected torrent trackers for new releases and changes. It combines direct-link monitoring, phrase-based rules, per-user collections, a responsive web interface, and private Telegram notifications in a small self-hosted deployment.
-
-Torrentinel does not host, index, or download copyrighted material. Use it only with trackers and content you are legally permitted to access.
+Torrentinel watches torrent releases and tells you when something changes. It supports direct-link subscriptions, phrase-based rules, personal collections, and Telegram notifications through a responsive web interface.
 
 ## Features
 
-- Direct-link subscriptions that monitor titles, covers, magnet links, torrent-file links, and tracker metadata.
-- Rule subscriptions with case-insensitive required and ignored phrases.
-- A silent first baseline, preventing existing releases from creating an initial notification storm.
-- Separate collections, subscriptions, read state, and history for every user.
-- Admin-managed accounts with no public registration and no captcha.
-- Read, unread, updated, and error markers in the web interface.
-- Per-user tracker credentials and custom mirrors.
-- Per-user Telegram bots linked through short-lived `/start` codes.
-- Rich Telegram notifications with cover art, release details, tracker and Magnet/Torrent file buttons.
-- Configurable polling from 5 minutes to 6 hours.
-- Administrator tracker logs with a fixed 168-hour rolling retention window.
-- AES-256-GCM encryption for tracker credentials and Telegram bot tokens stored in SQLite.
-- Native TypeScript tracker plugins designed for future extension.
-- Rootless Podman deployment with two persistent named volumes.
+- Direct-link monitoring for title, cover, magnet, torrent-file, and metadata changes
+- Case-insensitive rule subscriptions with required and ignored phrases
+- Per-user collections, history, and read/unread state
+- Telegram notifications with artwork and release links
+- Tracker credentials, mirrors, and Telegram bots configured from the web interface
+- Administrator-managed accounts with no public registration
+- Configurable polling from 5 minutes to 6 hours
+- Tracker diagnostics with seven-day log retention
+- Encrypted credentials and bot tokens in SQLite
+- Modular TypeScript tracker adapters
+- Multi-architecture images for `linux/amd64` and `linux/arm64`
 
 ## Screenshots
 
-These screenshots use fictional demo subscriptions and contain no production account data.
+### Monitor
 
-### Monitor workspace
-
-![Torrentinel monitor workspace with collections, direct subscriptions, and phrase-based rules](docs/screenshots/monitor-workspace.png)
+![Torrentinel monitor workspace](docs/screenshots/monitor-workspace.png)
 
 ### Subscription details
 
-![Direct subscription details with cover art, release links, monitoring state, and change history](docs/screenshots/subscription-details.png)
+![Torrentinel subscription details](docs/screenshots/subscription-details.png)
 
-### Administration and tracker diagnostics
+### Administration
 
-![Administration interface with polling controls and tracker diagnostic logs](docs/screenshots/administration-diagnostics.png)
+![Torrentinel administration and tracker diagnostics](docs/screenshots/administration-diagnostics.png)
 
 ## Supported trackers
 
-| Tracker | Direct links | Rules | Authentication | Rule source |
-| --- | --- | --- | --- | --- |
-| [Kinozal](https://kinozal.tv/) | Yes | Yes | Required | Recent releases |
-| [Rutor](https://rutor.is/) | Yes | Yes | None | Recent releases |
-| [RuTracker](https://rutracker.org/) | Yes | Yes | Optional | Rolling Atom feed |
+| Tracker | Direct links | Rules | Login |
+| --- | --- | --- | --- |
+| [Kinozal](https://kinozal.tv/) | Yes | Yes | Required |
+| [Rutor](https://rutor.is/) | Yes | Yes | No |
+| [RuTracker](https://rutracker.org/) | Yes | Yes | Optional |
 
-Tracker sites can change their HTML, authentication, or anti-bot protection without notice. Torrentinel reports parser and access failures in the interface instead of silently treating a failed check as an unchanged release.
+## Quick start
 
-## Diagnostics and log retention
+### Docker Compose
 
-Administrators can inspect **Tracker logs** in the Administration page. Torrentinel records scheduler runs and safe tracker observations, including the tracker, operation, outcome, duration, HTTP status, requested and resolved URLs, external ID, title, fingerprint, discovered-release counts, and sanitized error details.
-
-Diagnostic records have a fixed rolling retention of **168 hours (7 days)**. Expired records are removed at application startup, after scheduler runs, when the administrator reads the log, and by a periodic cleanup while the service is running.
-
-The diagnostic log deliberately does not store tracker credentials, cookies, Telegram bot tokens, magnet URIs, torrent-file payloads or download URLs, or raw tracker HTML. URLs have user information, fragments, and sensitive query parameters removed or redacted before storage.
-
-## How it works
-
-```mermaid
-flowchart LR
-  Browser["Web interface"] --> App["Torrentinel\nFastify + React"]
-  App --> DB["SQLite"]
-  App --> Plugins["Tracker plugins"]
-  Plugins --> Trackers["Kinozal · Rutor · RuTracker"]
-  Plugins --> Resolver["Private FlareSolverr sidecar"]
-  App --> Telegram["Telegram Bot API"]
-```
-
-The Fastify API, React interface, scheduler, Telegram long-poller, and SQLite database share one Node.js application container. A private FlareSolverr sidecar resolves Cloudflare-protected RuTracker detail pages. Its port is not published and it does not require persistent storage.
-
-Tracker adapters live under `server/trackers/plugins/`. Each plugin declares its capabilities and may implement:
-
-- `direct`: normalize a tracker URL and return a stable release snapshot;
-- `rules`: discover recent releases from a feed, list, or search source;
-- authentication, custom-mirror, artwork, and snapshot-version behavior.
-
-The scheduler consumes only these shared contracts, keeping collections, baselines, change events, and notifications independent of individual tracker implementations.
-
-## Quick start with Docker
-
-Requirements:
-
-- Docker Engine 24 or newer with the Docker Compose plugin;
-- outbound network access from the containers;
-- enough shared memory for the private browser sidecar.
-
-The published image supports both `linux/amd64` and `linux/arm64`. Clone the repository and start the supplied Compose deployment:
+Docker Compose is the simplest way to run Torrentinel. It starts the application and a private FlareSolverr sidecar used for RuTracker detail pages.
 
 ```sh
 git clone https://github.com/ib0ndar/Torrentinel.git
@@ -106,9 +62,16 @@ cd Torrentinel
 docker compose up -d
 ```
 
-This starts `bah0/torrentinel:v0.2.2` and a private FlareSolverr sidecar. Only Torrentinel is published, on [http://localhost:8080](http://localhost:8080). Application state and the SQLite database use the separate `torrentinel_app` and `torrentinel_db` named volumes.
+Open [http://localhost:8080](http://localhost:8080) and sign in with:
 
-To use another host port or an externally reachable address, provide them when starting the deployment:
+```text
+Username: admin
+Password: admin
+```
+
+The default password must be changed after the first sign-in.
+
+To use a different port or public address:
 
 ```sh
 TORRENTINEL_PORT=8999 \
@@ -116,7 +79,7 @@ PUBLIC_URL=https://torrentinel.example.com \
 docker compose up -d
 ```
 
-Useful commands:
+Common commands:
 
 ```sh
 docker compose pull
@@ -125,9 +88,11 @@ docker compose logs -f torrentinel
 docker compose down
 ```
 
-`docker compose down` preserves both named volumes. Do not add `--volumes` unless you intend to delete all application state and the database.
+Application files and the SQLite database are stored in the `torrentinel_app` and `torrentinel_db` named volumes.
 
-To run only the application container without RuTracker browser resolution:
+### Docker without Compose
+
+The application can run by itself if RuTracker browser resolution is not required:
 
 ```sh
 docker run -d \
@@ -137,79 +102,12 @@ docker run -d \
   -v torrentinel_app:/var/lib/torrentinel \
   -v torrentinel_db:/data \
   -e PUBLIC_URL=http://localhost:8080 \
-  bah0/torrentinel:v0.2.2
+  bah0/torrentinel:v0.2.3
 ```
 
-Open [http://localhost:8080](http://localhost:8080) and sign in with `admin` / `admin`. Torrentinel requires the default password to be changed immediately.
+### Rootless Podman on RHEL
 
-## Quick start with Podman
-
-Requirements:
-
-- Podman 5 or newer;
-- outbound network access from the containers;
-- enough shared memory for the browser sidecar.
-
-Build the image and create the network and two persistent volumes:
-
-```sh
-podman build --format docker -t localhost/torrentinel:local .
-podman network create torrentinel_internal
-podman volume create torrentinel_app
-podman volume create torrentinel_db
-```
-
-Start the private browser resolver:
-
-```sh
-podman run -d \
-  --name torrentinel_flaresolverr \
-  --restart=unless-stopped \
-  --network torrentinel_internal \
-  --network-alias flaresolverr \
-  --shm-size 512m \
-  --tmpfs /config:rw,size=64m,mode=0700 \
-  -e LOG_LEVEL=info \
-  ghcr.io/flaresolverr/flaresolverr:v3.5.0
-```
-
-Start Torrentinel:
-
-```sh
-podman run -d \
-  --name torrentinel \
-  --restart=unless-stopped \
-  --network torrentinel_internal \
-  -p 8080:8080 \
-  -v torrentinel_app:/var/lib/torrentinel:Z,U \
-  -v torrentinel_db:/data:Z,U \
-  -e FLARESOLVERR_URL=http://flaresolverr:8191/v1 \
-  -e PUBLIC_URL=http://localhost:8080 \
-  localhost/torrentinel:local
-```
-
-Open [http://localhost:8080](http://localhost:8080) and sign in with the initial account:
-
-```text
-Username: admin
-Password: admin
-```
-
-Torrentinel requires the default password to be changed immediately after the first sign-in. Tracker credentials, mirrors, and Telegram integration are then configured in **Settings**.
-
-For Telegram Magnet buttons, `PUBLIC_URL` must be an HTTP or HTTPS address through which the user's Telegram client can reach Torrentinel. Use the externally reachable reverse-proxy URL instead of `localhost` in a production deployment.
-
-## Rootless Podman on RHEL
-
-The `deploy/` directory contains Quadlet files for a rootless RHEL deployment. The supplied example uses:
-
-- application container name `torrentinel`;
-- host TCP port `8999`, mapped to container port `8080`;
-- named volumes `torrentinel_app` and `torrentinel_db`;
-- an internal network and unpublished FlareSolverr sidecar;
-- `keep-id` user mapping, SELinux relabeling, health checks, and automatic restart.
-
-Build the expected image and install the units:
+The `deploy/` directory contains Quadlet units for a rootless Podman deployment with named volumes, health checks, SELinux labeling, and an internal FlareSolverr network.
 
 ```sh
 podman build --format docker -t localhost/torrentinel:latest .
@@ -217,111 +115,100 @@ podman volume create torrentinel_app
 podman volume create torrentinel_db
 
 install -d -m 0700 ~/.config/containers/systemd
-install -m 0644 \
-  deploy/torrentinel.container \
-  deploy/torrentinel.network \
-  deploy/torrentinel_flaresolverr.container \
-  ~/.config/containers/systemd/
+install -m 0644 deploy/*.container deploy/*.network ~/.config/containers/systemd/
 
 sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload
 systemctl --user start torrentinel.service
 ```
 
-Before using Telegram Magnet buttons, replace the example `PUBLIC_URL` in `deploy/torrentinel.container` with an address reachable from the Telegram client.
-
-Useful commands:
-
-```sh
-systemctl --user status torrentinel.service
-systemctl --user restart torrentinel.service
-journalctl --user-unit torrentinel.service -f
-podman healthcheck run torrentinel
-```
+The supplied unit publishes Torrentinel on TCP port `8999`. Update `PUBLIC_URL` in `deploy/torrentinel.container` when the service is accessed through a reverse proxy or another hostname.
 
 ## Configuration
 
-| Variable | Default | Purpose |
+Tracker accounts, mirrors, and Telegram bots are configured from **Settings**. The polling interval and user accounts are managed from **Administration**.
+
+Runtime settings can be supplied as environment variables:
+
+| Variable | Default | Description |
 | --- | --- | --- |
 | `PORT` | `8080` | HTTP port inside the container |
-| `PUBLIC_URL` | unset | Browser-reachable base URL used for Telegram Magnet buttons |
-| `DATA_DIR` | `/data` | Directory containing the SQLite database |
-| `APP_DATA_DIR` | `/var/lib/torrentinel` | Directory containing the encryption key |
-| `POLL_INTERVAL_MINUTES` | `60` | Initial polling interval; the admin interface accepts 5–360 minutes |
-| `POLL_STARTUP_DELAY_SECONDS` | `20` | Delay before the first automatic poll |
-| `TRACKER_REQUEST_TIMEOUT_MS` | `30000` | Tracker HTTP request timeout |
-| `FLARESOLVERR_URL` | `http://127.0.0.1:8191/v1` | Internal resolver API for RuTracker detail pages |
-| `FLARESOLVERR_TIMEOUT_MS` | `120000` | Browser-resolved detail request timeout |
-| `SESSION_DAYS` | `30` | Web-session lifetime |
-| `SESSION_COOKIE_SECURE` | `false` | Set to `true` when the service is available exclusively through HTTPS |
+| `PUBLIC_URL` | unset | Externally reachable Torrentinel URL |
+| `DATA_DIR` | `/data` | SQLite database directory |
+| `APP_DATA_DIR` | `/var/lib/torrentinel` | Application key directory |
+| `POLL_INTERVAL_MINUTES` | `60` | Initial polling interval |
+| `POLL_STARTUP_DELAY_SECONDS` | `20` | Delay before the startup poll |
+| `TRACKER_REQUEST_TIMEOUT_MS` | `30000` | Tracker request timeout |
+| `FLARESOLVERR_URL` | `http://127.0.0.1:8191/v1` | FlareSolverr API address |
+| `FLARESOLVERR_TIMEOUT_MS` | `120000` | Browser resolver timeout |
+| `SESSION_COOKIE_SECURE` | `false` | Enable secure cookies when using HTTPS |
 
-Copy `.env.example` when running the application outside a container. Tracker passwords and Telegram bot tokens are deliberately not environment variables; users enter them through the authenticated interface.
+See [`.env.example`](.env.example) for a ready-to-copy configuration.
 
-## Data and security
+## Telegram notifications
 
-Torrentinel stores its generated encryption key and SQLite database separately:
+Each Torrentinel user can connect a separate Telegram bot and account:
 
-- application volume: `/var/lib/torrentinel`, containing the 256-bit encryption key;
-- database volume: `/data`, containing SQLite and its WAL files.
+1. Create a bot with Telegram's [BotFather](https://t.me/BotFather).
+2. Save the bot token in Torrentinel under **Settings**.
+3. Generate a linking code and send the displayed `/start` command to the bot.
 
-Tracker usernames, tracker passwords, and Telegram bot tokens are encrypted with AES-256-GCM before being written to SQLite. The key is created on first start with file mode `0600` and is never returned by the API.
+`PUBLIC_URL` must be reachable from the Telegram client for Torrentinel-hosted Magnet buttons to work.
 
-Back up both volumes together. Losing the application volume makes encrypted integration data in the database unrecoverable. Stop the application before a raw volume-level backup so the SQLite database and WAL remain consistent.
+## Architecture
 
-Recommended production practices:
+```mermaid
+flowchart LR
+  Browser["Web interface"] --> App["Torrentinel\nFastify + React"]
+  App --> DB["SQLite"]
+  App --> Plugins["Tracker adapters"]
+  Plugins --> Trackers["Kinozal · Rutor · RuTracker"]
+  Plugins --> Resolver["FlareSolverr"]
+  App --> Telegram["Telegram Bot API"]
+```
 
-- place Torrentinel behind an HTTPS reverse proxy;
-- set `SESSION_COOKIE_SECURE=true`;
-- replace `admin` / `admin` immediately when prompted;
-- do not publish the FlareSolverr port;
-- restrict access to the web interface at the network or proxy layer;
-- never commit `.env`, database, key, or backup files.
+The API, React interface, scheduler, Telegram worker, and SQLite database run in one Node.js container. Tracker-specific behavior is isolated behind shared direct-subscription and rule-discovery contracts under `server/trackers/plugins/`.
+
+## Data and backups
+
+Torrentinel keeps persistent data in two locations:
+
+- `/var/lib/torrentinel` contains the generated encryption key
+- `/data` contains the SQLite database
+
+Tracker passwords and Telegram bot tokens are encrypted with AES-256-GCM before being stored. Back up both volumes together; the database cannot decrypt saved integrations without the application key.
 
 ## Development
 
-Install dependencies and start the API:
+Torrentinel requires Node.js 22.20 or newer.
 
 ```sh
 npm ci
 npm run dev:server
 ```
 
-Start the Vite development server in another terminal:
+Start the web interface in another terminal:
 
 ```sh
 npm run dev:web
 ```
 
-Verification commands:
+Run the verification suite with:
 
 ```sh
 npm run typecheck
 npm test
 npm run build
-npm audit
 ```
 
 ## Adding a tracker
 
-1. Add the tracker key and default mirror to the application types and database seed data.
-2. Create `server/trackers/plugins/<tracker>/manifest.ts`.
-3. Implement the applicable direct, rules, parser, authentication, and transport modules.
-4. Register the plugin factory in `server/trackers/index.ts`.
-5. Add sanitized HTML or XML fixtures and contract tests.
-6. Increment `snapshotVersion` whenever the persisted snapshot schema changes.
-
-Existing subscriptions are silently re-baselined after a snapshot schema change, preventing deployments from generating false update events.
-
-## Project status
-
-Torrentinel is an early self-hosted project. Tracker integrations depend on third-party sites and may require maintenance when those sites change. Issues and pull requests containing sanitized fixtures are welcome; never include tracker cookies, credentials, bot tokens, personal subscription data, or copyrighted torrent payloads.
+Each tracker integration declares its capabilities and implements the applicable direct, rule, authentication, parsing, and transport modules. New adapters are registered in `server/trackers/index.ts` and should include contract tests for their supported operations.
 
 ## AI assistance
 
-This project was created with assistance from GPT models by [OpenAI](https://openai.com/). The project maintainer reviewed, tested, and integrated the resulting code.
+Torrentinel was created with assistance from GPT models by [OpenAI](https://openai.com/). The generated code was reviewed, tested, and integrated by the project maintainer.
 
 ## License
 
-Torrentinel is licensed under the [GNU Affero General Public License v3.0](LICENSE), SPDX identifier `AGPL-3.0-only`.
-
-If you modify Torrentinel and make it available to users over a network, review the source-availability requirements in section 13 of the license.
+Torrentinel is available under the [GNU Affero General Public License v3.0](LICENSE).
