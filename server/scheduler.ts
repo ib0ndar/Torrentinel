@@ -293,6 +293,7 @@ export class Scheduler {
         })();
         status.changed += 1;
         await this.telegram.notifyRelease(row.user_id, {
+          subscriptionId: row.id,
           release: currentSnapshot,
           trackerName: plugin.manifest.displayName,
           changes,
@@ -468,6 +469,7 @@ export class Scheduler {
       for (const release of releases) {
         const trackerName = trackerRegistry.get(release.trackerKey)?.manifest.displayName || release.trackerKey;
         await this.telegram.notifyRelease(rule.user_id, {
+          subscriptionId: rule.id,
           release,
           trackerName,
           ruleTerms: parseTerms(rule.required_terms),

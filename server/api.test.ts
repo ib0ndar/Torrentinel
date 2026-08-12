@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApplication } from "./app.js";
-import { recordTrackerObservation, startSchedulerRun } from "./diagnostics.js";
+import { recordTelegramDelivery, recordTrackerObservation, startSchedulerRun } from "./diagnostics.js";
 
 const cleanup: string[] = [];
 afterEach(() => {
@@ -256,11 +256,22 @@ describe("authenticated API", () => {
         requestedUrl: "https://rutor.is/torrent/42",
         durationMs: 120,
       });
+      recordTelegramDelivery(db, {
+        userId: login.json().user.id,
+        trackerKey: "rutor",
+        externalId: "42",
+        title: "Fixture notification",
+        deliveryMethod: "text",
+        outcome: "delivered",
+        telegramMessageId: 99,
+        durationMs: 80,
+      });
       const diagnostics = await app.inject({ method: "GET", url: "/api/admin/diagnostics", headers: { cookie: adminCookie } });
       expect(diagnostics.statusCode).toBe(200);
       expect(diagnostics.json()).toMatchObject({
         retentionHours: 168,
         observations: [{ trackerKey: "rutor", operation: "direct", outcome: "missing", username: "admin" }],
+        telegramDeliveries: [{ trackerKey: "rutor", outcome: "delivered", telegramMessageId: 99, username: "admin" }],
       });
 
       const invalidInterval = await app.inject({

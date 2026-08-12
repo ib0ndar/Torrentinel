@@ -827,6 +827,27 @@ function Admin({ notify }: { notify: Notify }) {
         </div>}
       </section>
 
+      <section className="table-section diagnostic-section">
+        <div className="section-heading">
+          <div><h2>Telegram deliveries</h2><p>Delivery receipts and failures for subscription notifications. Records expire after 168 hours.</p></div>
+        </div>
+        {!diagnostics ? <ListSkeleton /> : diagnostics.telegramDeliveries.length === 0 ? <div className="diagnostic-empty">No Telegram notifications have been attempted during the retention window.</div> : <div className="diagnostic-table diagnostic-table--telegram">
+          <div className="diagnostic-head telegram-delivery-grid"><span>Sent</span><span>Account</span><span>Source</span><span>Delivery</span><span>Outcome</span><span>Release</span><span>Duration</span></div>
+          {diagnostics.telegramDeliveries.map((delivery) => {
+            const detail = delivery.errorMessage || delivery.title || "General notification";
+            return <div className="diagnostic-row telegram-delivery-grid" key={delivery.id}>
+              <span className="diagnostic-time" title={new Date(delivery.createdAt).toLocaleString()}>{relativeTime(delivery.createdAt)}</span>
+              <span className="diagnostic-detail"><strong>{delivery.username}</strong><small>{delivery.subscriptionName || (delivery.subscriptionId ? `Subscription ${delivery.subscriptionId}` : "Account message")}</small></span>
+              <span className="diagnostic-source">{delivery.trackerKey ? <><TrackerTag tracker={delivery.trackerKey} /><span><strong>{trackerName(delivery.trackerKey)}</strong><small>{delivery.externalId ? `ID ${delivery.externalId}` : "Release"}</small></span></> : <span><strong>System</strong><small>Telegram</small></span>}</span>
+              <span className="diagnostic-operation">{deliveryMethodLabel(delivery.deliveryMethod)}</span>
+              <span><span className={`state ${diagnosticStateClass(delivery.outcome)}`}>{delivery.outcome}</span></span>
+              <span className="diagnostic-detail"><strong title={detail}>{detail}</strong><small>{delivery.telegramMessageId ? `Telegram message #${delivery.telegramMessageId}` : "No delivery receipt"}</small></span>
+              <span className="diagnostic-duration">{formatDiagnosticDuration(delivery.durationMs)}</span>
+            </div>;
+          })}
+        </div>}
+      </section>
+
       <section className="table-section"><div className="section-heading"><div><h2>Users</h2><p>Collections and subscription data are isolated by account.</p></div><span>{users.length}</span></div><div className="data-table user-table"><div className="table-head"><span>User</span><span>Role</span><span>Collections</span><span>Subscriptions</span><span>Status</span><span /></div>{users.map((user) => <div className="table-row" key={user.id}><span className="user-cell"><span className="avatar">{user.username[0].toUpperCase()}</span><span><strong>{user.username}</strong><small>Created {relativeTime(user.createdAt)}</small></span></span><span>{user.isAdmin ? "Administrator" : "Member"}</span><span>{user.collectionCount}</span><span>{user.subscriptionCount}</span><span><span className={`state ${user.disabled ? "state--error" : "state--good"}`}>{user.disabled ? "Disabled" : user.mustChangePassword ? "Password change" : "Active"}</span></span><span className="row-actions"><button className="text-button" onClick={() => void resetUser(user)}>Reset password</button><button className="text-button" onClick={() => void toggleUser(user)}>{user.disabled ? "Enable" : "Disable"}</button></span></div>)}</div></section>
 
       <section className="table-section"><div className="section-heading"><div><h2>Global mirrors</h2><p>Defaults used unless a user has a personal override.</p></div></div><div className="mirror-admin">{mirrors.map((mirror) => <AdminMirrorRow key={mirror.trackerKey} mirror={mirror} onSave={updateMirror} />)}</div></section>
@@ -1042,10 +1063,17 @@ function pollingCadence(minutes: number): string {
 }
 
 function diagnosticStateClass(outcome: string): string {
-  if (["error", "missing", "blocked", "auth", "parse", "network", "unsupported"].includes(outcome)) return "state--error";
+  if (["error", "failed", "missing", "blocked", "auth", "parse", "network", "unsupported"].includes(outcome)) return "state--error";
   if (["changed", "new-matches"].includes(outcome)) return "state--updated";
-  if (["temporarily-unavailable", "challenge"].includes(outcome)) return "state--pending";
+  if (["skipped", "temporarily-unavailable", "challenge"].includes(outcome)) return "state--pending";
   return "state--good";
+}
+
+function deliveryMethodLabel(method: string): string {
+  if (method === "photo-url") return "Photo by URL";
+  if (method === "photo-upload") return "Uploaded photo";
+  if (method === "none") return "Not attempted";
+  return "Text";
 }
 
 function formatDiagnosticDuration(durationMs: number): string {

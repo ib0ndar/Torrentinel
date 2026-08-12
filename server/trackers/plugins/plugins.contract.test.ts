@@ -78,7 +78,9 @@ describe("Kinozal plugin", () => {
       metadata: { coverObserved: true, changeMarker: "2026-08-07 12:34" },
     });
     expect(new URL(browseUrl).searchParams.get("s")).toBe("Film 2160p");
-    expect(new URL(browseUrl).searchParams.get("t")).toBe("1");
+    expect(new URL(browseUrl).searchParams.get("g")).toBe("0");
+    expect(new URL(browseUrl).searchParams.get("t")).toBe("0");
+    expect(new URL(browseUrl).searchParams.get("f")).toBe("0");
     expect(batch.coverage).toEqual({ source: "search", complete: false });
     expect(batch.sourceUrl).toBe(browseUrl);
     expect(batch.releases[0]).toMatchObject({ externalId: "71", title: "Film 2026 BDRip" });

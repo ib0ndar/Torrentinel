@@ -7,6 +7,7 @@ import {
   DIAGNOSTIC_RETENTION_HOURS,
   diagnosticCutoffIso,
   pruneDiagnostics,
+  recordTelegramDelivery,
   recordTrackerObservation,
   startSchedulerRun,
 } from "./diagnostics.js";
@@ -83,11 +84,23 @@ describe("tracker diagnostics", () => {
       durationMs: 1,
       observedAt: oldTimestamp,
     });
+    recordTelegramDelivery(db, {
+      userId: user.id,
+      trackerKey: "kinozal",
+      externalId: "42",
+      title: "Old delivery",
+      deliveryMethod: "text",
+      outcome: "delivered",
+      telegramMessageId: 123,
+      durationMs: 50,
+      createdAt: oldTimestamp,
+    });
 
     expect(diagnosticCutoffIso(now)).toBe(new Date(now - 168 * 60 * 60 * 1_000).toISOString());
-    expect(pruneDiagnostics(db, now)).toEqual({ observations: 1, runs: 1 });
+    expect(pruneDiagnostics(db, now)).toEqual({ observations: 1, runs: 1, deliveries: 1 });
     expect(db.prepare("SELECT COUNT(*) AS count FROM tracker_observations").get()).toEqual({ count: 0 });
     expect(db.prepare("SELECT COUNT(*) AS count FROM scheduler_runs").get()).toEqual({ count: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM telegram_deliveries").get()).toEqual({ count: 0 });
   });
 });
 

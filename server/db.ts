@@ -183,6 +183,24 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     CREATE INDEX IF NOT EXISTS idx_tracker_observations_subscription ON tracker_observations(subscription_id, observed_at DESC);
     CREATE INDEX IF NOT EXISTS idx_tracker_observations_outcome ON tracker_observations(outcome, observed_at DESC);
 
+    CREATE TABLE IF NOT EXISTS telegram_deliveries (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subscription_id TEXT REFERENCES subscriptions(id) ON DELETE SET NULL,
+      tracker_key TEXT,
+      external_id TEXT,
+      title TEXT,
+      delivery_method TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      telegram_message_id INTEGER,
+      error_message TEXT,
+      duration_ms INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_telegram_deliveries_time ON telegram_deliveries(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_telegram_deliveries_user ON telegram_deliveries(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_telegram_deliveries_outcome ON telegram_deliveries(outcome, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS telegram_bots (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       token_encrypted TEXT NOT NULL,

@@ -76,7 +76,7 @@ describe("Kinozal search discovery migration", () => {
       expect(db.prepare(`
         SELECT initialized, discovery_revision FROM subscription_tracker_state
         WHERE subscription_id = 'kinozal-rule' AND tracker_key = 'kinozal'
-      `).get()).toEqual({ initialized: 1, discovery_revision: "kinozal-search-v1" });
+      `).get()).toEqual({ initialized: 1, discovery_revision: "kinozal-search-uploaded-v2" });
       expect(db.prepare("SELECT external_id FROM rule_matches WHERE subscription_id = 'kinozal-rule'").all())
         .toEqual([{ external_id: "2150115" }]);
 

@@ -163,9 +163,26 @@ export interface DiagnosticRun {
   durationMs?: number | null;
 }
 
+export interface TelegramDelivery {
+  id: string;
+  subscriptionId?: string | null;
+  subscriptionName?: string | null;
+  username: string;
+  trackerKey?: TrackerKey | null;
+  externalId?: string | null;
+  title?: string | null;
+  deliveryMethod: "none" | "text" | "photo-url" | "photo-upload";
+  outcome: "delivered" | "failed" | "skipped";
+  telegramMessageId?: number | null;
+  errorMessage?: string | null;
+  durationMs: number;
+  createdAt: string;
+}
+
 export interface DiagnosticsResponse {
   retentionHours: number;
   generatedAt: string;
   observations: TrackerObservation[];
   runs: DiagnosticRun[];
+  telegramDeliveries: TelegramDelivery[];
 }

@@ -54,6 +54,13 @@ describe("rich Telegram release notifications", () => {
         { text: "Magnet", url: `https://torrentinel.example/magnet/${hash.toUpperCase()}` },
       ]],
     });
+    expect(db.prepare("SELECT outcome, delivery_method, telegram_message_id, tracker_key, external_id FROM telegram_deliveries").get()).toEqual({
+      outcome: "delivered",
+      delivery_method: "photo-url",
+      telegram_message_id: 1,
+      tracker_key: "rutracker",
+      external_id: "42",
+    });
   });
 
   it("uploads the artwork when Telegram cannot fetch its URL directly", async () => {
@@ -94,6 +101,11 @@ describe("rich Telegram release notifications", () => {
         { text: "Torrent file", url: "https://rutor.is/download/88" },
       ]],
     });
+    expect(db.prepare("SELECT outcome, delivery_method, telegram_message_id FROM telegram_deliveries").get()).toEqual({
+      outcome: "delivered",
+      delivery_method: "photo-upload",
+      telegram_message_id: 2,
+    });
   });
 
   it("uses a text notification only when both remote and uploaded artwork delivery fail", async () => {
@@ -123,6 +135,65 @@ describe("rich Telegram release notifications", () => {
 
     expect(calls.map((call) => call.method)).toEqual(["sendPhoto", "sendMessage"]);
     expect(calls[1].body.text).toContain("⚡ Fallback release");
+    expect(db.prepare("SELECT outcome, delivery_method, telegram_message_id FROM telegram_deliveries").get()).toEqual({
+      outcome: "delivered",
+      delivery_method: "text",
+      telegram_message_id: 2,
+    });
+  });
+
+  it("records a skipped delivery when Telegram is not linked", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "torrentinel-telegram-test-"));
+    cleanup.push(directory);
+    const db = createDatabase(join(directory, "test.db"));
+    const vault = createSecretVault(join(directory, "master.key"));
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const telegram = new TelegramService(db, vault, telegramFetcher([]), "https://torrentinel.example");
+
+    await telegram.notifyRelease(user.id, {
+      trackerName: "Kinozal",
+      release: {
+        trackerKey: "kinozal",
+        externalId: "101",
+        title: "No destination",
+        url: "https://kinozal.example/details.php?id=101",
+      },
+    });
+
+    expect(db.prepare("SELECT outcome, delivery_method, error_message FROM telegram_deliveries").get()).toEqual({
+      outcome: "skipped",
+      delivery_method: "none",
+      error_message: "Telegram bot or account link is not configured",
+    });
+  });
+
+  it("records Telegram API failures without exposing the bot token", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const calls: TelegramCall[] = [];
+    const { db, vault, userId } = notificationDatabase();
+    const telegram = new TelegramService(
+      db,
+      vault,
+      telegramFetcher(calls, "sendMessage"),
+      "https://torrentinel.example",
+    );
+
+    await telegram.notifyRelease(userId, {
+      trackerName: "Rutor",
+      release: {
+        trackerKey: "rutor",
+        externalId: "102",
+        title: "Failed destination",
+        url: "https://rutor.is/torrent/102",
+      },
+    });
+
+    expect(db.prepare("SELECT outcome, delivery_method, error_message FROM telegram_deliveries").get()).toEqual({
+      outcome: "failed",
+      delivery_method: "text",
+      error_message: "failed to fetch photo",
+    });
+    expect(JSON.stringify(db.prepare("SELECT * FROM telegram_deliveries").get())).not.toContain("not-a-real-telegram-token");
   });
 });
 

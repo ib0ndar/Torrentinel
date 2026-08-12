@@ -14,7 +14,9 @@ export function createKinozalRuleDiscovery(session: KinozalSessionManager): Rule
       }
       const searchUrl = new URL("/browse.php", context.baseUrl);
       searchUrl.searchParams.set("s", requiredTerms.join(" "));
-      searchUrl.searchParams.set("t", "1");
+      searchUrl.searchParams.set("g", "0");
+      searchUrl.searchParams.set("t", "0");
+      searchUrl.searchParams.set("f", "0");
       const result = await session.get(searchUrl.toString(), context);
       return {
         releases: parseKinozalSearch(result.body, context.baseUrl),

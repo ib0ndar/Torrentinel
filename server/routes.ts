@@ -554,11 +554,21 @@ function registerAdminRoutes(app: FastifyInstance, db: SqliteDatabase): void {
       ORDER BY started_at DESC
       LIMIT 20
     `).all(cutoff) as DiagnosticRunRow[];
+    const telegramDeliveries = db.prepare(`
+      SELECT d.*, u.username, s.name AS subscription_name
+      FROM telegram_deliveries d
+      JOIN users u ON u.id = d.user_id
+      LEFT JOIN subscriptions s ON s.id = d.subscription_id
+      WHERE d.created_at >= ?
+      ORDER BY d.created_at DESC
+      LIMIT ?
+    `).all(cutoff, query.limit) as TelegramDeliveryRow[];
     return {
       retentionHours: DIAGNOSTIC_RETENTION_HOURS,
       generatedAt: nowIso(),
       observations: observations.map(serializeDiagnosticObservation),
       runs: runs.map(serializeDiagnosticRun),
+      telegramDeliveries: telegramDeliveries.map(serializeTelegramDelivery),
     };
   });
 
@@ -853,6 +863,24 @@ function serializeDiagnosticRun(row: DiagnosticRunRow) {
   };
 }
 
+function serializeTelegramDelivery(row: TelegramDeliveryRow) {
+  return {
+    id: row.id,
+    subscriptionId: row.subscription_id,
+    subscriptionName: row.subscription_name,
+    username: row.username,
+    trackerKey: row.tracker_key,
+    externalId: row.external_id,
+    title: row.title,
+    deliveryMethod: row.delivery_method,
+    outcome: row.outcome,
+    telegramMessageId: row.telegram_message_id,
+    errorMessage: row.error_message,
+    durationMs: row.duration_ms,
+    createdAt: row.created_at,
+  };
+}
+
 function nullableBoolean(value: number | null): boolean | null {
   return value === null ? null : Boolean(value);
 }
@@ -893,4 +921,10 @@ interface DiagnosticObservationRow {
 interface DiagnosticRunRow {
   id: string; trigger: string; started_at: string; finished_at: string | null; checked: number; changed: number;
   errors: number; duration_ms: number | null;
+}
+interface TelegramDeliveryRow {
+  id: string; subscription_id: string | null; subscription_name: string | null; username: string;
+  tracker_key: TrackerKey | null; external_id: string | null; title: string | null;
+  delivery_method: string; outcome: string; telegram_message_id: number | null;
+  error_message: string | null; duration_ms: number; created_at: string;
 }

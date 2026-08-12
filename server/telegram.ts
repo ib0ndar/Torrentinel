@@ -2,6 +2,7 @@ import { customAlphabet } from "nanoid";
 import { config } from "./config.js";
 import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
+import { recordTelegramDelivery, type TelegramDeliveryInput } from "./diagnostics.js";
 import { telegramTokenAad, type SecretVault } from "./secrets.js";
 import type { Release } from "./types.js";
 
@@ -24,6 +25,10 @@ interface TelegramResponse<T> {
   description?: string;
 }
 
+interface TelegramMessage {
+  message_id: number;
+}
+
 interface BotRow {
   user_id: string;
   token_encrypted: string;
@@ -42,6 +47,7 @@ interface NotificationDestination {
 }
 
 export interface ReleaseNotification {
+  subscriptionId?: string;
   release: Release;
   trackerName: string;
   ruleTerms?: string[];
@@ -185,24 +191,57 @@ export class TelegramService {
   }
 
   async notifyUser(userId: string, html: string): Promise<void> {
+    const startedMs = Date.now();
     const destination = this.notificationDestination(userId);
-    if (!destination) return;
+    if (!destination) {
+      this.recordDelivery({
+        userId,
+        deliveryMethod: "none",
+        outcome: "skipped",
+        durationMs: Date.now() - startedMs,
+        error: new Error("Telegram bot or account link is not configured"),
+      });
+      return;
+    }
     try {
       const token = this.vault.decrypt(destination.tokenEncrypted, telegramTokenAad(userId));
-      await this.call(token, "sendMessage", {
+      const message = await this.call<TelegramMessage>(token, "sendMessage", {
         chat_id: destination.chatId,
         text: html,
         parse_mode: "HTML",
         disable_web_page_preview: true,
       });
+      this.recordDelivery({
+        userId,
+        deliveryMethod: "text",
+        outcome: "delivered",
+        telegramMessageId: message.message_id,
+        durationMs: Date.now() - startedMs,
+      });
     } catch (error) {
+      this.recordDelivery({
+        userId,
+        deliveryMethod: "text",
+        outcome: "failed",
+        durationMs: Date.now() - startedMs,
+        error,
+      });
       console.error(`Telegram notification failed for user ${userId}:`, safeError(error));
     }
   }
 
   async notifyRelease(userId: string, notification: ReleaseNotification): Promise<void> {
+    const startedMs = Date.now();
     const destination = this.notificationDestination(userId);
-    if (!destination) return;
+    if (!destination) {
+      this.recordReleaseDelivery(userId, notification, {
+        deliveryMethod: "none",
+        outcome: "skipped",
+        durationMs: Date.now() - startedMs,
+        error: new Error("Telegram bot or account link is not configured"),
+      });
+      return;
+    }
 
     const caption = releaseCaption(notification);
     const replyMarkup = releaseKeyboard(notification.release, this.publicUrl);
@@ -210,17 +249,23 @@ export class TelegramService {
       const token = this.vault.decrypt(destination.tokenEncrypted, telegramTokenAad(userId));
       if (httpUrl(notification.release.coverUrl)) {
         try {
-          await this.call(token, "sendPhoto", {
+          const message = await this.call<TelegramMessage>(token, "sendPhoto", {
             chat_id: destination.chatId,
             photo: notification.release.coverUrl,
             caption,
             parse_mode: "HTML",
             reply_markup: replyMarkup,
           });
+          this.recordReleaseDelivery(userId, notification, {
+            deliveryMethod: "photo-url",
+            outcome: "delivered",
+            telegramMessageId: message.message_id,
+            durationMs: Date.now() - startedMs,
+          });
           return;
         } catch (remotePhotoError) {
           try {
-            await this.sendUploadedPhoto(
+            const message = await this.sendUploadedPhoto(
               token,
               destination.chatId,
               notification.release.coverUrl!,
@@ -228,6 +273,12 @@ export class TelegramService {
               caption,
               replyMarkup,
             );
+            this.recordReleaseDelivery(userId, notification, {
+              deliveryMethod: "photo-upload",
+              outcome: "delivered",
+              telegramMessageId: message.message_id,
+              durationMs: Date.now() - startedMs,
+            });
             return;
           } catch (uploadedPhotoError) {
             console.warn(
@@ -238,15 +289,50 @@ export class TelegramService {
         }
       }
 
-      await this.call(token, "sendMessage", {
+      const message = await this.call<TelegramMessage>(token, "sendMessage", {
         chat_id: destination.chatId,
         text: caption,
         parse_mode: "HTML",
         disable_web_page_preview: true,
         reply_markup: replyMarkup,
       });
+      this.recordReleaseDelivery(userId, notification, {
+        deliveryMethod: "text",
+        outcome: "delivered",
+        telegramMessageId: message.message_id,
+        durationMs: Date.now() - startedMs,
+      });
     } catch (error) {
+      this.recordReleaseDelivery(userId, notification, {
+        deliveryMethod: "text",
+        outcome: "failed",
+        durationMs: Date.now() - startedMs,
+        error,
+      });
       console.error(`Telegram release notification failed for user ${userId}:`, safeError(error));
+    }
+  }
+
+  private recordReleaseDelivery(
+    userId: string,
+    notification: ReleaseNotification,
+    result: Omit<TelegramDeliveryInput, "userId" | "subscriptionId" | "trackerKey" | "externalId" | "title">,
+  ): void {
+    this.recordDelivery({
+      ...result,
+      userId,
+      subscriptionId: notification.subscriptionId,
+      trackerKey: notification.release.trackerKey,
+      externalId: notification.release.externalId,
+      title: notification.release.title,
+    });
+  }
+
+  private recordDelivery(input: TelegramDeliveryInput): void {
+    try {
+      recordTelegramDelivery(this.db, input);
+    } catch (error) {
+      console.error("Could not persist Telegram delivery diagnostic:", safeError(error));
     }
   }
 
@@ -266,7 +352,7 @@ export class TelegramService {
     releaseUrl: string,
     caption: string,
     replyMarkup: ReturnType<typeof releaseKeyboard>,
-  ): Promise<void> {
+  ): Promise<TelegramMessage> {
     const response = await this.mediaFetcher(coverUrl, {
       headers: {
         accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
@@ -289,7 +375,7 @@ export class TelegramService {
     form.set("caption", caption);
     form.set("parse_mode", "HTML");
     form.set("reply_markup", JSON.stringify(replyMarkup));
-    await this.callForm(token, "sendPhoto", form);
+    return this.callForm<TelegramMessage>(token, "sendPhoto", form);
   }
 
   private startWorker(userId: string, token: string, offset: number): void {

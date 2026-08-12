@@ -24,6 +24,20 @@ export interface TrackerObservationInput {
   observedAt?: string;
 }
 
+export interface TelegramDeliveryInput {
+  userId: string;
+  subscriptionId?: string;
+  trackerKey?: TrackerKey;
+  externalId?: string;
+  title?: string;
+  deliveryMethod: "none" | "text" | "photo-url" | "photo-upload";
+  outcome: "delivered" | "failed" | "skipped";
+  telegramMessageId?: number;
+  durationMs: number;
+  error?: unknown;
+  createdAt?: string;
+}
+
 export function startSchedulerRun(db: SqliteDatabase, trigger: string, startedAt: string): string {
   pruneDiagnostics(db);
   const id = nanoid();
@@ -84,19 +98,42 @@ export function recordTrackerObservation(db: SqliteDatabase, input: TrackerObser
   );
 }
 
+export function recordTelegramDelivery(db: SqliteDatabase, input: TelegramDeliveryInput): void {
+  db.prepare(`
+    INSERT INTO telegram_deliveries (
+      id, user_id, subscription_id, tracker_key, external_id, title,
+      delivery_method, outcome, telegram_message_id, error_message, duration_ms, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    nanoid(),
+    input.userId,
+    input.subscriptionId || null,
+    input.trackerKey || null,
+    input.externalId ? truncate(input.externalId, 120) : null,
+    input.title ? truncate(input.title, 500) : null,
+    input.deliveryMethod,
+    input.outcome,
+    input.telegramMessageId ?? null,
+    input.error ? safeDiagnosticText(input.error instanceof Error ? input.error.message : String(input.error)) : null,
+    Math.max(0, Math.round(input.durationMs)),
+    input.createdAt || new Date().toISOString(),
+  );
+}
+
 export function diagnosticCutoffIso(now = Date.now()): string {
   return new Date(now - DIAGNOSTIC_RETENTION_HOURS * 60 * 60 * 1_000).toISOString();
 }
 
-export function pruneDiagnostics(db: SqliteDatabase, now = Date.now()): { observations: number; runs: number } {
+export function pruneDiagnostics(db: SqliteDatabase, now = Date.now()): { observations: number; runs: number; deliveries: number } {
   const cutoff = diagnosticCutoffIso(now);
   return db.transaction(() => {
     const observations = db.prepare("DELETE FROM tracker_observations WHERE observed_at < ?").run(cutoff).changes;
+    const deliveries = db.prepare("DELETE FROM telegram_deliveries WHERE created_at < ?").run(cutoff).changes;
     const runs = db.prepare(`
       DELETE FROM scheduler_runs
       WHERE COALESCE(finished_at, started_at) < ?
     `).run(cutoff).changes;
-    return { observations, runs };
+    return { observations, runs, deliveries };
   })();
 }
 

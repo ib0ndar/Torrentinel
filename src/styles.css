@@ -374,6 +374,7 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .diagnostic-controls select { min-width: 130px; min-height: 39px; padding: 0 30px 0 11px; color: var(--muted); font-size: 12px; }
 .diagnostic-table { margin-top: 22px; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,10,24,.28); }
 .diagnostic-head, .diagnostic-row { min-width: 840px; display: grid; grid-template-columns: 92px 135px 105px 115px minmax(240px, 1fr) 64px; align-items: center; gap: 11px; padding: 0 14px; }
+.telegram-delivery-grid { min-width: 940px; grid-template-columns: 92px 125px 125px 110px 92px minmax(260px, 1fr) 64px; }
 .diagnostic-head { min-height: 38px; border-bottom: 1px solid var(--line); background: rgba(34,211,238,.025); color: var(--dim); font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .diagnostic-row { min-height: 82px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .diagnostic-row:last-child { border-bottom: 0; }
