@@ -102,7 +102,7 @@ docker run -d \
   -v torrentinel_app:/var/lib/torrentinel \
   -v torrentinel_db:/data \
   -e PUBLIC_URL=http://localhost:8080 \
-  bah0/torrentinel:v0.2.4
+  bah0/torrentinel:v0.2.5
 ```
 
 ### Rootless Podman on RHEL
