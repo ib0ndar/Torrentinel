@@ -27,6 +27,79 @@ describe("rule matching", () => {
   });
 });
 
+describe("Kinozal search discovery migration", () => {
+  it("silently seeds existing catalogue matches before notifying about later torrent IDs", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO subscriptions (
+        id, user_id, collection_id, type, name, required_terms, ignored_terms,
+        initialized, created_at, updated_at
+      ) VALUES ('kinozal-rule', ?, ?, 'rule', '', ?, '[]', 1, ?, ?)
+    `).run(user.id, collection.id, JSON.stringify(["Опасный", "2160p"]), timestamp, timestamp);
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES ('kinozal-rule', 'kinozal')").run();
+    db.prepare(`
+      INSERT INTO subscription_tracker_state (subscription_id, tracker_key, initialized)
+      VALUES ('kinozal-rule', 'kinozal', 1)
+    `).run();
+
+    const existing = {
+      trackerKey: "kinozal" as const,
+      externalId: "2150115",
+      title: "Особо ОПАСНЫЙ пассажир / Blu-Ray Remux (2160P)",
+      url: "https://kinozal.me/details.php?id=2150115",
+    };
+    const later = {
+      trackerKey: "kinozal" as const,
+      externalId: "2150999",
+      title: "Опасный рейс / WEB-DL (2160p)",
+      url: "https://kinozal.me/details.php?id=2150999",
+    };
+    const plugin = trackerRegistry.get("kinozal");
+    if (!plugin?.rules) throw new Error("Kinozal rule discovery is unavailable");
+    const discover = vi.spyOn(plugin.rules, "discover")
+      .mockResolvedValueOnce({ releases: [existing], coverage: { source: "search", complete: false } })
+      .mockResolvedValueOnce({ releases: [existing, later], coverage: { source: "search", complete: false } });
+    const notifyRelease = vi.fn(async () => undefined);
+    const telegram = {
+      canNotify: vi.fn(() => false),
+      notifyRelease,
+    } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 9)));
+
+    try {
+      const baseline = await scheduler.run("test");
+      expect(baseline.changed).toBe(0);
+      expect(notifyRelease).not.toHaveBeenCalled();
+      expect(db.prepare(`
+        SELECT initialized, discovery_revision FROM subscription_tracker_state
+        WHERE subscription_id = 'kinozal-rule' AND tracker_key = 'kinozal'
+      `).get()).toEqual({ initialized: 1, discovery_revision: "kinozal-search-v1" });
+      expect(db.prepare("SELECT external_id FROM rule_matches WHERE subscription_id = 'kinozal-rule'").all())
+        .toEqual([{ external_id: "2150115" }]);
+
+      const update = await scheduler.run("test");
+      expect(update.changed).toBe(1);
+      expect(notifyRelease).toHaveBeenCalledTimes(1);
+      expect(notifyRelease).toHaveBeenCalledWith(user.id, expect.objectContaining({
+        release: expect.objectContaining({ externalId: "2150999" }),
+      }));
+      expect(db.prepare("SELECT COUNT(*) AS count FROM subscription_events WHERE subscription_id = 'kinozal-rule'").get())
+        .toEqual({ count: 1 });
+      expect(discover).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ userId: user.id, baseUrl: "https://kinozal.tv" }),
+        { requiredTerms: ["Опасный", "2160p"] },
+      );
+    } finally {
+      discover.mockRestore();
+      db.close();
+    }
+  });
+});
+
 describe("change and notification helpers", () => {
   it("changes the fingerprint when monitored release fields change", () => {
     const release = { trackerKey: "rutor" as const, externalId: "1", title: "One", url: "https://rutor.is/torrent/1" };

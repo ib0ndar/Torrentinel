@@ -133,7 +133,14 @@ function snapshotDetails(snapshot: Release | undefined): Record<string, Diagnost
 function safeObservationDetails(details: Record<string, DiagnosticDetail> | undefined): Record<string, DiagnosticDetail> {
   if (!details) return {};
   const safe: Record<string, DiagnosticDetail> = {};
-  for (const key of ["subscriptionCount", "matchedCount", "newMatchCount"]) {
+  for (const key of [
+    "subscriptionCount",
+    "matchedCount",
+    "newMatchCount",
+    "baselineCount",
+    "requiredTerms",
+    "discoveryRevision",
+  ]) {
     const value = details[key];
     if (typeof value === "string") safe[key] = truncate(value, 200);
     else if (typeof value === "number" || typeof value === "boolean" || value === null) safe[key] = value;

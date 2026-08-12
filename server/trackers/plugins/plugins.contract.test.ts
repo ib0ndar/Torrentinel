@@ -33,7 +33,10 @@ describe("tracker plugin contract", () => {
 describe("Kinozal plugin", () => {
   it("requires credentials and refreshes an expired authenticated session", async () => {
     const plugin = createKinozalPlugin();
-    await expect(plugin.rules!.discover({ baseUrl: "https://kinozal.tv" }))
+    await expect(plugin.rules!.discover(
+      { baseUrl: "https://kinozal.tv" },
+      { requiredTerms: ["film", "2160p"] },
+    ))
       .rejects.toMatchObject<Partial<TrackerError>>({ code: "authentication" });
 
     const directPage = fixture("kinozal/fixtures/direct.html");
@@ -41,6 +44,7 @@ describe("Kinozal plugin", () => {
     const loginPage = fixture("kinozal/fixtures/login.html");
     let loginRequests = 0;
     let detailRequests = 0;
+    let browseUrl = "";
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes("takelogin.php")) {
@@ -54,13 +58,16 @@ describe("Kinozal plugin", () => {
         detailRequests += 1;
         return new Response(detailRequests === 1 ? loginPage : directPage, { status: 200 });
       }
-      if (url.includes("browse.php")) return new Response(recentPage, { status: 200 });
+      if (url.includes("browse.php")) {
+        browseUrl = url;
+        return new Response(recentPage, { status: 200 });
+      }
       return new Response("not found", { status: 404 });
     }));
     const context = { baseUrl: "https://kinozal.tv", username: "fixture-user", password: "fixture-password" };
 
     const direct = await plugin.direct!.fetchSnapshot("https://kinozal.tv/details.php?id=71", context);
-    const batch = await plugin.rules!.discover(context);
+    const batch = await plugin.rules!.discover(context, { requiredTerms: ["Film", "2160p"] });
 
     expect(loginRequests).toBe(2);
     expect(direct).toMatchObject({
@@ -69,8 +76,19 @@ describe("Kinozal plugin", () => {
       coverUrl: "https://kinozal.tv/i/poster/71.jpg",
       metadata: { coverObserved: true, changeMarker: "2026-08-07 12:34" },
     });
-    expect(batch.coverage).toEqual({ source: "recent-list", complete: false });
+    expect(new URL(browseUrl).searchParams.get("s")).toBe("Film 2160p");
+    expect(new URL(browseUrl).searchParams.get("t")).toBe("1");
+    expect(batch.coverage).toEqual({ source: "search", complete: false });
+    expect(batch.sourceUrl).toBe(browseUrl);
     expect(batch.releases[0]).toMatchObject({ externalId: "71", title: "Film 2026 BDRip" });
+  });
+
+  it("rejects a catalogue search without required phrases", async () => {
+    const plugin = createKinozalPlugin();
+    await expect(plugin.rules!.discover(
+      { baseUrl: "https://kinozal.tv", username: "fixture-user", password: "fixture-password" },
+      { requiredTerms: [] },
+    )).rejects.toMatchObject<Partial<TrackerError>>({ code: "unsupported" });
   });
 });
 

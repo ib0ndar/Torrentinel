@@ -24,6 +24,7 @@ export interface TrackerManifest {
     covers: boolean;
     ruleDiscovery?: RuleDiscoveryMode;
   };
+  ruleDiscoveryRevision?: string;
 }
 
 export interface DiscoveryCoverage {
@@ -36,6 +37,11 @@ export interface DiscoveryBatch {
   releases: Release[];
   coverage: DiscoveryCoverage;
   cursor?: string;
+  sourceUrl?: string;
+}
+
+export interface RuleDiscoveryQuery {
+  requiredTerms: readonly string[];
 }
 
 export interface DirectMonitor {
@@ -43,7 +49,7 @@ export interface DirectMonitor {
 }
 
 export interface RuleDiscoveryProvider {
-  discover(context: TrackerContext): Promise<DiscoveryBatch>;
+  discover(context: TrackerContext, query?: RuleDiscoveryQuery): Promise<DiscoveryBatch>;
 }
 
 export interface TrackerPlugin {

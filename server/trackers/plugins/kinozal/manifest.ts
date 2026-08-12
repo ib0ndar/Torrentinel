@@ -5,12 +5,13 @@ export const kinozalManifest: TrackerManifest = {
   displayName: "Kinozal",
   canonicalHosts: ["kinozal.tv", "kinozal.me", "kinozal.guru"],
   snapshotVersion: 2,
+  ruleDiscoveryRevision: "kinozal-search-v1",
   capabilities: {
     authentication: "required",
     customMirrors: true,
     direct: true,
     rules: true,
     covers: true,
-    ruleDiscovery: "recent-list",
+    ruleDiscovery: "search",
   },
 };

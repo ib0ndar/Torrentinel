@@ -109,6 +109,7 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
       subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       tracker_key TEXT NOT NULL REFERENCES tracker_mirrors(tracker_key),
       initialized INTEGER NOT NULL DEFAULT 0,
+      discovery_revision TEXT,
       last_checked_at TEXT,
       last_error TEXT,
       PRIMARY KEY(subscription_id, tracker_key)
@@ -219,6 +220,12 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
 }
 
 function migrate(db: SqliteDatabase): void {
+  const trackerStateColumns = db.prepare("PRAGMA table_info(subscription_tracker_state)")
+    .all() as Array<{ name: string }>;
+  if (!trackerStateColumns.some((column) => column.name === "discovery_revision")) {
+    db.exec("ALTER TABLE subscription_tracker_state ADD COLUMN discovery_revision TEXT");
+  }
+
   const telegramAccounts = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'telegram_accounts'")
     .get() as { sql: string } | undefined;
   if (!telegramAccounts?.sql.includes("chat_id TEXT NOT NULL UNIQUE")) return;

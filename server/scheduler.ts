@@ -4,7 +4,7 @@ import { nowIso } from "./db.js";
 import { config } from "./config.js";
 import type { DirectSnapshot, Release, TrackerKey } from "./types.js";
 import { trackerRegistry } from "./trackers/index.js";
-import type { TrackerContext } from "./trackers/core/contracts.js";
+import type { TrackerContext, TrackerPlugin } from "./trackers/core/contracts.js";
 import { TrackerError } from "./trackers/core/errors.js";
 import type { TelegramService } from "./telegram.js";
 import { readTrackerCredentials, type SecretVault } from "./secrets.js";
@@ -38,6 +38,12 @@ interface RuleRow {
   ignored_terms: string;
   base_url: string;
   tracker_initialized: number;
+  discovery_revision: string | null;
+}
+
+interface RuleDiscoveryGroup {
+  rows: RuleRow[];
+  requiredTerms?: string[];
 }
 
 interface SchedulerStatus {
@@ -324,7 +330,8 @@ export class Scheduler {
     const rows = this.db.prepare(`
       SELECT s.id, s.user_id, s.name, st.tracker_key, s.required_terms, s.ignored_terms,
              COALESCE(utm.base_url, tm.base_url) AS base_url,
-             COALESCE(sts.initialized, 0) AS tracker_initialized
+             COALESCE(sts.initialized, 0) AS tracker_initialized,
+             sts.discovery_revision
       FROM subscriptions s
       JOIN subscription_trackers st ON st.subscription_id = s.id
       JOIN tracker_mirrors tm ON tm.tracker_key = st.tracker_key AND tm.enabled = 1
@@ -363,71 +370,68 @@ export class Scheduler {
         });
         continue;
       }
-      let releases: Release[];
-      try {
-        releases = (await plugin.rules.discover(this.context(sample.user_id, sample.tracker_key, sample.base_url))).releases;
-        status.checked += 1;
-      } catch (error) {
-        status.errors += 1;
-        const message = errorMessage(error);
-        for (const row of groupRows) this.updateTrackerState(row.id, row.tracker_key, false, message);
-        this.recordObservation({
-          runId,
-          userId: sample.user_id,
-          trackerKey: sample.tracker_key,
-          operation: "rule-discovery",
-          outcome: diagnosticOutcome(error),
-          requestedUrl: sample.base_url,
-          durationMs: Date.now() - startedMs,
-          error,
-          details: { subscriptionCount: groupRows.length },
-        });
-        continue;
-      }
-
-      let matchedCount = 0;
-      let newMatchCount = 0;
-      for (const row of groupRows) {
-        const required = parseTerms(row.required_terms);
-        const ignored = parseTerms(row.ignored_terms);
-        const matches = releases.filter((release) => titleMatches(release.title, required, ignored));
-        matchedCount += matches.length;
-        const isBaseline = !row.tracker_initialized;
-        for (const release of matches) {
-          const matchId = nanoid();
-          const result = this.db.prepare(`
-            INSERT OR IGNORE INTO rule_matches
-              (id, subscription_id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            matchId, row.id, release.trackerKey, release.externalId, release.title, release.url,
-            release.magnet || null, release.torrentUrl || null, nowIso(),
+      let successfulDiscoveries = 0;
+      let failedDiscoveries = 0;
+      for (const discoveryGroup of ruleDiscoveryGroups(plugin, groupRows)) {
+        const discoveryStartedMs = Date.now();
+        const query = discoveryGroup.requiredTerms
+          ? { requiredTerms: discoveryGroup.requiredTerms }
+          : undefined;
+        try {
+          const batch = await plugin.rules.discover(
+            this.context(sample.user_id, sample.tracker_key, sample.base_url),
+            query,
           );
-          if (!isBaseline && result.changes > 0) {
-            newMatchCount += 1;
-            const enriched = await this.enrichRuleMatch(release, row, plugin, runId);
-            this.db.prepare(`
-              UPDATE rule_matches SET title = ?, url = ?, magnet = ?, torrent_url = ? WHERE id = ?
-            `).run(enriched.title, enriched.url, enriched.magnet || null, enriched.torrentUrl || null, matchId);
-            newByRule.set(row.id, [...(newByRule.get(row.id) || []), enriched]);
-          }
+          successfulDiscoveries += 1;
+          const { matchedCount, newMatchCount, baselineCount } = await this.processRuleMatches(
+            discoveryGroup.rows,
+            batch.releases,
+            plugin,
+            runId,
+            newByRule,
+          );
+          this.recordObservation({
+            runId,
+            userId: sample.user_id,
+            trackerKey: sample.tracker_key,
+            operation: "rule-discovery",
+            outcome: newMatchCount > 0 ? "new-matches" : baselineCount > 0 ? "baseline" : "unchanged",
+            requestedUrl: batch.sourceUrl || sample.base_url,
+            releaseCount: batch.releases.length,
+            durationMs: Date.now() - discoveryStartedMs,
+            details: {
+              subscriptionCount: discoveryGroup.rows.length,
+              matchedCount,
+              newMatchCount,
+              baselineCount,
+              ...(discoveryGroup.requiredTerms ? { requiredTerms: discoveryGroup.requiredTerms.join(" · ") } : {}),
+              ...(plugin.manifest.ruleDiscoveryRevision
+                ? { discoveryRevision: plugin.manifest.ruleDiscoveryRevision }
+                : {}),
+            },
+          });
+        } catch (error) {
+          failedDiscoveries += 1;
+          const message = errorMessage(error);
+          for (const row of discoveryGroup.rows) this.updateTrackerState(row.id, row.tracker_key, false, message);
+          this.recordObservation({
+            runId,
+            userId: sample.user_id,
+            trackerKey: sample.tracker_key,
+            operation: "rule-discovery",
+            outcome: diagnosticOutcome(error),
+            requestedUrl: error instanceof TrackerError && error.url ? error.url : sample.base_url,
+            durationMs: Date.now() - discoveryStartedMs,
+            error,
+            details: {
+              subscriptionCount: discoveryGroup.rows.length,
+              ...(discoveryGroup.requiredTerms ? { requiredTerms: discoveryGroup.requiredTerms.join(" · ") } : {}),
+            },
+          });
         }
-        this.updateTrackerState(row.id, row.tracker_key, true, null);
-        this.db.prepare(`
-          UPDATE subscriptions SET initialized = 1, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
-        `).run(nowIso(), nowIso(), row.id);
       }
-      this.recordObservation({
-        runId,
-        userId: sample.user_id,
-        trackerKey: sample.tracker_key,
-        operation: "rule-discovery",
-        outcome: newMatchCount > 0 ? "new-matches" : "unchanged",
-        requestedUrl: sample.base_url,
-        releaseCount: releases.length,
-        durationMs: Date.now() - startedMs,
-        details: { subscriptionCount: groupRows.length, matchedCount, newMatchCount },
-      });
+      if (successfulDiscoveries > 0) status.checked += 1;
+      if (failedDiscoveries > 0) status.errors += 1;
     }
 
     for (const subscriptionId of new Set(rows.map((row) => row.id))) {
@@ -470,6 +474,52 @@ export class Scheduler {
         });
       }
     }
+  }
+
+  private async processRuleMatches(
+    rows: RuleRow[],
+    releases: Release[],
+    plugin: TrackerPlugin,
+    runId: string,
+    newByRule: Map<string, Release[]>,
+  ): Promise<{ matchedCount: number; newMatchCount: number; baselineCount: number }> {
+    let matchedCount = 0;
+    let newMatchCount = 0;
+    let baselineCount = 0;
+    for (const row of rows) {
+      const required = parseTerms(row.required_terms);
+      const ignored = parseTerms(row.ignored_terms);
+      const matches = releases.filter((release) => titleMatches(release.title, required, ignored));
+      matchedCount += matches.length;
+      const discoveryRevision = plugin.manifest.ruleDiscoveryRevision;
+      const isBaseline = !row.tracker_initialized
+        || Boolean(discoveryRevision && row.discovery_revision !== discoveryRevision);
+      if (isBaseline) baselineCount += 1;
+      for (const release of matches) {
+        const matchId = nanoid();
+        const result = this.db.prepare(`
+          INSERT OR IGNORE INTO rule_matches
+            (id, subscription_id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          matchId, row.id, release.trackerKey, release.externalId, release.title, release.url,
+          release.magnet || null, release.torrentUrl || null, nowIso(),
+        );
+        if (!isBaseline && result.changes > 0) {
+          newMatchCount += 1;
+          const enriched = await this.enrichRuleMatch(release, row, plugin, runId);
+          this.db.prepare(`
+            UPDATE rule_matches SET title = ?, url = ?, magnet = ?, torrent_url = ? WHERE id = ?
+          `).run(enriched.title, enriched.url, enriched.magnet || null, enriched.torrentUrl || null, matchId);
+          newByRule.set(row.id, [...(newByRule.get(row.id) || []), enriched]);
+        }
+      }
+      this.updateTrackerState(row.id, row.tracker_key, true, null, discoveryRevision);
+      this.db.prepare(`
+        UPDATE subscriptions SET initialized = 1, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
+      `).run(nowIso(), nowIso(), row.id);
+    }
+    return { matchedCount, newMatchCount, baselineCount };
   }
 
   private async enrichRuleMatch(
@@ -526,17 +576,24 @@ export class Scheduler {
     `);
   }
 
-  private updateTrackerState(subscriptionId: string, trackerKey: TrackerKey, initialized: boolean, error: string | null): void {
+  private updateTrackerState(
+    subscriptionId: string,
+    trackerKey: TrackerKey,
+    initialized: boolean,
+    error: string | null,
+    discoveryRevision?: string,
+  ): void {
     const timestamp = nowIso();
     this.db.prepare(`
       INSERT INTO subscription_tracker_state
-        (subscription_id, tracker_key, initialized, last_checked_at, last_error)
-      VALUES (?, ?, ?, ?, ?)
+        (subscription_id, tracker_key, initialized, discovery_revision, last_checked_at, last_error)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(subscription_id, tracker_key) DO UPDATE SET
         initialized = CASE WHEN excluded.initialized = 1 THEN 1 ELSE subscription_tracker_state.initialized END,
+        discovery_revision = COALESCE(excluded.discovery_revision, subscription_tracker_state.discovery_revision),
         last_checked_at = excluded.last_checked_at,
         last_error = excluded.last_error
-    `).run(subscriptionId, trackerKey, initialized ? 1 : 0, timestamp, error);
+    `).run(subscriptionId, trackerKey, initialized ? 1 : 0, discoveryRevision || null, timestamp, error);
   }
 
   private context(userId: string, trackerKey: TrackerKey, baseUrl: string): TrackerContext {
@@ -598,6 +655,22 @@ export function directSnapshotRequiresSilentSchemaUpgrade(value: string | null, 
   const previousVersion = isRecord(previous.metadata) ? previous.metadata.snapshotVersion : undefined;
   const currentVersion = current.metadata?.snapshotVersion;
   return typeof currentVersion === "number" && previousVersion !== currentVersion;
+}
+
+function ruleDiscoveryGroups(plugin: TrackerPlugin, rows: RuleRow[]): RuleDiscoveryGroup[] {
+  if (plugin.manifest.capabilities.ruleDiscovery !== "search") return [{ rows }];
+  const groups = new Map<string, RuleDiscoveryGroup>();
+  for (const row of rows) {
+    const requiredTerms = parseTerms(row.required_terms);
+    const key = JSON.stringify(requiredTerms
+      .map((term) => term.trim().toLocaleLowerCase("ru-RU"))
+      .filter(Boolean)
+      .sort());
+    const existing = groups.get(key);
+    if (existing) existing.rows.push(row);
+    else groups.set(key, { rows: [row], requiredTerms });
+  }
+  return [...groups.values()];
 }
 
 function parseTerms(value: string): string[] {
