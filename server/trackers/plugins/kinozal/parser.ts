@@ -46,16 +46,17 @@ export function parseKinozalDirect(body: string, normalizedUrl: string): Release
   };
 }
 
-export function parseKinozalRecent(body: string, baseUrl: string): Release[] {
+export function parseKinozalSearch(body: string, baseUrl: string): Release[] {
   const $ = cheerio.load(body);
   const releases: Release[] = [];
-  $("a[href*='details.php?id=']").each((_, element) => {
-    const href = $(element).attr("href");
-    const title = cleanText($(element).text()) || cleanText($(element).attr("title"));
+  $("table.t_peer tr").each((_, rowElement) => {
+    const row = $(rowElement);
+    const link = row.find("td.nam a[href*='details.php?id=']").first();
+    const href = link.attr("href");
+    const title = cleanText(link.text()) || cleanText(link.attr("title"));
     if (!href || !title) return;
     const releaseUrl = absoluteUrl(href, baseUrl);
     if (!releaseUrl) return;
-    const row = $(element).closest("tr");
     const externalId = externalIdFromUrl(releaseUrl, [/[?&]id=(\d+)/i]);
     releases.push({
       trackerKey: "kinozal",
@@ -68,7 +69,10 @@ export function parseKinozalRecent(body: string, baseUrl: string): Release[] {
     });
   });
   if (releases.length === 0) {
-    throw new TrackerError("parse", "Kinozal recent page did not contain any releases", { trackerKey: "kinozal" });
+    if (/Найдено\s+0\s+раздач/iu.test(body)) return [];
+    throw new TrackerError("parse", "Kinozal search page did not contain a recognizable results table", {
+      trackerKey: "kinozal",
+    });
   }
   return uniqueReleases(releases);
 }

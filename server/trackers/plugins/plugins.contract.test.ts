@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TrackerError } from "../core/errors.js";
 import { TrackerPluginRegistry } from "../core/registry.js";
 import { createKinozalPlugin } from "./kinozal/index.js";
+import { parseKinozalSearch } from "./kinozal/parser.js";
 import { createRutorPlugin } from "./rutor/index.js";
 import { rutorMissing } from "./rutor/transport.js";
 import { createRutrackerPlugin } from "./rutracker/index.js";
@@ -89,6 +90,15 @@ describe("Kinozal plugin", () => {
       { baseUrl: "https://kinozal.tv", username: "fixture-user", password: "fixture-password" },
       { requiredTerms: [] },
     )).rejects.toMatchObject<Partial<TrackerError>>({ code: "unsupported" });
+  });
+
+  it("treats an empty search as a successful result and ignores unrelated topic links", () => {
+    expect(parseKinozalSearch(`
+      <div class="menu"><a href="details.php?id=900">Unrelated menu topic</a></div>
+      <p>Найдено 0 раздач</p>
+    `, "https://kinozal.me")).toEqual([]);
+    expect(parseKinozalSearch(fixture("kinozal/fixtures/recent.html"), "https://kinozal.me"))
+      .toHaveLength(1);
   });
 });
 

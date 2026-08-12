@@ -1,7 +1,7 @@
 import type { RuleDiscoveryProvider } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
 import type { KinozalSessionManager } from "./auth.js";
-import { parseKinozalRecent } from "./parser.js";
+import { parseKinozalSearch } from "./parser.js";
 
 export function createKinozalRuleDiscovery(session: KinozalSessionManager): RuleDiscoveryProvider {
   return {
@@ -17,7 +17,7 @@ export function createKinozalRuleDiscovery(session: KinozalSessionManager): Rule
       searchUrl.searchParams.set("t", "1");
       const result = await session.get(searchUrl.toString(), context);
       return {
-        releases: parseKinozalRecent(result.body, context.baseUrl),
+        releases: parseKinozalSearch(result.body, context.baseUrl),
         coverage: { source: "search", complete: false },
         sourceUrl: result.url,
       };

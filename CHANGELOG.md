@@ -2,6 +2,13 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.2.4] - 2026-08-12
+
+### Fixed
+
+- Empty Kinozal catalogue searches are now treated as successful checks with no matches.
+- Kinozal search parsing is restricted to the release-results table, preventing unrelated topic links from being stored as rule matches.
+
 ## [0.2.3] - 2026-08-12
 
 ### Changed
@@ -65,6 +72,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.2.4]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.3
 [0.2.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.2
 [0.2.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.1
