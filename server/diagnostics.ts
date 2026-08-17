@@ -35,6 +35,7 @@ export interface TelegramDeliveryInput {
   telegramMessageId?: number;
   durationMs: number;
   error?: unknown;
+  artworkError?: unknown;
   createdAt?: string;
 }
 
@@ -102,8 +103,8 @@ export function recordTelegramDelivery(db: SqliteDatabase, input: TelegramDelive
   db.prepare(`
     INSERT INTO telegram_deliveries (
       id, user_id, subscription_id, tracker_key, external_id, title,
-      delivery_method, outcome, telegram_message_id, error_message, duration_ms, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      delivery_method, outcome, telegram_message_id, error_message, artwork_error_message, duration_ms, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     nanoid(),
     input.userId,
@@ -115,6 +116,7 @@ export function recordTelegramDelivery(db: SqliteDatabase, input: TelegramDelive
     input.outcome,
     input.telegramMessageId ?? null,
     input.error ? safeDiagnosticText(input.error instanceof Error ? input.error.message : String(input.error)) : null,
+    input.artworkError ? safeDiagnosticText(input.artworkError instanceof Error ? input.artworkError.message : String(input.artworkError)) : null,
     Math.max(0, Math.round(input.durationMs)),
     input.createdAt || new Date().toISOString(),
   );

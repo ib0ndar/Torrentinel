@@ -265,13 +265,20 @@ describe("authenticated API", () => {
         outcome: "delivered",
         telegramMessageId: 99,
         durationMs: 80,
+        artworkError: "Telegram could not fetch the image URL; HTTPS/2 upload succeeded",
       });
       const diagnostics = await app.inject({ method: "GET", url: "/api/admin/diagnostics", headers: { cookie: adminCookie } });
       expect(diagnostics.statusCode).toBe(200);
       expect(diagnostics.json()).toMatchObject({
         retentionHours: 168,
         observations: [{ trackerKey: "rutor", operation: "direct", outcome: "missing", username: "admin" }],
-        telegramDeliveries: [{ trackerKey: "rutor", outcome: "delivered", telegramMessageId: 99, username: "admin" }],
+        telegramDeliveries: [{
+          trackerKey: "rutor",
+          outcome: "delivered",
+          telegramMessageId: 99,
+          artworkErrorMessage: "Telegram could not fetch the image URL; HTTPS/2 upload succeeded",
+          username: "admin",
+        }],
       });
 
       const invalidInterval = await app.inject({

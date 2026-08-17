@@ -876,6 +876,7 @@ function serializeTelegramDelivery(row: TelegramDeliveryRow) {
     outcome: row.outcome,
     telegramMessageId: row.telegram_message_id,
     errorMessage: row.error_message,
+    artworkErrorMessage: row.artwork_error_message,
     durationMs: row.duration_ms,
     createdAt: row.created_at,
   };
@@ -926,5 +927,5 @@ interface TelegramDeliveryRow {
   id: string; subscription_id: string | null; subscription_name: string | null; username: string;
   tracker_key: TrackerKey | null; external_id: string | null; title: string | null;
   delivery_method: string; outcome: string; telegram_message_id: number | null;
-  error_message: string | null; duration_ms: number; created_at: string;
+  error_message: string | null; artwork_error_message: string | null; duration_ms: number; created_at: string;
 }

@@ -2,6 +2,18 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.2.6] - 2026-08-17
+
+### Added
+
+- Telegram delivery diagnostics now retain sanitized artwork-fallback errors even when the final text or uploaded-photo message succeeds.
+- The Administration interface shows the artwork fallback reason together with each Telegram delivery receipt.
+
+### Fixed
+
+- Cover retrieval now retries through secure HTTP/2 before falling back to a text-only Telegram notification, supporting image hosts such as Fastpic that reject Node.js's standard HTTPS client while serving the same image over HTTP/2.
+- HTTP/2 cover downloads enforce HTTPS-only redirects, timeouts, image content types, and Telegram's photo-size limit before uploading the image to Telegram.
+
 ## [0.2.5] - 2026-08-12
 
 ### Added
@@ -84,6 +96,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.2.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.3

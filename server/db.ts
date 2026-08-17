@@ -194,6 +194,7 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
       outcome TEXT NOT NULL,
       telegram_message_id INTEGER,
       error_message TEXT,
+      artwork_error_message TEXT,
       duration_ms INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
@@ -242,6 +243,12 @@ function migrate(db: SqliteDatabase): void {
     .all() as Array<{ name: string }>;
   if (!trackerStateColumns.some((column) => column.name === "discovery_revision")) {
     db.exec("ALTER TABLE subscription_tracker_state ADD COLUMN discovery_revision TEXT");
+  }
+
+  const telegramDeliveryColumns = db.prepare("PRAGMA table_info(telegram_deliveries)")
+    .all() as Array<{ name: string }>;
+  if (!telegramDeliveryColumns.some((column) => column.name === "artwork_error_message")) {
+    db.exec("ALTER TABLE telegram_deliveries ADD COLUMN artwork_error_message TEXT");
   }
 
   const telegramAccounts = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'telegram_accounts'")

@@ -69,6 +69,29 @@ describe("tracker diagnostics", () => {
     expect(serialized).not.toContain("do-not-store");
   });
 
+  it("stores sanitized artwork fallback errors with Telegram delivery receipts", () => {
+    const db = testDatabase();
+    const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: string };
+    recordTelegramDelivery(db, {
+      userId: user.id,
+      trackerKey: "rutracker",
+      externalId: "6887455",
+      title: "Fixture delivery",
+      deliveryMethod: "photo-upload",
+      outcome: "delivered",
+      telegramMessageId: 18,
+      durationMs: 250,
+      artworkError: "cover failed token=private-value at https://user:pass@example.test/image.jpg?api_key=secret",
+    });
+
+    const row = db.prepare("SELECT artwork_error_message FROM telegram_deliveries").get() as { artwork_error_message: string };
+    expect(row.artwork_error_message).toContain("token=[redacted]");
+    expect(row.artwork_error_message).toContain("api_key=[redacted]");
+    expect(row.artwork_error_message).not.toContain("private-value");
+    expect(row.artwork_error_message).not.toContain("user:pass");
+    expect(row.artwork_error_message).not.toContain("secret");
+  });
+
   it("removes observations and runs older than exactly 168 hours", () => {
     const db = testDatabase();
     const user = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: string };

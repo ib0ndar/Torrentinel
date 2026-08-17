@@ -835,13 +835,15 @@ function Admin({ notify }: { notify: Notify }) {
           <div className="diagnostic-head telegram-delivery-grid"><span>Sent</span><span>Account</span><span>Source</span><span>Delivery</span><span>Outcome</span><span>Release</span><span>Duration</span></div>
           {diagnostics.telegramDeliveries.map((delivery) => {
             const detail = delivery.errorMessage || delivery.title || "General notification";
+            const receipt = delivery.telegramMessageId ? `Telegram message #${delivery.telegramMessageId}` : "No delivery receipt";
+            const deliveryNote = delivery.artworkErrorMessage ? `Artwork fallback: ${delivery.artworkErrorMessage} · ${receipt}` : receipt;
             return <div className="diagnostic-row telegram-delivery-grid" key={delivery.id}>
               <span className="diagnostic-time" title={new Date(delivery.createdAt).toLocaleString()}>{relativeTime(delivery.createdAt)}</span>
               <span className="diagnostic-detail"><strong>{delivery.username}</strong><small>{delivery.subscriptionName || (delivery.subscriptionId ? `Subscription ${delivery.subscriptionId}` : "Account message")}</small></span>
               <span className="diagnostic-source">{delivery.trackerKey ? <><TrackerTag tracker={delivery.trackerKey} /><span><strong>{trackerName(delivery.trackerKey)}</strong><small>{delivery.externalId ? `ID ${delivery.externalId}` : "Release"}</small></span></> : <span><strong>System</strong><small>Telegram</small></span>}</span>
               <span className="diagnostic-operation">{deliveryMethodLabel(delivery.deliveryMethod)}</span>
               <span><span className={`state ${diagnosticStateClass(delivery.outcome)}`}>{delivery.outcome}</span></span>
-              <span className="diagnostic-detail"><strong title={detail}>{detail}</strong><small>{delivery.telegramMessageId ? `Telegram message #${delivery.telegramMessageId}` : "No delivery receipt"}</small></span>
+              <span className="diagnostic-detail"><strong title={detail}>{detail}</strong><small title={deliveryNote}>{deliveryNote}</small></span>
               <span className="diagnostic-duration">{formatDiagnosticDuration(delivery.durationMs)}</span>
             </div>;
           })}

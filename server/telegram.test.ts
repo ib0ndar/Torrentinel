@@ -108,6 +108,50 @@ describe("rich Telegram release notifications", () => {
     });
   });
 
+  it("retries cover retrieval through HTTPS/2 before falling back to text", async () => {
+    const calls: TelegramCall[] = [];
+    const { db, vault, userId } = notificationDatabase();
+    const mediaFetcher: typeof fetch = async () => new Response("not found", { status: 404 });
+    const http2MediaFetcher = async () => ({
+      bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]).buffer as ArrayBuffer,
+      contentType: "image/jpeg",
+    });
+    const telegram = new TelegramService(
+      db,
+      vault,
+      telegramFetcher(calls, "sendPhoto"),
+      "https://torrentinel.example",
+      mediaFetcher,
+      http2MediaFetcher,
+    );
+
+    await telegram.notifyRelease(userId, {
+      trackerName: "RuTracker",
+      release: {
+        trackerKey: "rutracker",
+        externalId: "6887455",
+        title: "HTTP/2 cover retry",
+        url: "https://rutracker.org/forum/viewtopic.php?t=6887455",
+        coverUrl: "https://i128.fastpic.org/big/cover.jpg",
+      },
+    });
+
+    expect(calls.map((call) => call.method)).toEqual(["sendPhoto", "sendPhoto"]);
+    expect(calls[1].multipart).toBe(true);
+    expect(calls[1].body.photo).toBe("image/jpeg:4");
+    const delivery = db.prepare(`
+      SELECT outcome, delivery_method, telegram_message_id, artwork_error_message
+      FROM telegram_deliveries
+    `).get() as Record<string, unknown>;
+    expect(delivery).toMatchObject({
+      outcome: "delivered",
+      delivery_method: "photo-upload",
+      telegram_message_id: 2,
+    });
+    expect(delivery.artwork_error_message).toContain("failed to fetch photo");
+    expect(delivery.artwork_error_message).toContain("cover download failed with HTTP 404");
+  });
+
   it("uses a text notification only when both remote and uploaded artwork delivery fail", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const calls: TelegramCall[] = [];
@@ -119,6 +163,7 @@ describe("rich Telegram release notifications", () => {
       telegramFetcher(calls, "sendPhoto"),
       "https://torrentinel.example",
       mediaFetcher,
+      async () => { throw new Error("HTTPS/2 cover download failed with HTTP 404"); },
     );
 
     await telegram.notifyRelease(userId, {
@@ -135,11 +180,14 @@ describe("rich Telegram release notifications", () => {
 
     expect(calls.map((call) => call.method)).toEqual(["sendPhoto", "sendMessage"]);
     expect(calls[1].body.text).toContain("⚡ Fallback release");
-    expect(db.prepare("SELECT outcome, delivery_method, telegram_message_id FROM telegram_deliveries").get()).toEqual({
+    const delivery = db.prepare("SELECT outcome, delivery_method, telegram_message_id, artwork_error_message FROM telegram_deliveries").get() as Record<string, unknown>;
+    expect(delivery).toMatchObject({
       outcome: "delivered",
       delivery_method: "text",
       telegram_message_id: 2,
     });
+    expect(delivery.artwork_error_message).toContain("standard HTTPS fetch: cover download failed with HTTP 403");
+    expect(delivery.artwork_error_message).toContain("HTTPS/2 retry: HTTPS/2 cover download failed with HTTP 404");
   });
 
   it("records a skipped delivery when Telegram is not linked", async () => {

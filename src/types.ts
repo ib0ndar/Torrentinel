@@ -175,6 +175,7 @@ export interface TelegramDelivery {
   outcome: "delivered" | "failed" | "skipped";
   telegramMessageId?: number | null;
   errorMessage?: string | null;
+  artworkErrorMessage?: string | null;
   durationMs: number;
   createdAt: string;
 }
