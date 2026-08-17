@@ -2,6 +2,13 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.2.7] - 2026-08-17
+
+### Fixed
+
+- Telegram cover uploads now retry HTTP/2 without a `Referer` header when an image host rejects hotlinked requests, fixing Fastpic images that deliberately returned HTTP 404 when the RuTracker page was supplied as the referrer.
+- Successful cover fallbacks retain the failed retrieval stages in Administration diagnostics for future tracker and image-host investigations.
+
 ## [0.2.6] - 2026-08-17
 
 ### Added
@@ -96,6 +103,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.2.7]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.7
 [0.2.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.4

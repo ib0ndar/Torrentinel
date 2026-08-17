@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Http2CoverFetcher } from "./cover-http2.js";
 import { createDatabase, nowIso, type SqliteDatabase } from "./db.js";
 import { createSecretVault, telegramTokenAad, type SecretVault } from "./secrets.js";
 import { TelegramService } from "./telegram.js";
@@ -108,14 +109,19 @@ describe("rich Telegram release notifications", () => {
     });
   });
 
-  it("retries cover retrieval through HTTPS/2 before falling back to text", async () => {
+  it("retries cover retrieval through HTTPS/2 without a referer before falling back to text", async () => {
     const calls: TelegramCall[] = [];
     const { db, vault, userId } = notificationDatabase();
     const mediaFetcher: typeof fetch = async () => new Response("not found", { status: 404 });
-    const http2MediaFetcher = async () => ({
-      bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]).buffer as ArrayBuffer,
-      contentType: "image/jpeg",
-    });
+    const http2Headers: Array<Record<string, string>> = [];
+    const http2MediaFetcher: Http2CoverFetcher = async (_url, options) => {
+      http2Headers.push(options.headers);
+      if (options.headers.referer) throw new Error("cover download failed with HTTP 404");
+      return {
+        bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]).buffer as ArrayBuffer,
+        contentType: "image/jpeg",
+      };
+    };
     const telegram = new TelegramService(
       db,
       vault,
@@ -139,6 +145,9 @@ describe("rich Telegram release notifications", () => {
     expect(calls.map((call) => call.method)).toEqual(["sendPhoto", "sendPhoto"]);
     expect(calls[1].multipart).toBe(true);
     expect(calls[1].body.photo).toBe("image/jpeg:4");
+    expect(http2Headers).toHaveLength(2);
+    expect(http2Headers[0].referer).toBe("https://rutracker.org/forum/viewtopic.php?t=6887455");
+    expect(http2Headers[1].referer).toBeUndefined();
     const delivery = db.prepare(`
       SELECT outcome, delivery_method, telegram_message_id, artwork_error_message
       FROM telegram_deliveries
@@ -187,7 +196,8 @@ describe("rich Telegram release notifications", () => {
       telegram_message_id: 2,
     });
     expect(delivery.artwork_error_message).toContain("standard HTTPS fetch: cover download failed with HTTP 403");
-    expect(delivery.artwork_error_message).toContain("HTTPS/2 retry: HTTPS/2 cover download failed with HTTP 404");
+    expect(delivery.artwork_error_message).toContain("HTTPS/2 retry with referer: HTTPS/2 cover download failed with HTTP 404");
+    expect(delivery.artwork_error_message).toContain("HTTPS/2 retry without referer: HTTPS/2 cover download failed with HTTP 404");
   });
 
   it("records a skipped delivery when Telegram is not linked", async () => {

@@ -36,7 +36,7 @@ interface TelegramMessage {
 
 interface UploadedPhotoResult {
   message: TelegramMessage;
-  standardFetchError?: string;
+  coverFetchErrors?: string;
 }
 
 interface BotRow {
@@ -285,7 +285,7 @@ export class TelegramService {
               caption,
               replyMarkup,
             );
-            artworkError = combineErrors(remotePhotoError, uploaded.standardFetchError);
+            artworkError = combineErrors(remotePhotoError, uploaded.coverFetchErrors);
             this.recordReleaseDelivery(userId, notification, {
               deliveryMethod: "photo-upload",
               outcome: "delivered",
@@ -376,7 +376,7 @@ export class TelegramService {
       "user-agent": COVER_USER_AGENT,
     };
     let asset: CoverAsset;
-    let standardFetchError: string | undefined;
+    let coverFetchErrors: string | undefined;
     try {
       const response = await this.mediaFetcher(coverUrl, {
         headers,
@@ -384,7 +384,7 @@ export class TelegramService {
       });
       asset = await coverAssetFromResponse(response);
     } catch (error) {
-      standardFetchError = safeError(error);
+      const standardFetchError = safeError(error);
       try {
         asset = await this.http2MediaFetcher(coverUrl, {
           headers,
@@ -392,8 +392,26 @@ export class TelegramService {
           timeoutMs: 20_000,
         });
       } catch (http2Error) {
-        throw new Error(`standard HTTPS fetch: ${standardFetchError}; HTTPS/2 retry: ${safeError(http2Error)}`);
+        const { referer: _referer, ...headersWithoutReferer } = headers;
+        try {
+          asset = await this.http2MediaFetcher(coverUrl, {
+            headers: headersWithoutReferer,
+            maximumBytes: MAX_TELEGRAM_PHOTO_BYTES,
+            timeoutMs: 20_000,
+          });
+        } catch (http2WithoutRefererError) {
+          throw new Error([
+            `standard HTTPS fetch: ${standardFetchError}`,
+            `HTTPS/2 retry with referer: ${safeError(http2Error)}`,
+            `HTTPS/2 retry without referer: ${safeError(http2WithoutRefererError)}`,
+          ].join("; "));
+        }
+        coverFetchErrors = [
+          `standard HTTPS fetch: ${standardFetchError}`,
+          `HTTPS/2 retry with referer: ${safeError(http2Error)}`,
+        ].join("; ");
       }
+      coverFetchErrors ||= `standard HTTPS fetch: ${standardFetchError}`;
     }
 
     const form = new FormData();
@@ -403,7 +421,7 @@ export class TelegramService {
     form.set("parse_mode", "HTML");
     form.set("reply_markup", JSON.stringify(replyMarkup));
     const message = await this.callForm<TelegramMessage>(token, "sendPhoto", form);
-    return { message, standardFetchError };
+    return { message, coverFetchErrors };
   }
 
   private startWorker(userId: string, token: string, offset: number): void {
