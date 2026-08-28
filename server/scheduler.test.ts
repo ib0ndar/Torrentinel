@@ -14,6 +14,7 @@ import type { TelegramService } from "./telegram.js";
 import type { DirectSnapshot } from "./types.js";
 import { fingerprintRelease } from "./trackers/core/parsing.js";
 import { trackerRegistry } from "./trackers/index.js";
+import type { CoverCacheStore } from "./cover-cache.js";
 
 describe("rule matching", () => {
   it("requires every required phrase without case sensitivity", () => {
@@ -159,6 +160,76 @@ describe("change and notification helpers", () => {
 });
 
 describe("direct subscription title synchronization", () => {
+  it("caches the baseline cover and retries refreshes after an update-time failure", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO subscriptions (
+        id, user_id, collection_id, type, name, direct_url, created_at, updated_at
+      ) VALUES ('cover-retry', ?, ?, 'direct', '', 'https://rutor.is/torrent/800/test', ?, ?)
+    `).run(user.id, collection.id, timestamp, timestamp);
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES ('cover-retry', 'rutor')").run();
+
+    const baseline = directSnapshot("Baseline", "fingerprint-1", "cover-1.jpg");
+    const firstUpdate = directSnapshot("First update", "fingerprint-2", "cover-2.jpg");
+    const secondUpdate = directSnapshot("Second update", "fingerprint-3", "cover-3.jpg");
+    const plugin = trackerRegistry.get("rutor");
+    if (!plugin?.direct) throw new Error("Rutor direct monitor is unavailable");
+    const fetchSnapshot = vi.spyOn(plugin.direct, "fetchSnapshot")
+      .mockResolvedValueOnce(baseline)
+      .mockResolvedValueOnce(firstUpdate)
+      .mockResolvedValueOnce(secondUpdate);
+    const refresh = vi.fn<CoverCacheStore["refresh"]>()
+      .mockResolvedValueOnce({
+        cachedAt: timestamp,
+        contentType: "image/jpeg",
+        byteLength: 3,
+        sourceUrl: baseline.coverUrl!,
+      })
+      .mockRejectedValueOnce(new Error("cover refresh timed out [ETIMEDOUT]"))
+      .mockResolvedValueOnce({
+        cachedAt: timestamp,
+        contentType: "image/jpeg",
+        byteLength: 4,
+        sourceUrl: secondUpdate.coverUrl!,
+      });
+    const coverCache: CoverCacheStore = {
+      has: vi.fn(() => true),
+      refresh,
+      read: vi.fn(),
+      remove: vi.fn(),
+    };
+    const notifyRelease = vi.fn(async () => undefined);
+    const telegram = { notifyRelease } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 5)), coverCache);
+
+    try {
+      expect((await scheduler.run("test")).changed).toBe(0);
+      expect(notifyRelease).not.toHaveBeenCalled();
+      expect((await scheduler.run("test")).changed).toBe(1);
+      expect(notifyRelease).toHaveBeenNthCalledWith(1, user.id, expect.objectContaining({
+        release: firstUpdate,
+        coverRefreshError: expect.stringContaining("ETIMEDOUT"),
+      }));
+      expect((await scheduler.run("test")).changed).toBe(1);
+      expect(notifyRelease).toHaveBeenNthCalledWith(2, user.id, expect.objectContaining({
+        release: secondUpdate,
+        coverRefreshError: undefined,
+      }));
+      expect(refresh).toHaveBeenCalledTimes(3);
+      expect(refresh.mock.calls.map((call) => call[1].coverUrl)).toEqual([
+        baseline.coverUrl,
+        firstUpdate.coverUrl,
+        secondUpdate.coverUrl,
+      ]);
+    } finally {
+      fetchSnapshot.mockRestore();
+      db.close();
+    }
+  });
+
   it("updates the display title on scheduled changes and repairs stale titles on manual checks", async () => {
     const db = createDatabase(":memory:");
     const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
@@ -221,3 +292,15 @@ describe("direct subscription title synchronization", () => {
     }
   });
 });
+
+function directSnapshot(title: string, fingerprint: string, coverFile: string): DirectSnapshot {
+  return {
+    trackerKey: "rutor",
+    externalId: "800",
+    title,
+    url: "https://rutor.is/torrent/800/test",
+    coverUrl: `https://images.example/${coverFile}`,
+    metadata: { snapshotVersion: 1, coverObserved: true },
+    fingerprint,
+  };
+}

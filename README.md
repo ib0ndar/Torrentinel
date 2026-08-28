@@ -20,6 +20,7 @@ Torrentinel watches torrent releases and tells you when something changes. It su
 - Case-insensitive rule subscriptions with required and ignored phrases
 - Per-user collections, history, and read/unread state
 - Telegram notifications with artwork and release links
+- Persistent cover fallback when an image host is temporarily unavailable
 - Tracker credentials, mirrors, and Telegram bots configured from the web interface
 - Administrator-managed accounts with no public registration
 - Configurable polling from 5 minutes to 6 hours
@@ -102,7 +103,7 @@ docker run -d \
   -v torrentinel_app:/var/lib/torrentinel \
   -v torrentinel_db:/data \
   -e PUBLIC_URL=http://localhost:8080 \
-  bah0/torrentinel:v0.2.7
+  bah0/torrentinel:v0.3.0
 ```
 
 ### Rootless Podman on RHEL
@@ -135,7 +136,7 @@ Runtime settings can be supplied as environment variables:
 | `PORT` | `8080` | HTTP port inside the container |
 | `PUBLIC_URL` | unset | Externally reachable Torrentinel URL |
 | `DATA_DIR` | `/data` | SQLite database directory |
-| `APP_DATA_DIR` | `/var/lib/torrentinel` | Application key directory |
+| `APP_DATA_DIR` | `/var/lib/torrentinel` | Application key and cached-cover directory |
 | `POLL_INTERVAL_MINUTES` | `60` | Initial polling interval |
 | `POLL_STARTUP_DELAY_SECONDS` | `20` | Delay before the startup poll |
 | `TRACKER_REQUEST_TIMEOUT_MS` | `30000` | Tracker request timeout |

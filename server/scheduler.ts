@@ -16,6 +16,8 @@ import {
   startSchedulerRun,
   type TrackerObservationInput,
 } from "./diagnostics.js";
+import type { CoverCacheStore } from "./cover-cache.js";
+import { coverErrorMessage } from "./cover-fetch.js";
 
 interface DirectRow {
   id: string;
@@ -73,6 +75,7 @@ export class Scheduler {
     private readonly db: SqliteDatabase,
     private readonly telegram: TelegramService,
     private readonly vault: SecretVault,
+    private readonly coverCache?: CoverCacheStore,
   ) {}
 
   start(): void {
@@ -193,6 +196,8 @@ export class Scheduler {
     let snapshot: DirectSnapshot | undefined;
     let observationError: unknown;
     let outcome = "error";
+    let coverRefreshError: string | undefined;
+    let coverDetails: Record<string, string | number | boolean | null> | undefined;
     if (!plugin?.direct) {
       const error = new TrackerError("unsupported", `${row.tracker_key} does not support direct subscriptions`, {
         trackerKey: row.tracker_key,
@@ -217,6 +222,33 @@ export class Scheduler {
     try {
       snapshot = await plugin.direct.fetchSnapshot(row.direct_url, this.context(row.user_id, row.tracker_key, row.base_url));
       status.checked += 1;
+      if (!directSnapshotIsTemporarilyUnavailable(snapshot) && this.coverCache) {
+        const isBaseline = !row.initialized || !row.current_fingerprint;
+        const snapshotChanged = snapshot.fingerprint !== row.current_fingerprint;
+        const needsBackfill = !this.coverCache.has(row.id);
+        if (isBaseline || snapshotChanged || needsBackfill) {
+          const retainedCache = this.coverCache.has(row.id);
+          try {
+            const refreshed = await this.coverCache.refresh(row.id, snapshot);
+            coverDetails = {
+              coverCacheStatus: retainedCache ? "refreshed" : "cached",
+              coverCacheBytes: refreshed.byteLength,
+              coverCachedAt: refreshed.cachedAt,
+              ...(refreshed.retrievalFallbackErrors
+                ? { coverCacheFallback: refreshed.retrievalFallbackErrors }
+                : {}),
+            };
+          } catch (error) {
+            coverRefreshError = coverErrorMessage(error);
+            coverDetails = {
+              coverCacheStatus: retainedCache ? "refresh-failed-cache-retained" : "refresh-failed-no-cache",
+              coverCacheError: coverRefreshError,
+            };
+          }
+        } else {
+          coverDetails = { coverCacheStatus: "current" };
+        }
+      }
       if (!row.initialized || !row.current_fingerprint) {
         outcome = "baseline";
         this.db.prepare(`
@@ -297,6 +329,7 @@ export class Scheduler {
           release: currentSnapshot,
           trackerName: plugin.manifest.displayName,
           changes,
+          coverRefreshError,
         });
       } else {
         outcome = "unchanged";
@@ -323,6 +356,7 @@ export class Scheduler {
         snapshot,
         durationMs: Date.now() - startedMs,
         error: observationError,
+        details: coverDetails,
       });
     }
   }

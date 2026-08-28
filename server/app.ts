@@ -12,6 +12,9 @@ import { TelegramService } from "./telegram.js";
 import { Scheduler } from "./scheduler.js";
 import { createSecretVault, ensureVaultKey } from "./secrets.js";
 import { closeTrackerAdapters } from "./trackers/index.js";
+import { CoverCache } from "./cover-cache.js";
+import type { CoverRetriever } from "./cover-fetch.js";
+import { downloadCoverWithHttp2 } from "./cover-http2.js";
 
 interface ApplicationOptions {
   databasePath?: string;
@@ -19,6 +22,8 @@ interface ApplicationOptions {
   staticAssets?: boolean;
   encryptionKeyPath?: string;
   telegramFetch?: typeof fetch;
+  coverCacheDir?: string;
+  coverRetriever?: CoverRetriever;
 }
 
 export async function createApplication(options: ApplicationOptions = {}) {
@@ -31,8 +36,19 @@ export async function createApplication(options: ApplicationOptions = {}) {
   const db = createDatabase(options.databasePath);
   const vault = createSecretVault(options.encryptionKeyPath || config.encryptionKeyPath);
   ensureVaultKey(db, vault);
-  const telegram = new TelegramService(db, vault, options.telegramFetch);
-  const scheduler = new Scheduler(db, telegram, vault);
+  const coverCacheDir = options.coverCacheDir
+    || (options.databasePath ? resolve(dirname(options.databasePath), "covers") : config.coverCacheDir);
+  const coverCache = new CoverCache(db, coverCacheDir, options.coverRetriever);
+  const telegram = new TelegramService(
+    db,
+    vault,
+    options.telegramFetch,
+    config.publicUrl,
+    fetch,
+    downloadCoverWithHttp2,
+    coverCache,
+  );
+  const scheduler = new Scheduler(db, telegram, vault, coverCache);
 
   await app.register(cookie);
   app.addHook("onSend", async (_request, reply) => {
@@ -43,7 +59,7 @@ export async function createApplication(options: ApplicationOptions = {}) {
     reply.header("content-security-policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
   });
   registerAuth(app, db);
-  registerRoutes(app, db, scheduler, telegram, vault);
+  registerRoutes(app, db, scheduler, telegram, vault, coverCache);
 
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const publicDir = resolve(currentDir, "../public");
@@ -78,5 +94,5 @@ export async function createApplication(options: ApplicationOptions = {}) {
     db.close();
   });
 
-  return { app, db, scheduler, telegram, vault };
+  return { app, db, scheduler, telegram, vault, coverCache };
 }

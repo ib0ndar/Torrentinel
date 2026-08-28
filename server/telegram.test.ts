@@ -6,6 +6,7 @@ import type { Http2CoverFetcher } from "./cover-http2.js";
 import { createDatabase, nowIso, type SqliteDatabase } from "./db.js";
 import { createSecretVault, telegramTokenAad, type SecretVault } from "./secrets.js";
 import { TelegramService } from "./telegram.js";
+import type { CoverCacheStore } from "./cover-cache.js";
 
 const cleanup: string[] = [];
 
@@ -15,6 +16,67 @@ afterEach(() => {
 });
 
 describe("rich Telegram release notifications", () => {
+  it("uploads the retained cached cover when the latest refresh fails", async () => {
+    const calls: TelegramCall[] = [];
+    const { db, vault, userId } = notificationDatabase();
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(userId) as { id: string };
+    const timestamp = nowIso();
+    db.prepare(`
+      INSERT INTO subscriptions (
+        id, user_id, collection_id, type, name, direct_url, created_at, updated_at
+      ) VALUES ('cached-cover', ?, ?, 'direct', 'Cached cover', 'https://rutracker.org/forum/viewtopic.php?t=42', ?, ?)
+    `).run(userId, collection.id, timestamp, timestamp);
+    const read = vi.fn<CoverCacheStore["read"]>().mockResolvedValue({
+      bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]).buffer as ArrayBuffer,
+      contentType: "image/jpeg",
+      sourceUrl: "https://images.example/previous.jpg",
+      cachedAt: timestamp,
+    });
+    const coverCache: CoverCacheStore = {
+      has: vi.fn(() => true),
+      refresh: vi.fn(),
+      read,
+      remove: vi.fn(),
+    };
+    const mediaFetcher = vi.fn<typeof fetch>(async () => { throw new Error("cover host is offline"); });
+    const telegram = new TelegramService(
+      db,
+      vault,
+      telegramFetcher(calls),
+      "https://torrentinel.example",
+      mediaFetcher,
+      async () => { throw new Error("cover host is offline"); },
+      coverCache,
+    );
+
+    await telegram.notifyRelease(userId, {
+      subscriptionId: "cached-cover",
+      trackerName: "RuTracker",
+      changes: ["title changed"],
+      coverRefreshError: "latest cover refresh timed out [ETIMEDOUT]",
+      release: {
+        trackerKey: "rutracker",
+        externalId: "42",
+        title: "Updated release",
+        url: "https://rutracker.org/forum/viewtopic.php?t=42",
+        coverUrl: "https://images.example/latest.jpg",
+      },
+    });
+
+    expect(read).toHaveBeenCalledWith("cached-cover");
+    expect(mediaFetcher).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ method: "sendPhoto", multipart: true });
+    expect(calls[0].body.photo).toBe("image/jpeg:4");
+    expect(db.prepare(`
+      SELECT outcome, delivery_method, artwork_error_message FROM telegram_deliveries
+    `).get()).toEqual({
+      outcome: "delivered",
+      delivery_method: "photo-cache",
+      artwork_error_message: "latest cover refresh timed out [ETIMEDOUT]",
+    });
+  });
+
   it("sends artwork, release details, and only tracker and magnet buttons", async () => {
     const calls: TelegramCall[] = [];
     const { db, vault, userId } = notificationDatabase();

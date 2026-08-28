@@ -1074,6 +1074,7 @@ function diagnosticStateClass(outcome: string): string {
 function deliveryMethodLabel(method: string): string {
   if (method === "photo-url") return "Photo by URL";
   if (method === "photo-upload") return "Uploaded photo";
+  if (method === "photo-cache") return "Cached photo";
   if (method === "none") return "Not attempted";
   return "Text";
 }

@@ -29,6 +29,7 @@ export const config = {
   appDataDir,
   databasePath: resolve(dataDir, "torrentinel.db"),
   encryptionKeyPath: resolve(appDataDir, "master.key"),
+  coverCacheDir: resolve(appDataDir, "covers"),
   pollIntervalMinutes: integer("POLL_INTERVAL_MINUTES", 60),
   pollStartupDelaySeconds: integer("POLL_STARTUP_DELAY_SECONDS", 20),
   requestTimeoutMs: integer("TRACKER_REQUEST_TIMEOUT_MS", 30_000),

@@ -30,7 +30,7 @@ export interface TelegramDeliveryInput {
   trackerKey?: TrackerKey;
   externalId?: string;
   title?: string;
-  deliveryMethod: "none" | "text" | "photo-url" | "photo-upload";
+  deliveryMethod: "none" | "text" | "photo-url" | "photo-upload" | "photo-cache";
   outcome: "delivered" | "failed" | "skipped";
   telegramMessageId?: number;
   durationMs: number;
@@ -179,6 +179,11 @@ function safeObservationDetails(details: Record<string, DiagnosticDetail> | unde
     "baselineCount",
     "requiredTerms",
     "discoveryRevision",
+    "coverCacheStatus",
+    "coverCacheBytes",
+    "coverCachedAt",
+    "coverCacheFallback",
+    "coverCacheError",
   ]) {
     const value = details[key];
     if (typeof value === "string") safe[key] = truncate(value, 200);

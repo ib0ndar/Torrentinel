@@ -5,6 +5,8 @@ import {
   type CoverAsset,
   type Http2CoverFetcher,
 } from "./cover-http2.js";
+import type { CoverCacheStore } from "./cover-cache.js";
+import { NetworkCoverRetriever } from "./cover-fetch.js";
 import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
 import { recordTelegramDelivery, type TelegramDeliveryInput } from "./diagnostics.js";
@@ -12,8 +14,6 @@ import { telegramTokenAad, type SecretVault } from "./secrets.js";
 import type { Release } from "./types.js";
 
 const linkCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
-const MAX_TELEGRAM_PHOTO_BYTES = 10_000_000;
-const COVER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138 Safari/537.36";
 
 interface TelegramUpdate {
   update_id: number;
@@ -62,6 +62,7 @@ export interface ReleaseNotification {
   trackerName: string;
   ruleTerms?: string[];
   changes?: string[];
+  coverRefreshError?: string;
 }
 
 export class TelegramService {
@@ -75,6 +76,7 @@ export class TelegramService {
     private readonly publicUrl = config.publicUrl,
     private readonly mediaFetcher: typeof fetch = fetch,
     private readonly http2MediaFetcher: Http2CoverFetcher = downloadCoverWithHttp2,
+    private readonly coverCache?: CoverCacheStore,
   ) {}
 
   async start(): Promise<void> {
@@ -259,6 +261,35 @@ export class TelegramService {
     let artworkError: string | undefined;
     try {
       const token = this.vault.decrypt(destination.tokenEncrypted, telegramTokenAad(userId));
+      artworkError = notification.coverRefreshError;
+      if (notification.subscriptionId && this.coverCache) {
+        try {
+          const cached = await this.coverCache.read(notification.subscriptionId);
+          if (cached) {
+            try {
+              const message = await this.sendCoverAsset(
+                token,
+                destination.chatId,
+                { bytes: cached.bytes, contentType: cached.contentType },
+                caption,
+                replyMarkup,
+              );
+              this.recordReleaseDelivery(userId, notification, {
+                deliveryMethod: "photo-cache",
+                outcome: "delivered",
+                telegramMessageId: message.message_id,
+                durationMs: Date.now() - startedMs,
+                artworkError,
+              });
+              return;
+            } catch (cachedPhotoError) {
+              artworkError = combineErrors(artworkError, `cached cover upload: ${safeError(cachedPhotoError)}`);
+            }
+          }
+        } catch (cacheReadError) {
+          artworkError = combineErrors(artworkError, `cached cover read: ${safeError(cacheReadError)}`);
+        }
+      }
       if (httpUrl(notification.release.coverUrl)) {
         try {
           const message = await this.call<TelegramMessage>(token, "sendPhoto", {
@@ -273,6 +304,7 @@ export class TelegramService {
             outcome: "delivered",
             telegramMessageId: message.message_id,
             durationMs: Date.now() - startedMs,
+            artworkError,
           });
           return;
         } catch (remotePhotoError) {
@@ -285,7 +317,7 @@ export class TelegramService {
               caption,
               replyMarkup,
             );
-            artworkError = combineErrors(remotePhotoError, uploaded.coverFetchErrors);
+            artworkError = combineErrors(artworkError, remotePhotoError, uploaded.coverFetchErrors);
             this.recordReleaseDelivery(userId, notification, {
               deliveryMethod: "photo-upload",
               outcome: "delivered",
@@ -295,7 +327,7 @@ export class TelegramService {
             });
             return;
           } catch (uploadedPhotoError) {
-            artworkError = combineErrors(remotePhotoError, uploadedPhotoError);
+            artworkError = combineErrors(artworkError, remotePhotoError, uploadedPhotoError);
             console.warn(
               `Telegram artwork delivery failed for user ${userId}; sending a text notification:`,
               artworkError,
@@ -370,58 +402,26 @@ export class TelegramService {
     caption: string,
     replyMarkup: ReturnType<typeof releaseKeyboard>,
   ): Promise<UploadedPhotoResult> {
-    const headers = {
-      accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-      referer: releaseUrl,
-      "user-agent": COVER_USER_AGENT,
-    };
-    let asset: CoverAsset;
-    let coverFetchErrors: string | undefined;
-    try {
-      const response = await this.mediaFetcher(coverUrl, {
-        headers,
-        signal: AbortSignal.timeout(20_000),
-      });
-      asset = await coverAssetFromResponse(response);
-    } catch (error) {
-      const standardFetchError = safeError(error);
-      try {
-        asset = await this.http2MediaFetcher(coverUrl, {
-          headers,
-          maximumBytes: MAX_TELEGRAM_PHOTO_BYTES,
-          timeoutMs: 20_000,
-        });
-      } catch (http2Error) {
-        const { referer: _referer, ...headersWithoutReferer } = headers;
-        try {
-          asset = await this.http2MediaFetcher(coverUrl, {
-            headers: headersWithoutReferer,
-            maximumBytes: MAX_TELEGRAM_PHOTO_BYTES,
-            timeoutMs: 20_000,
-          });
-        } catch (http2WithoutRefererError) {
-          throw new Error([
-            `standard HTTPS fetch: ${standardFetchError}`,
-            `HTTPS/2 retry with referer: ${safeError(http2Error)}`,
-            `HTTPS/2 retry without referer: ${safeError(http2WithoutRefererError)}`,
-          ].join("; "));
-        }
-        coverFetchErrors = [
-          `standard HTTPS fetch: ${standardFetchError}`,
-          `HTTPS/2 retry with referer: ${safeError(http2Error)}`,
-        ].join("; ");
-      }
-      coverFetchErrors ||= `standard HTTPS fetch: ${standardFetchError}`;
-    }
+    const retrieval = await new NetworkCoverRetriever(this.mediaFetcher, this.http2MediaFetcher)
+      .retrieve(coverUrl, releaseUrl);
+    const message = await this.sendCoverAsset(token, chatId, retrieval.asset, caption, replyMarkup);
+    return { message, coverFetchErrors: retrieval.fallbackErrors };
+  }
 
+  private async sendCoverAsset(
+    token: string,
+    chatId: string,
+    asset: CoverAsset,
+    caption: string,
+    replyMarkup: ReturnType<typeof releaseKeyboard>,
+  ): Promise<TelegramMessage> {
     const form = new FormData();
     form.set("chat_id", chatId);
     form.set("photo", new Blob([asset.bytes], { type: asset.contentType }), coverFilename(asset.contentType));
     form.set("caption", caption);
     form.set("parse_mode", "HTML");
     form.set("reply_markup", JSON.stringify(replyMarkup));
-    const message = await this.callForm<TelegramMessage>(token, "sendPhoto", form);
-    return { message, coverFetchErrors };
+    return this.callForm<TelegramMessage>(token, "sendPhoto", form);
   }
 
   private startWorker(userId: string, token: string, offset: number): void {
@@ -561,17 +561,6 @@ function combineErrors(...errors: unknown[]): string | undefined {
     .filter((error) => error !== undefined && error !== null && error !== "")
     .map((error) => safeError(error));
   return messages.length > 0 ? messages.join("; ") : undefined;
-}
-
-async function coverAssetFromResponse(response: Response): Promise<CoverAsset> {
-  if (!response.ok) throw new Error(`cover download failed with HTTP ${response.status}`);
-  const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLocaleLowerCase("en-US");
-  if (!contentType?.startsWith("image/")) throw new Error("cover URL did not return an image");
-  const declaredLength = Number.parseInt(response.headers.get("content-length") || "0", 10);
-  if (declaredLength > MAX_TELEGRAM_PHOTO_BYTES) throw new Error("cover exceeds Telegram's photo size limit");
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength > MAX_TELEGRAM_PHOTO_BYTES) throw new Error("cover exceeds Telegram's photo size limit");
-  return { bytes, contentType };
 }
 
 export function escapeTelegram(value: string): string {

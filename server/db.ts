@@ -99,6 +99,16 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     CREATE INDEX IF NOT EXISTS idx_subscriptions_user_collection ON subscriptions(user_id, collection_id);
     CREATE INDEX IF NOT EXISTS idx_subscriptions_type_enabled ON subscriptions(type, enabled);
 
+    CREATE TABLE IF NOT EXISTS subscription_cover_cache (
+      subscription_id TEXT PRIMARY KEY REFERENCES subscriptions(id) ON DELETE CASCADE,
+      source_url TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      file_name TEXT NOT NULL UNIQUE,
+      byte_length INTEGER NOT NULL,
+      cached_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_subscription_cover_cache_time ON subscription_cover_cache(cached_at DESC);
+
     CREATE TABLE IF NOT EXISTS subscription_trackers (
       subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       tracker_key TEXT NOT NULL REFERENCES tracker_mirrors(tracker_key),

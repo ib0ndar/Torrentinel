@@ -171,7 +171,7 @@ export interface TelegramDelivery {
   trackerKey?: TrackerKey | null;
   externalId?: string | null;
   title?: string | null;
-  deliveryMethod: "none" | "text" | "photo-url" | "photo-upload";
+  deliveryMethod: "none" | "text" | "photo-url" | "photo-upload" | "photo-cache";
   outcome: "delivered" | "failed" | "skipped";
   telegramMessageId?: number | null;
   errorMessage?: string | null;

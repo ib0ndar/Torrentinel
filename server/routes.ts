@@ -29,6 +29,7 @@ import {
   diagnosticCutoffIso,
   pruneDiagnostics,
 } from "./diagnostics.js";
+import type { CoverCacheStore } from "./cover-cache.js";
 
 const credentialsSchema = z.object({
   username: z.string().trim().min(1).max(80),
@@ -48,6 +49,7 @@ export function registerRoutes(
   scheduler: Scheduler,
   telegram: TelegramService,
   vault: SecretVault,
+  coverCache: CoverCacheStore,
 ): void {
   app.get("/api/health", async () => ({
     status: "ok",
@@ -240,6 +242,12 @@ export function registerRoutes(
   app.delete("/api/collections/:id", { preHandler: requireReadyUser }, async (request, reply) => {
     const params = parse(idParams, request.params, reply);
     if (!params || !request.user) return;
+    if (!ownsCollection(db, params.id, request.user.id)) {
+      return reply.code(404).send({ error: "Collection not found" });
+    }
+    const subscriptions = db.prepare("SELECT id FROM subscriptions WHERE collection_id = ? AND user_id = ?")
+      .all(params.id, request.user.id) as Array<{ id: string }>;
+    await Promise.all(subscriptions.map((subscription) => coverCache.remove(subscription.id)));
     const result = db.prepare("DELETE FROM collections WHERE id = ? AND user_id = ?")
       .run(params.id, request.user.id);
     if (!result.changes) return reply.code(404).send({ error: "Collection not found" });
@@ -417,6 +425,7 @@ export function registerRoutes(
         db.prepare("DELETE FROM rule_matches WHERE subscription_id = ?").run(params.id);
       }
     })();
+    if (resetBaseline && current.type === "direct") await coverCache.remove(params.id);
     if (resetBaseline) setTimeout(() => void scheduler.checkSubscription(params.id, request.user!.id), 50);
     return { ok: true };
   });
@@ -424,6 +433,10 @@ export function registerRoutes(
   app.delete("/api/subscriptions/:id", { preHandler: requireReadyUser }, async (request, reply) => {
     const params = parse(idParams, request.params, reply);
     if (!params || !request.user) return;
+    if (!ownsSubscription(db, params.id, request.user.id)) {
+      return reply.code(404).send({ error: "Subscription not found" });
+    }
+    await coverCache.remove(params.id);
     const result = db.prepare("DELETE FROM subscriptions WHERE id = ? AND user_id = ?")
       .run(params.id, request.user.id);
     if (!result.changes) return reply.code(404).send({ error: "Subscription not found" });
