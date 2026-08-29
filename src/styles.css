@@ -95,6 +95,8 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .button--primary:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 10px 30px rgba(34,211,238,.2); }
 .button--quiet { background: rgba(255,255,255,.025); }
 .button--danger { border-color: rgba(255,107,107,.28); color: var(--danger); }
+.button--danger-filled { border-color: rgba(255,107,107,.7); background: linear-gradient(135deg, #f05b67, #c43653); box-shadow: 0 8px 24px rgba(255,107,107,.14); color: #fff; }
+.button--danger-filled:hover:not(:disabled) { border-color: #ff8990; box-shadow: 0 10px 28px rgba(255,107,107,.2); }
 .icon-button { width: 36px; height: 36px; display: inline-grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; transition: color .14s ease, background .14s ease; }
 .icon-button:hover { color: var(--ink); background: rgba(255,255,255,.05); }
 .icon-button--danger:hover { color: var(--danger); background: rgba(255,107,107,.08); }
@@ -203,6 +205,27 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .empty-compact { padding: 28px 12px; color: var(--dim); font-size: 14px; text-align: center; }
 .skeleton { display: grid; gap: 1px; background: var(--line); }
 .skeleton span { height: 67px; background: linear-gradient(90deg, var(--surface) 10%, var(--surface-2) 40%, var(--surface) 70%); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; }
+
+.dialog-layer { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(3,5,11,.72); backdrop-filter: blur(5px) saturate(.8); animation: fade-in .18s ease-out both; }
+.app-dialog { position: relative; width: min(520px, 100%); overflow: hidden; border: 1px solid rgba(143,180,255,.24); border-radius: 12px; background: #0f172b; box-shadow: 0 28px 90px rgba(0,0,0,.58), 0 0 0 1px rgba(255,255,255,.015); animation: dialog-in .2s cubic-bezier(.2,.8,.2,1) both; }
+.app-dialog::before { content: ""; position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 2px; background: var(--brand-gradient); }
+.app-dialog--danger::before { background: linear-gradient(90deg, var(--danger), #c43653 58%, var(--warning)); }
+.app-dialog__close { position: absolute; z-index: 2; top: 18px; right: 18px; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; transition: color .14s ease, background .14s ease; }
+.app-dialog__close:hover { background: rgba(255,255,255,.05); color: var(--ink); }
+.app-dialog__close .icon { transform: rotate(45deg); }
+.app-dialog__body { padding: 28px 30px 25px; }
+.app-dialog__eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 42px 11px 0; color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.app-dialog__eyebrow > span { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px rgba(34,211,238,.65); }
+.app-dialog--danger .app-dialog__eyebrow { color: var(--danger); }
+.app-dialog--danger .app-dialog__eyebrow > span { background: var(--danger); box-shadow: 0 0 10px rgba(255,107,107,.55); }
+.app-dialog h2 { margin: 0; padding-right: 34px; overflow-wrap: anywhere; font-size: 25px; line-height: 1.15; letter-spacing: -.035em; }
+.app-dialog__description { margin: 9px 0 23px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.app-dialog__field { display: grid; gap: 9px; color: var(--ink); font-size: 13px; font-weight: 650; }
+.app-dialog__field input { min-height: 46px; }
+.app-dialog__field small { color: var(--dim); font-size: 11px; font-weight: 500; }
+.app-dialog__actions { min-height: 75px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 15px 30px; border-top: 1px solid var(--line); background: rgba(8,11,20,.45); }
+.app-dialog__actions .button { min-width: 88px; }
+.app-dialog__actions .button--primary, .app-dialog__actions .button--danger-filled { min-width: 99px; }
 
 .drawer-layer { position: fixed; z-index: 20; inset: 0; display: flex; justify-content: flex-end; background: rgba(0,0,0,.55); backdrop-filter: blur(3px); animation: fade-in .18s ease-out both; }
 .drawer { width: min(480px, 100vw); height: 100%; display: flex; flex-direction: column; border-left: 1px solid var(--line-strong); background: #0d1424; box-shadow: -24px 0 80px rgba(0,0,0,.45); animation: drawer-in .28s cubic-bezier(.2,.8,.2,1) both; }
@@ -409,6 +432,7 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 @keyframes stage-in { from { opacity: .2; } }
 @keyframes row-in { from { opacity: 0; transform: translateY(5px); } }
 @keyframes fade-in { from { opacity: 0; } }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
 @keyframes drawer-in { from { transform: translateX(100%); } }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
@@ -489,6 +513,11 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 }
 
 @media (max-width: 520px) {
+  .dialog-layer { align-items: end; padding: 12px; }
+  .app-dialog { border-radius: 12px; }
+  .app-dialog__body { padding: 25px 20px 22px; }
+  .app-dialog__actions { min-height: 70px; padding: 13px 20px; }
+  .app-dialog__actions .button { flex: 1; min-width: 0; }
   .drawer > header { gap: 13px; padding-inline: 20px; }
   .drawer > header h2 { font-size: 23px; }
   .drawer-heading--with-media { grid-template-columns: 82px minmax(0, 1fr); gap: 14px; }

@@ -2,6 +2,13 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.3.1] - 2026-08-29
+
+### Changed
+
+- Replaced collection, subscription, Telegram, tracker-login, and user-password browser prompts with accessible in-page dialogs that match the Torrentinel interface.
+- Dialogs now provide focused input, keyboard submission, Escape and backdrop cancellation, focus trapping and restoration, responsive mobile layout, and distinct destructive-action styling.
+
 ## [0.3.0] - 2026-08-28
 
 ### Added
@@ -120,6 +127,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.3.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.3.0
 [0.2.7]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.7
 [0.2.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.6

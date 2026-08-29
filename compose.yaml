@@ -1,6 +1,6 @@
 services:
   torrentinel:
-    image: bah0/torrentinel:v0.3.0
+    image: bah0/torrentinel:v0.3.1
     container_name: torrentinel
     restart: unless-stopped
     depends_on:

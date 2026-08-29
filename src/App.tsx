@@ -1,10 +1,14 @@
 import {
+  createContext,
   type CSSProperties,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -27,6 +31,36 @@ import type {
 } from "./types";
 
 type Toast = { id: number; message: string; tone: "good" | "bad" };
+
+type DialogTone = "default" | "danger";
+type DialogBaseOptions = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: DialogTone;
+};
+type DialogPromptOptions = DialogBaseOptions & {
+  inputLabel: string;
+  initialValue?: string;
+  inputType?: "text" | "password";
+  autoComplete?: string;
+  minLength?: number;
+  maxLength?: number;
+};
+type DialogRequest = (DialogBaseOptions & {
+  kind: "confirm";
+  resolve: (value: boolean | string | null) => void;
+}) | (DialogPromptOptions & {
+  kind: "prompt";
+  resolve: (value: boolean | string | null) => void;
+});
+type DialogApi = {
+  confirm: (options: DialogBaseOptions) => Promise<boolean>;
+  prompt: (options: DialogPromptOptions) => Promise<string | null>;
+};
+
+const DialogContext = createContext<DialogApi | null>(null);
 
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
@@ -78,21 +112,21 @@ export default function App() {
   if (user.mustChangePassword) return <ChangePassword user={user} onChanged={setUser} notify={notify} />;
 
   return (
-    <>
+    <DialogProvider>
       <AppShell
-        user={user}
-        setUser={setUser}
-        notify={notify}
-        path={path}
-        navigate={navigate}
-        renderPage={(intervalMinutes) => path === "/settings"
-          ? <Settings notify={notify} />
-          : path === "/admin" && user.isAdmin
-            ? <Admin notify={notify} />
-            : <Workspace notify={notify} intervalMinutes={intervalMinutes} />}
-      />
-      {toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}
-    </>
+          user={user}
+          setUser={setUser}
+          notify={notify}
+          path={path}
+          navigate={navigate}
+          renderPage={(intervalMinutes) => path === "/settings"
+            ? <Settings notify={notify} />
+            : path === "/admin" && user.isAdmin
+              ? <Admin notify={notify} />
+              : <Workspace notify={notify} intervalMinutes={intervalMinutes} />}
+        />
+        {toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}
+    </DialogProvider>
   );
 }
 
@@ -266,6 +300,7 @@ function NavItem({ to, icon, label, active, navigate }: { to: string; icon: Icon
 }
 
 function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinutes: number | null }) {
+  const dialog = useDialog();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -321,7 +356,15 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
 
   async function renameCollection() {
     if (!selected) return;
-    const name = window.prompt("Collection name", selected.name)?.trim();
+    const name = (await dialog.prompt({
+      eyebrow: "Edit collection",
+      title: "Rename collection",
+      description: "Choose a short name that makes this collection easy to find.",
+      inputLabel: "Collection name",
+      initialValue: selected.name,
+      maxLength: 80,
+      confirmLabel: "Rename",
+    }))?.trim();
     if (!name || name === selected.name) return;
     try {
       await api(`/api/collections/${selected.id}`, { method: "PATCH", ...jsonBody({ name }) });
@@ -331,7 +374,15 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
   }
 
   async function deleteCollection() {
-    if (!selected || !window.confirm(`Delete “${selected.name}” and all of its subscriptions?`)) return;
+    if (!selected) return;
+    const confirmed = await dialog.confirm({
+      eyebrow: "Delete collection",
+      title: `Delete “${selected.name}”?`,
+      description: "This permanently removes the collection and every subscription inside it. This action cannot be undone.",
+      confirmLabel: "Delete collection",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     try {
       await api(`/api/collections/${selected.id}`, { method: "DELETE" });
       setSelectedId(null);
@@ -363,8 +414,8 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
             <header className="pane-header">
               <div><p className="eyebrow">Collection</p><h1>{selected.name}</h1></div>
               <div className="header-actions">
-                <button className="icon-button" title="Rename collection" onClick={renameCollection}><Icon name="edit" /></button>
-                <button className="icon-button icon-button--danger" title="Delete collection" onClick={deleteCollection}><Icon name="trash" /></button>
+                <button className="icon-button" title="Rename collection" onClick={() => void renameCollection()}><Icon name="edit" /></button>
+                <button className="icon-button icon-button--danger" title="Delete collection" onClick={() => void deleteCollection()}><Icon name="trash" /></button>
                 <button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />Add subscription</button>
               </div>
             </header>
@@ -486,6 +537,7 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
 }
 
 function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: { id: string; collections: Collection[]; onClose: () => void; onChanged: () => Promise<void>; notify: Notify }) {
+  const dialog = useDialog();
   const [item, setItem] = useState<Subscription | null>(null);
   const [events, setEvents] = useState<SubscriptionEvent[]>([]);
   const [matches, setMatches] = useState<RuleMatch[]>([]);
@@ -525,7 +577,17 @@ function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: 
   }
 
   async function remove() {
-    if (!item || !window.confirm(item.type === "rule" ? "Delete this rule?" : `Delete “${item.label}”?`)) return;
+    if (!item) return;
+    const confirmed = await dialog.confirm({
+      eyebrow: item.type === "rule" ? "Delete rule" : "Delete subscription",
+      title: item.type === "rule" ? "Delete this rule?" : `Delete “${item.label}”?`,
+      description: item.type === "rule"
+        ? "This permanently removes the rule, its matches, and its change history. This action cannot be undone."
+        : "This permanently removes the subscription and its change history. This action cannot be undone.",
+      confirmLabel: item.type === "rule" ? "Delete rule" : "Delete subscription",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     try { await api(`/api/subscriptions/${id}`, { method: "DELETE" }); await onChanged(); onClose(); notify("Subscription deleted"); }
     catch (error) { notify(errorMessage(error), "bad"); }
   }
@@ -552,7 +614,7 @@ function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: 
 
         <section className="detail-section"><div className="section-heading"><h3>Change history</h3><span>{events.length}</span></div>{events.length ? <div className="timeline">{events.map((event) => <div className="timeline-item" key={event.id}><span className={!event.readAt ? "timeline-dot timeline-dot--new" : "timeline-dot"} /><div><strong>{event.summary}</strong><small>{relativeTime(event.createdAt)}</small></div></div>)}</div> : <EmptyCompact text="Changes will appear here after the baseline." />}</section>
 
-        <section className="detail-section detail-section--actions"><button className="button button--quiet" onClick={markRead}>{item.isUnread ? "Mark read" : "Mark unread"}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, item.enabled ? "Subscription paused" : "Subscription resumed")}>{item.enabled ? "Pause" : "Resume"}</button><button className="button button--danger" onClick={remove}><Icon name="trash" />Delete</button></section>
+        <section className="detail-section detail-section--actions"><button className="button button--quiet" onClick={markRead}>{item.isUnread ? "Mark read" : "Mark unread"}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, item.enabled ? "Subscription paused" : "Subscription resumed")}>{item.enabled ? "Pause" : "Resume"}</button><button className="button button--danger" onClick={() => void remove()}><Icon name="trash" />Delete</button></section>
       </div>}
     </Drawer>
   );
@@ -585,6 +647,7 @@ function EditSubscriptionForm({ item, busy, onCancel, onSave }: { item: Subscrip
 type TrackerSettingsDraft = { mirror: string; username: string; password: string; saving: boolean };
 
 function Settings({ notify }: { notify: Notify }) {
+  const dialog = useDialog();
   const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
   const [link, setLink] = useState<{ code: string; expiresAt: string; deepLink?: string } | null>(null);
   const [trackers, setTrackers] = useState<Tracker[]>([]);
@@ -629,13 +692,27 @@ function Settings({ notify }: { notify: Notify }) {
     } catch (error) { notify(errorMessage(error), "bad"); } finally { setTelegramBusy(false); }
   }
   async function removeBot() {
-    if (!window.confirm("Remove this Telegram bot and unlink its chat?")) return;
+    const confirmed = await dialog.confirm({
+      eyebrow: "Telegram delivery",
+      title: "Remove Telegram bot?",
+      description: "This removes the stored bot token and unlinks the connected chat. Telegram notifications will stop until a bot is configured again.",
+      confirmLabel: "Remove bot",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setTelegramBusy(true);
     try { await api("/api/telegram/bot", { method: "DELETE" }); setBotToken(""); setLink(null); await load(); notify("Telegram bot removed"); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setTelegramBusy(false); }
   }
   async function unlink() {
-    if (!window.confirm("Unlink Telegram from this user?")) return;
+    const confirmed = await dialog.confirm({
+      eyebrow: "Telegram delivery",
+      title: "Unlink this chat?",
+      description: "Notifications to the connected Telegram chat will stop. The bot token remains stored and you can link a chat again later.",
+      confirmLabel: "Unlink chat",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     try { await api("/api/telegram", { method: "DELETE" }); setLink(null); await load(); notify("Telegram unlinked"); }
     catch (error) { notify(errorMessage(error), "bad"); }
   }
@@ -650,9 +727,16 @@ function Settings({ notify }: { notify: Notify }) {
     catch (error) { setDrafts((current) => ({ ...current, [tracker.key]: { ...draft, saving: false } })); notify(errorMessage(error), "bad"); }
   }
   async function clearTrackerCredentials(tracker: Tracker) {
-    if (!window.confirm(`Remove the stored ${tracker.displayName} login?`)) return;
     const draft = drafts[tracker.key];
     if (!draft) return;
+    const confirmed = await dialog.confirm({
+      eyebrow: "Tracker access",
+      title: `Remove ${tracker.displayName} login?`,
+      description: "The encrypted username and password will be deleted. Any tracker checks that require authentication may stop working.",
+      confirmLabel: "Remove login",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     try { await api(`/api/trackers/${tracker.key}/settings`, { method: "PUT", ...jsonBody({ clearCredentials: true }) }); await load(); notify(`${tracker.displayName} login removed`); }
     catch (error) { notify(errorMessage(error), "bad"); }
   }
@@ -691,6 +775,7 @@ function Settings({ notify }: { notify: Notify }) {
 }
 
 function Admin({ notify }: { notify: Notify }) {
+  const dialog = useDialog();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [mirrors, setMirrors] = useState<AdminMirror[]>([]);
   const [status, setStatus] = useState<SchedulerStatus | null>(null);
@@ -727,7 +812,17 @@ function Admin({ notify }: { notify: Notify }) {
     catch (error) { notify(errorMessage(error), "bad"); }
   }
   async function resetUser(user: AdminUser) {
-    const password = window.prompt(`Temporary password for ${user.username}`);
+    const password = await dialog.prompt({
+      eyebrow: "User access",
+      title: `Reset password for ${user.username}`,
+      description: "Set a temporary password. The user must replace it the next time they sign in.",
+      inputLabel: "Temporary password",
+      inputType: "password",
+      autoComplete: "new-password",
+      minLength: 8,
+      maxLength: 500,
+      confirmLabel: "Reset password",
+    });
     if (!password) return;
     try { await api(`/api/admin/users/${user.id}/reset-password`, { method: "POST", ...jsonBody({ password }) }); notify("Password reset; the user must change it at sign-in"); }
     catch (error) { notify(errorMessage(error), "bad"); }
@@ -872,6 +967,136 @@ function CreateUser({ onClose, onCreated, notify }: { onClose: () => void; onCre
 
 function Page({ title, eyebrow, description, actions, children }: { title: string; eyebrow: string; description: string; actions?: ReactNode; children: ReactNode }) {
   return <main className="page"><header className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{actions}</header><div className="page-body">{children}</div></main>;
+}
+
+function DialogProvider({ children }: { children: ReactNode }) {
+  const [request, setRequest] = useState<DialogRequest | null>(null);
+
+  const confirm = useCallback((options: DialogBaseOptions) => new Promise<boolean>((resolve) => {
+    setRequest({ ...options, kind: "confirm", resolve: (value) => resolve(value === true) });
+  }), []);
+
+  const prompt = useCallback((options: DialogPromptOptions) => new Promise<string | null>((resolve) => {
+    setRequest({ ...options, kind: "prompt", resolve: (value) => resolve(typeof value === "string" ? value : null) });
+  }), []);
+
+  const settle = useCallback((current: DialogRequest, value: boolean | string | null) => {
+    current.resolve(value);
+    setRequest((active) => active === current ? null : active);
+  }, []);
+
+  const api = useMemo(() => ({ confirm, prompt }), [confirm, prompt]);
+
+  return (
+    <DialogContext.Provider value={api}>
+      {children}
+      {request && <AppDialog request={request} onCancel={() => settle(request, request.kind === "confirm" ? false : null)} onAccept={(value) => settle(request, value)} />}
+    </DialogContext.Provider>
+  );
+}
+
+function useDialog() {
+  const dialog = useContext(DialogContext);
+  if (!dialog) throw new Error("useDialog must be used inside DialogProvider");
+  return dialog;
+}
+
+function AppDialog({ request, onCancel, onAccept }: { request: DialogRequest; onCancel: () => void; onAccept: (value: boolean | string) => void }) {
+  const [value, setValue] = useState(request.kind === "prompt" ? request.initialValue || "" : "");
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const tone = request.tone || "default";
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
+      } else {
+        confirmRef.current?.focus();
+      }
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab" || !dialogRef.current) return;
+    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")]
+      .filter((element) => element.getClientRects().length > 0);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    onAccept(request.kind === "confirm" ? true : value);
+  }
+
+  return (
+    <div className="dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+      <div
+        ref={dialogRef}
+        className={`app-dialog app-dialog--${tone}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        onKeyDown={handleKeyDown}
+      >
+        <form onSubmit={submit}>
+          <button type="button" className="app-dialog__close" onClick={onCancel} aria-label="Close dialog"><Icon name="close" size={17} /></button>
+          <div className="app-dialog__body">
+            <p className="app-dialog__eyebrow"><span />{request.eyebrow}</p>
+            <h2 id={titleId}>{request.title}</h2>
+            <p id={descriptionId} className="app-dialog__description">{request.description}</p>
+            {request.kind === "prompt" && (
+              <label className="app-dialog__field">
+                <span>{request.inputLabel}</span>
+                <input
+                  ref={inputRef}
+                  type={request.inputType || "text"}
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  autoComplete={request.autoComplete}
+                  minLength={request.minLength}
+                  maxLength={request.maxLength}
+                  required
+                />
+                {request.minLength && <small>At least {request.minLength} characters</small>}
+              </label>
+            )}
+          </div>
+          <div className="app-dialog__actions">
+            <button type="button" className="button button--quiet" onClick={onCancel}>Cancel</button>
+            <button ref={confirmRef} className={`button ${tone === "danger" ? "button--danger-filled" : "button--primary"}`}>{request.confirmLabel}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function Drawer({ title, subtitle, onClose, wide = false, extraWide = false, headerMedia, children }: { title: string; subtitle: string; onClose: () => void; wide?: boolean; extraWide?: boolean; headerMedia?: ReactNode; children: ReactNode }) {
