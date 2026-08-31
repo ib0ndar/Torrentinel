@@ -532,7 +532,7 @@ function registerAdminRoutes(app: FastifyInstance, db: SqliteDatabase): void {
   app.get("/api/admin/diagnostics", { preHandler: requireAdmin }, async (request, reply) => {
     const query = parse(z.object({
       trackerKey: trackerKeySchema.optional(),
-      operation: z.enum(["direct", "rule-discovery", "rule-enrichment"]).optional(),
+      operation: z.enum(["direct", "feed-poll", "rule-discovery", "rule-enrichment"]).optional(),
       outcome: z.string().trim().min(1).max(40).optional(),
       limit: z.coerce.number().int().min(1).max(250).default(100),
     }), request.query, reply);

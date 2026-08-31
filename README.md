@@ -104,7 +104,7 @@ docker run -d \
   -v torrentinel_app:/var/lib/torrentinel \
   -v torrentinel_db:/data \
   -e PUBLIC_URL=http://localhost:8080 \
-  bah0/torrentinel:v0.4.0
+  bah0/torrentinel:v0.4.1
 ```
 
 ### Rootless Podman on RHEL
@@ -112,7 +112,7 @@ docker run -d \
 The `deploy/` directory contains Quadlet units for a rootless Podman deployment with named volumes, health checks, SELinux labeling, and an internal FlareSolverr network.
 
 ```sh
-podman pull docker.io/bah0/torrentinel:v0.4.0
+podman pull docker.io/bah0/torrentinel:v0.4.1
 podman volume create torrentinel_app
 podman volume create torrentinel_db
 

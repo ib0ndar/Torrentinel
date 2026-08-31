@@ -457,6 +457,30 @@ export class Scheduler {
             if (!rollingFeed) {
               rollingFeed = ingestRollingFeedBatch(this.db, sample.tracker_key, batch);
               rollingFeeds.set(sample.tracker_key, rollingFeed);
+              this.recordObservation({
+                runId,
+                userId: sample.user_id,
+                trackerKey: sample.tracker_key,
+                operation: "feed-poll",
+                outcome: rollingFeed.gapDetected
+                  ? "coverage-gap"
+                  : rollingFeed.coverageStatus === "baseline"
+                    ? "baseline"
+                    : "continuous",
+                requestedUrl: batch.sourceUrl || sample.base_url,
+                releaseCount: batch.releases.length,
+                durationMs: Date.now() - discoveryStartedMs,
+                details: {
+                  feedEntryCount: rollingFeed.entryCount,
+                  feedNewEntryCount: rollingFeed.newEntryCount,
+                  feedOverlapCount: rollingFeed.overlapCount ?? null,
+                  feedBufferedCount: rollingFeed.bufferedCount,
+                  feedCoverageMinutes: rollingFeed.coverageMinutes ?? null,
+                  feedCoverageStatus: rollingFeed.coverageStatus,
+                  feedOldestEntryAt: rollingFeed.oldestEntryAt || null,
+                  feedNewestEntryAt: rollingFeed.newestEntryAt || null,
+                },
+              });
             }
             if (rollingFeed.unresolvedGapSince) {
               const recoveryRun = recoveryRuns.get(sample.tracker_key) || { attempted: 0, failed: 0 };
@@ -529,14 +553,6 @@ export class Scheduler {
               newMatchCount,
               baselineCount,
               ...(rollingFeed ? {
-                feedEntryCount: rollingFeed.entryCount,
-                feedNewEntryCount: rollingFeed.newEntryCount,
-                feedOverlapCount: rollingFeed.overlapCount ?? null,
-                feedBufferedCount: releases.length,
-                feedCoverageMinutes: rollingFeed.coverageMinutes ?? null,
-                feedCoverageStatus: coverageGap ? "gap" : coverageRecovered ? "recovered" : rollingFeed.coverageStatus,
-                feedOldestEntryAt: rollingFeed.oldestEntryAt || null,
-                feedNewestEntryAt: rollingFeed.newestEntryAt || null,
                 recoveryCount,
                 recoveryComplete: recoveryComplete ?? null,
               } : {}),

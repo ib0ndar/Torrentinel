@@ -913,12 +913,12 @@ function Admin({ notify }: { notify: Notify }) {
         </span>
         {rutrackerHealth ? <div className="coverage-metrics">
           <span><strong>{rutrackerHealth.entryCount}</strong><small>entries</small></span>
-          <span><strong>{rutrackerHealth.newEntryCount}</strong><small>new</small></span>
+          <span><strong>{rutrackerHealth.newEntryCount}</strong><small>{rutrackerHealth.coverageStatus === "baseline" ? "seeded" : "new"}</small></span>
           <span><strong>{rutrackerHealth.overlapCount ?? "—"}</strong><small>overlap</small></span>
           <span><strong>{rutrackerHealth.coverageMinutes !== undefined ? formatCoverageMinutes(rutrackerHealth.coverageMinutes) : "—"}</strong><small>window</small></span>
           <span><strong>{selectedSafetyMargin !== undefined ? `${selectedSafetyMargin}×` : "—"}</strong><small>margin</small></span>
         </div> : <span className="coverage-empty">Available after the first RuTracker rule poll</span>}
-        <span className={`state ${coverageTone}`}>{rutrackerHealth?.unresolvedGapSince ? "Gap detected" : rutrackerHealth?.coverageStatus === "recovered" ? "Recovered" : rutrackerHealth ? "Continuous" : "Pending"}</span>
+        <span className={`state ${coverageTone}`}>{rutrackerHealth?.unresolvedGapSince ? "Gap detected" : rutrackerHealth?.coverageStatus === "recovered" ? "Recovered" : rutrackerHealth?.coverageStatus === "baseline" ? "Baseline" : rutrackerHealth ? "Continuous" : "Pending"}</span>
       </section>
 
       <section className="table-section diagnostic-section">
@@ -941,18 +941,26 @@ function Admin({ notify }: { notify: Notify }) {
           {visibleDiagnostics.map((observation) => {
             const diagnosticUrl = observation.resolvedUrl || observation.requestedUrl;
             const feedEntryCount = numericDetail(observation.details.feedEntryCount);
-            const feedSummary = feedEntryCount === undefined ? undefined : [
-              `${feedEntryCount} feed entries scanned`,
-              detailFragment(observation.details.feedNewEntryCount, "new"),
-              detailFragment(observation.details.feedOverlapCount, "overlap"),
-              detailFragment(observation.details.newMatchCount, "new matches"),
-            ].filter(Boolean).join(" · ");
-            const detail = observation.title || feedSummary || observation.errorMessage || (observation.releaseCount !== null && observation.releaseCount !== undefined ? `${observation.releaseCount} releases observed` : "Tracker request completed");
-            const coverageMinutes = numericDetail(observation.details.feedCoverageMinutes);
+            const feedIsBaseline = observation.details.feedCoverageStatus === "baseline";
+            const feedSummary = observation.operation !== "feed-poll" || feedEntryCount === undefined ? undefined : feedIsBaseline
+              ? `${feedEntryCount} feed entries seeded · overlap unavailable`
+              : [
+                `${feedEntryCount} feed entries scanned`,
+                detailFragment(observation.details.feedNewEntryCount, "new"),
+                detailFragment(observation.details.feedOverlapCount, "overlap"),
+              ].filter(Boolean).join(" · ");
+            const requiredTerms = typeof observation.details.requiredTerms === "string" ? observation.details.requiredTerms : undefined;
+            const ruleSummary = requiredTerms ? `Rule evaluated: ${requiredTerms}` : undefined;
+            const detail = observation.title || ruleSummary || feedSummary || observation.errorMessage || (observation.releaseCount !== null && observation.releaseCount !== undefined ? `${observation.releaseCount} releases observed` : "Tracker request completed");
+            const coverageMinutes = observation.operation === "feed-poll" ? numericDetail(observation.details.feedCoverageMinutes) : undefined;
+            const matchedCount = numericDetail(observation.details.matchedCount);
+            const newMatchCount = numericDetail(observation.details.newMatchCount);
             const diagnosticMeta = [
               observation.errorMessage,
+              ruleSummary && matchedCount !== undefined ? `${matchedCount} matched` : "",
+              ruleSummary && newMatchCount !== undefined ? `${newMatchCount} new matches` : "",
               coverageMinutes !== undefined ? `${formatCoverageMinutes(coverageMinutes)} feed window` : "",
-              typeof observation.details.feedCoverageStatus === "string" ? `${observation.details.feedCoverageStatus} coverage` : "",
+              observation.operation === "feed-poll" && typeof observation.details.feedCoverageStatus === "string" ? `${observation.details.feedCoverageStatus} coverage` : "",
               observation.httpStatus ? `HTTP ${observation.httpStatus}` : "",
               observation.externalId ? `ID ${observation.externalId}` : "",
             ].filter(Boolean).join(" · ");
@@ -1344,6 +1352,9 @@ function formatCoverageMinutes(minutes: number): string {
 
 function rutrackerCoverageDescription(health: DiscoveryHealth | undefined, safetyMargin: number | undefined): string {
   if (!health) return "The configured polling interval remains the actual tracker request interval.";
+  if (health.coverageStatus === "baseline") {
+    return `${health.entryCount} entries were seeded as the initial sample. Overlap becomes available after the next poll.`;
+  }
   if (health.unresolvedGapSince) {
     return `Continuity was lost ${relativeTime(health.unresolvedGapSince)}. Authenticated catch-up remains incomplete.`;
   }

@@ -2,6 +2,14 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.4.1] - 2026-08-31
+
+### Changed
+
+- RuTracker feed acquisition is recorded once per tracker run, while rule-evaluation observations show the distinct search terms and match counts that were evaluated against the shared batch.
+- The first persisted feed sample is labeled as entries seeded with overlap unavailable, instead of implying that every entry was newly published.
+- Existing retained rule observations also render their stored search terms instead of repeating tracker-level feed statistics.
+
 ## [0.4.0] - 2026-08-31
 
 ### Added
@@ -143,6 +151,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.4.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.0
 [0.3.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.3.0

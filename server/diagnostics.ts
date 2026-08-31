@@ -13,7 +13,7 @@ export interface TrackerObservationInput {
   subscriptionId?: string;
   userId: string;
   trackerKey: TrackerKey;
-  operation: "direct" | "rule-discovery" | "rule-enrichment";
+  operation: "direct" | "feed-poll" | "rule-discovery" | "rule-enrichment";
   outcome: string;
   requestedUrl?: string;
   snapshot?: Release & { fingerprint?: string };

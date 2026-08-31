@@ -103,6 +103,60 @@ describe("Kinozal search discovery migration", () => {
 });
 
 describe("RuTracker feed continuity", () => {
+  it("records one feed poll and distinct rule evaluations when a batch is shared", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    const insertRule = db.prepare(`
+      INSERT INTO subscriptions (
+        id, user_id, collection_id, type, name, required_terms, ignored_terms,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, 'rule', '', ?, '[]', ?, ?)
+    `);
+    insertRule.run("rutracker-rule-one", user.id, collection.id, JSON.stringify(["needle"]), timestamp, timestamp);
+    insertRule.run("rutracker-rule-two", user.id, collection.id, JSON.stringify(["haystack"]), timestamp, timestamp);
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'rutracker')")
+      .run("rutracker-rule-one");
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'rutracker')")
+      .run("rutracker-rule-two");
+
+    const plugin = trackerRegistry.get("rutracker");
+    if (!plugin?.rules) throw new Error("RuTracker rule discovery is unavailable");
+    const discover = vi.spyOn(plugin.rules, "discover")
+      .mockResolvedValue(feedBatch([release("1"), release("2")], "2026-08-31T10:00:00Z"));
+    const telegram = {
+      canNotify: vi.fn(() => false),
+      notifyRelease: vi.fn(async () => undefined),
+    } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 6)));
+
+    try {
+      await scheduler.run("test");
+      expect(discover).toHaveBeenCalledTimes(1);
+      const observations = db.prepare(`
+        SELECT operation, outcome, details FROM tracker_observations
+        WHERE tracker_key = 'rutracker' ORDER BY rowid
+      `).all() as Array<{ operation: string; outcome: string; details: string }>;
+      const feedPolls = observations.filter((row) => row.operation === "feed-poll");
+      const ruleEvaluations = observations.filter((row) => row.operation === "rule-discovery");
+      expect(feedPolls).toHaveLength(1);
+      expect(feedPolls[0].outcome).toBe("baseline");
+      expect(JSON.parse(feedPolls[0].details)).toMatchObject({
+        feedEntryCount: 2,
+        feedNewEntryCount: 2,
+        feedOverlapCount: null,
+        feedCoverageStatus: "baseline",
+      });
+      expect(ruleEvaluations).toHaveLength(2);
+      expect(ruleEvaluations.map((row) => JSON.parse(row.details).requiredTerms)).toEqual(["needle", "haystack"]);
+      expect(ruleEvaluations.every((row) => !("feedEntryCount" in JSON.parse(row.details)))).toBe(true);
+    } finally {
+      discover.mockRestore();
+      db.close();
+    }
+  });
+
   it("recovers a non-overlapping feed window and processes buffered matches", async () => {
     const db = createDatabase(":memory:");
     const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
@@ -154,17 +208,31 @@ describe("RuTracker feed continuity", () => {
         coverageStatus: "recovered",
         unresolvedGapSince: undefined,
       });
-      const latest = db.prepare(`
-        SELECT outcome, details FROM tracker_observations
-        WHERE tracker_key = 'rutracker' ORDER BY observed_at DESC LIMIT 1
-      `).get() as { outcome: string; details: string };
-      expect(latest.outcome).toBe("new-matches");
-      expect(JSON.parse(latest.details)).toMatchObject({
+      const observations = db.prepare(`
+        SELECT operation, outcome, details FROM tracker_observations
+        WHERE tracker_key = 'rutracker' ORDER BY rowid
+      `).all() as Array<{ operation: string; outcome: string; details: string }>;
+      const feedPolls = observations.filter((row) => row.operation === "feed-poll");
+      expect(feedPolls).toHaveLength(2);
+      expect(feedPolls.map((row) => row.outcome)).toEqual(["baseline", "coverage-gap"]);
+      expect(JSON.parse(feedPolls[0].details)).toMatchObject({
+        feedNewEntryCount: 2,
+        feedOverlapCount: null,
+        feedCoverageStatus: "baseline",
+      });
+      expect(JSON.parse(feedPolls[1].details)).toMatchObject({
+        feedNewEntryCount: 2,
         feedOverlapCount: 0,
-        feedCoverageStatus: "recovered",
+        feedCoverageStatus: "gap",
+      });
+      const latestRule = observations.filter((row) => row.operation === "rule-discovery").at(-1)!;
+      expect(latestRule.outcome).toBe("new-matches");
+      expect(JSON.parse(latestRule.details)).toMatchObject({
+        requiredTerms: "needle",
         recoveryCount: 1,
         recoveryComplete: true,
       });
+      expect(JSON.parse(latestRule.details)).not.toHaveProperty("feedEntryCount");
     } finally {
       discover.mockRestore();
       recover.mockRestore();

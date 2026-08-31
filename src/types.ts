@@ -152,7 +152,7 @@ export interface TrackerObservation {
   subscriptionName?: string | null;
   username: string;
   trackerKey: TrackerKey;
-  operation: "direct" | "rule-discovery" | "rule-enrichment";
+  operation: "direct" | "feed-poll" | "rule-discovery" | "rule-enrichment";
   outcome: string;
   requestedUrl?: string | null;
   resolvedUrl?: string | null;
