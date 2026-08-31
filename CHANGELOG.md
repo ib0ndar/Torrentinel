@@ -2,6 +2,19 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.4.2] - 2026-08-31
+
+### Added
+
+- A distribution-neutral native Linux production path with a hardened systemd service and environment template.
+- Declarative Podman volume Quadlets and a separate rootless-container environment template.
+
+### Changed
+
+- Installation guidance now presents native Linux, Docker Compose, and Podman Quadlet as three complete deployment scenarios with shared verification, update, troubleshooting, and backup guidance.
+- Docker Compose forwards every documented runtime setting, while native and container data-path defaults are now distinguished accurately.
+- Podman guidance is no longer tied to a specific Linux distribution, and persistent volumes are created automatically by Quadlet.
+
 ## [0.4.1] - 2026-08-31
 
 ### Changed
@@ -151,6 +164,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.4.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.2
 [0.4.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.0
 [0.3.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.3.1

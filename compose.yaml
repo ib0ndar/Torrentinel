@@ -1,6 +1,6 @@
 services:
   torrentinel:
-    image: bah0/torrentinel:v0.4.1
+    image: bah0/torrentinel:v0.4.2
     container_name: torrentinel
     restart: unless-stopped
     depends_on:
@@ -11,6 +11,12 @@ services:
     environment:
       FLARESOLVERR_URL: http://flaresolverr:8191/v1
       PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
+      POLL_INTERVAL_MINUTES: "${POLL_INTERVAL_MINUTES:-60}"
+      POLL_STARTUP_DELAY_SECONDS: "${POLL_STARTUP_DELAY_SECONDS:-20}"
+      TRACKER_REQUEST_TIMEOUT_MS: "${TRACKER_REQUEST_TIMEOUT_MS:-30000}"
+      FLARESOLVERR_TIMEOUT_MS: "${FLARESOLVERR_TIMEOUT_MS:-120000}"
+      SESSION_DAYS: "${SESSION_DAYS:-30}"
+      SESSION_COOKIE_SECURE: "${SESSION_COOKIE_SECURE:-false}"
     volumes:
       - torrentinel_app:/var/lib/torrentinel
       - torrentinel_db:/data
@@ -22,6 +28,7 @@ services:
     shm_size: 512m
     environment:
       LOG_LEVEL: info
+      LOG_HTML: "false"
     tmpfs:
       - /config:size=64m,mode=0700
 

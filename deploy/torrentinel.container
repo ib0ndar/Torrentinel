@@ -6,23 +6,20 @@ Requires=torrentinel_flaresolverr.service
 After=torrentinel_flaresolverr.service
 
 [Container]
-Image=docker.io/bah0/torrentinel:v0.4.1
+Image=docker.io/bah0/torrentinel:v0.4.2
 ContainerName=torrentinel
 UserNS=keep-id
 Network=torrentinel.network
 PublishPort=8999:8080/tcp
-Volume=torrentinel_app:/var/lib/torrentinel:Z,U
-Volume=torrentinel_db:/data:Z,U
+Volume=torrentinel_app.volume:/var/lib/torrentinel:Z,U
+Volume=torrentinel_db.volume:/data:Z,U
 HealthCmd=node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 HealthInterval=30s
 HealthTimeout=5s
 HealthStartPeriod=20s
 HealthRetries=3
 HealthOnFailure=kill
-Environment=POLL_INTERVAL_MINUTES=60
-Environment=PUBLIC_URL=http://localhost:8999
-Environment=SESSION_COOKIE_SECURE=false
-Environment=FLARESOLVERR_URL=http://flaresolverr:8191/v1
+EnvironmentFile=./torrentinel.env
 
 [Service]
 Restart=always
