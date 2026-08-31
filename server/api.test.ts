@@ -241,10 +241,12 @@ describe("authenticated API", () => {
       });
       expect(updatedInterval.statusCode).toBe(200);
       expect(updatedInterval.json().intervalMinutes).toBe(5);
+      expect(updatedInterval.json().discoveryHealth).toEqual([]);
       expect(db.prepare("SELECT value FROM app_state WHERE key = 'poll_interval_minutes'").get()).toMatchObject({ value: "5" });
 
       const systemStatus = await app.inject({ method: "GET", url: "/api/system/status", headers: { cookie: adminCookie } });
       expect(systemStatus.json().intervalMinutes).toBe(5);
+      expect(systemStatus.json().discoveryHealth).toEqual([]);
 
       const diagnosticRunId = startSchedulerRun(db, "test", new Date().toISOString());
       recordTrackerObservation(db, {

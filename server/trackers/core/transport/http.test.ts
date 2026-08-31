@@ -26,4 +26,26 @@ describe("tracker HTTP transport", () => {
     expect(seenCookies).toEqual([null, "session=fixture", null]);
     expect(session.authenticated).toBe(false);
   });
+
+  it("reuses browser clearance without exposing login values to the resolver", async () => {
+    let seenHeaders = new Headers();
+    let seenBody = "";
+    vi.stubGlobal("fetch", vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      seenHeaders = new Headers(init?.headers);
+      seenBody = String(init?.body || "");
+      return new Response("ok", { status: 200 });
+    }));
+    const session = new CookieSession();
+    session.seedCookies([{ name: "cf_clearance", value: "browser-cookie" }], "Validated browser agent");
+
+    await session.postForm("https://tracker.test/login", {
+      login_username: "user",
+      login_password: "password",
+    }, undefined, { origin: "https://tracker.test" });
+
+    expect(seenHeaders.get("cookie")).toBe("cf_clearance=browser-cookie");
+    expect(seenHeaders.get("user-agent")).toBe("Validated browser agent");
+    expect(seenHeaders.get("origin")).toBe("https://tracker.test");
+    expect(seenBody).toBe("login_username=user&login_password=password");
+  });
 });

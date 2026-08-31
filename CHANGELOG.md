@@ -2,6 +2,22 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.4.0] - 2026-08-31
+
+### Added
+
+- RuTracker rule discovery now persists every observed Atom entry in a shared 14-day release buffer before evaluating subscriptions.
+- Consecutive RuTracker feed batches are compared by topic ID, with entry counts, new entries, overlap, rolling-window duration, and polling safety margin visible in Administration.
+- A non-overlapping feed window creates an explicit coverage gap and triggers authenticated, registration-date-sorted, paginated catch-up searches for every active RuTracker rule.
+- RuTracker catch-up results are deduplicated through the existing rule-match store and coverage remains degraded until every active query reaches the recorded gap boundary.
+
+### Changed
+
+- The configured polling interval remains the sole tracker-request schedule; no hidden high-frequency RuTracker poller is used.
+- RuTracker tracker logs distinguish feed entries scanned, new entries, overlap, buffered releases, matching releases, and recovery status instead of describing every feed entry as an observed release.
+- RuTracker feed magnets are retained directly from Atom enclosure links.
+- Authenticated recovery uses FlareSolverr only to obtain reusable Cloudflare clearance; tracker credentials are submitted directly by Torrentinel and never included in sidecar request payloads.
+
 ## [0.3.1] - 2026-08-29
 
 ### Changed
@@ -127,6 +143,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.4.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.0
 [0.3.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.3.0
 [0.2.7]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.2.7

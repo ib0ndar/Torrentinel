@@ -4,7 +4,7 @@ import { nowIso } from "./db.js";
 import { config } from "./config.js";
 import type { DirectSnapshot, Release, TrackerKey } from "./types.js";
 import { trackerRegistry } from "./trackers/index.js";
-import type { TrackerContext, TrackerPlugin } from "./trackers/core/contracts.js";
+import type { DiscoveryBatch, TrackerContext, TrackerPlugin } from "./trackers/core/contracts.js";
 import { TrackerError } from "./trackers/core/errors.js";
 import type { TelegramService } from "./telegram.js";
 import { readTrackerCredentials, type SecretVault } from "./secrets.js";
@@ -18,6 +18,15 @@ import {
 } from "./diagnostics.js";
 import type { CoverCacheStore } from "./cover-cache.js";
 import { coverErrorMessage } from "./cover-fetch.js";
+import {
+  bufferReleases,
+  bufferedReleases,
+  feedHealth,
+  ingestRollingFeedBatch,
+  markFeedRecovery,
+  type FeedHealth,
+  type RollingFeedResult,
+} from "./release-buffer.js";
 
 interface DirectRow {
   id: string;
@@ -57,6 +66,11 @@ interface SchedulerStatus {
   changed: number;
   errors: number;
   trigger?: string;
+}
+
+interface FeedRecoveryRunState {
+  attempted: number;
+  failed: number;
 }
 
 export const MIN_POLL_INTERVAL_MINUTES = 5;
@@ -132,6 +146,10 @@ export class Scheduler {
     } catch {
       return { running: this.running, checked: 0, changed: 0, errors: 0 };
     }
+  }
+
+  discoveryHealth(): FeedHealth[] {
+    return feedHealth(this.db, this.pollIntervalMinutes());
   }
 
   async run(trigger = "manual"): Promise<SchedulerStatus> {
@@ -384,6 +402,9 @@ export class Scheduler {
     }
 
     const newByRule = new Map<string, Release[]>();
+    const feedDiscoveryBatches = new Map<TrackerKey, DiscoveryBatch>();
+    const rollingFeeds = new Map<TrackerKey, RollingFeedResult>();
+    const recoveryRuns = new Map<TrackerKey, FeedRecoveryRunState>();
     for (const groupRows of groups.values()) {
       const startedMs = Date.now();
       const sample = groupRows[0];
@@ -413,32 +434,112 @@ export class Scheduler {
           ? { requiredTerms: discoveryGroup.requiredTerms }
           : undefined;
         try {
-          const batch = await plugin.rules.discover(
-            this.context(sample.user_id, sample.tracker_key, sample.base_url),
-            query,
-          );
+          const cachedFeedBatch = plugin.manifest.capabilities.ruleDiscovery === "feed"
+            ? feedDiscoveryBatches.get(sample.tracker_key)
+            : undefined;
+          const batch = cachedFeedBatch
+            ? discoveryBatchForBaseUrl(cachedFeedBatch, plugin, sample.base_url)
+            : await plugin.rules.discover(
+              this.context(sample.user_id, sample.tracker_key, sample.base_url),
+              query,
+            );
+          if (!cachedFeedBatch && plugin.manifest.capabilities.ruleDiscovery === "feed") {
+            feedDiscoveryBatches.set(sample.tracker_key, batch);
+          }
           successfulDiscoveries += 1;
+          let releases = batch.releases;
+          let rollingFeed: RollingFeedResult | undefined;
+          let recoveryCount = 0;
+          let recoveryComplete: boolean | undefined;
+          let recoveryError: unknown;
+          if (batch.coverage.source === "feed") {
+            rollingFeed = rollingFeeds.get(sample.tracker_key);
+            if (!rollingFeed) {
+              rollingFeed = ingestRollingFeedBatch(this.db, sample.tracker_key, batch);
+              rollingFeeds.set(sample.tracker_key, rollingFeed);
+            }
+            if (rollingFeed.unresolvedGapSince) {
+              const recoveryRun = recoveryRuns.get(sample.tracker_key) || { attempted: 0, failed: 0 };
+              recoveryRun.attempted += 1;
+              recoveryRuns.set(sample.tracker_key, recoveryRun);
+              try {
+                if (!query || !plugin.rules.recover) {
+                  throw new TrackerError("unsupported", `${plugin.manifest.displayName} cannot recover this feed coverage gap`, {
+                    trackerKey: sample.tracker_key,
+                  });
+                }
+                const recovered = await plugin.rules.recover(
+                  this.context(sample.user_id, sample.tracker_key, sample.base_url),
+                  query,
+                  rollingFeed.unresolvedGapSince,
+                );
+                bufferReleases(this.db, recovered.releases);
+                recoveryCount = recovered.releases.length;
+                recoveryComplete = recovered.coverage.complete;
+                if (!recoveryComplete) {
+                  throw new TrackerError("temporary", `${plugin.manifest.displayName} catch-up search reached its safety limit before the gap was covered`, {
+                    trackerKey: sample.tracker_key,
+                    retryable: true,
+                    url: recovered.sourceUrl,
+                  });
+                }
+              } catch (error) {
+                recoveryError = error;
+                recoveryComplete = false;
+                recoveryRun.failed += 1;
+                failedDiscoveries += 1;
+              }
+            }
+            releases = releasesForBaseUrl(bufferedReleases(this.db, sample.tracker_key), plugin, sample.base_url);
+          }
           const { matchedCount, newMatchCount, baselineCount } = await this.processRuleMatches(
             discoveryGroup.rows,
-            batch.releases,
+            releases,
             plugin,
             runId,
             newByRule,
           );
+          if (recoveryError) {
+            const message = errorMessage(recoveryError);
+            for (const row of discoveryGroup.rows) this.updateTrackerState(row.id, row.tracker_key, false, message);
+          }
+          const coverageRecovered = Boolean(rollingFeed?.unresolvedGapSince && recoveryComplete);
+          const coverageGap = Boolean(rollingFeed?.unresolvedGapSince && !recoveryComplete);
           this.recordObservation({
             runId,
             userId: sample.user_id,
             trackerKey: sample.tracker_key,
             operation: "rule-discovery",
-            outcome: newMatchCount > 0 ? "new-matches" : baselineCount > 0 ? "baseline" : "unchanged",
+            outcome: coverageGap
+              ? "coverage-gap"
+              : newMatchCount > 0
+                ? "new-matches"
+                : coverageRecovered
+                  ? "recovered"
+                  : baselineCount > 0
+                    ? "baseline"
+                    : "unchanged",
             requestedUrl: batch.sourceUrl || sample.base_url,
             releaseCount: batch.releases.length,
             durationMs: Date.now() - discoveryStartedMs,
+            error: recoveryError,
             details: {
               subscriptionCount: discoveryGroup.rows.length,
               matchedCount,
               newMatchCount,
               baselineCount,
+              ...(rollingFeed ? {
+                feedEntryCount: rollingFeed.entryCount,
+                feedNewEntryCount: rollingFeed.newEntryCount,
+                feedOverlapCount: rollingFeed.overlapCount ?? null,
+                feedBufferedCount: releases.length,
+                feedCoverageMinutes: rollingFeed.coverageMinutes ?? null,
+                feedCoverageStatus: coverageGap ? "gap" : coverageRecovered ? "recovered" : rollingFeed.coverageStatus,
+                feedOldestEntryAt: rollingFeed.oldestEntryAt || null,
+                feedNewestEntryAt: rollingFeed.newestEntryAt || null,
+                recoveryCount,
+                recoveryComplete: recoveryComplete ?? null,
+              } : {}),
               ...(discoveryGroup.requiredTerms ? { requiredTerms: discoveryGroup.requiredTerms.join(" · ") } : {}),
               ...(plugin.manifest.ruleDiscoveryRevision
                 ? { discoveryRevision: plugin.manifest.ruleDiscoveryRevision }
@@ -467,6 +568,10 @@ export class Scheduler {
       }
       if (successfulDiscoveries > 0) status.checked += 1;
       if (failedDiscoveries > 0) status.errors += 1;
+    }
+
+    for (const [trackerKey, recovery] of recoveryRuns) {
+      if (recovery.attempted > 0) markFeedRecovery(this.db, trackerKey, recovery.failed === 0);
     }
 
     for (const subscriptionId of new Set(rows.map((row) => row.id))) {
@@ -694,7 +799,7 @@ export function directSnapshotRequiresSilentSchemaUpgrade(value: string | null, 
 }
 
 function ruleDiscoveryGroups(plugin: TrackerPlugin, rows: RuleRow[]): RuleDiscoveryGroup[] {
-  if (plugin.manifest.capabilities.ruleDiscovery !== "search") return [{ rows }];
+  if (plugin.manifest.capabilities.ruleDiscovery !== "search" && !plugin.rules?.recover) return [{ rows }];
   const groups = new Map<string, RuleDiscoveryGroup>();
   for (const row of rows) {
     const requiredTerms = parseTerms(row.required_terms);
@@ -707,6 +812,20 @@ function ruleDiscoveryGroups(plugin: TrackerPlugin, rows: RuleRow[]): RuleDiscov
     else groups.set(key, { rows: [row], requiredTerms });
   }
   return [...groups.values()];
+}
+
+function releasesForBaseUrl(releases: Release[], plugin: TrackerPlugin, baseUrl: string): Release[] {
+  return releases.map((release) => {
+    try {
+      return { ...release, url: plugin.normalizeUrl(new URL(release.url), baseUrl) };
+    } catch {
+      return release;
+    }
+  });
+}
+
+function discoveryBatchForBaseUrl(batch: DiscoveryBatch, plugin: TrackerPlugin, baseUrl: string): DiscoveryBatch {
+  return { ...batch, releases: releasesForBaseUrl(batch.releases, plugin, baseUrl) };
 }
 
 function parseTerms(value: string): string[] {

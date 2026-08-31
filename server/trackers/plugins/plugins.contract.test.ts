@@ -166,6 +166,7 @@ describe("RuTracker plugin", () => {
       metadata: { detailSource: "browser-session", infoHash: "ABC123" },
     });
     expect(batch.releases).toHaveLength(2);
+    expect(batch.releases[0].magnet).toBe("magnet:?xt=urn:btih:FEED88");
     expect(batch.coverage).toMatchObject({ source: "feed", complete: false, oldestObservedAt: "2026-08-08T08:20:00Z" });
     expect(batch.cursor).toBe("2026-08-08T08:30:00Z");
     expect(detailProvider.close).toHaveBeenCalledOnce();

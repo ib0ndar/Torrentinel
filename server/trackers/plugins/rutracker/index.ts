@@ -3,6 +3,7 @@ import { hostMatchesManifest } from "../../core/contracts.js";
 import { RutrackerDirectMonitor, type RutrackerDetailProvider } from "./direct.js";
 import { rutrackerManifest } from "./manifest.js";
 import { RutrackerRuleDiscovery } from "./rules.js";
+import { RutrackerSearchRecovery } from "./search.js";
 
 export function createRutrackerPlugin(detailProvider?: RutrackerDetailProvider): TrackerPlugin {
   const normalizeUrl = (url: URL, baseUrl: string) => {
@@ -10,14 +11,16 @@ export function createRutrackerPlugin(detailProvider?: RutrackerDetailProvider):
     return new URL(`${path}${url.search}`, baseUrl).toString();
   };
   const direct = new RutrackerDirectMonitor(normalizeUrl, detailProvider);
+  const searchRecovery = new RutrackerSearchRecovery();
   return {
     manifest: rutrackerManifest,
     matchesUrl: (url) => hostMatchesManifest(url.hostname, rutrackerManifest),
     normalizeUrl,
     direct,
-    rules: new RutrackerRuleDiscovery(),
+    rules: new RutrackerRuleDiscovery(searchRecovery),
     close: async () => {
       await direct.close();
+      await searchRecovery.close();
     },
   };
 }

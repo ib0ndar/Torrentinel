@@ -6,7 +6,7 @@ Requires=torrentinel_flaresolverr.service
 After=torrentinel_flaresolverr.service
 
 [Container]
-Image=localhost/torrentinel:latest
+Image=docker.io/bah0/torrentinel:v0.4.0
 ContainerName=torrentinel
 UserNS=keep-id
 Network=torrentinel.network

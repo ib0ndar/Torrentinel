@@ -11,9 +11,10 @@ import { createDatabase } from "./db.js";
 import { SecretVault } from "./secrets.js";
 import { escapeTelegram } from "./telegram.js";
 import type { TelegramService } from "./telegram.js";
-import type { DirectSnapshot } from "./types.js";
+import type { DirectSnapshot, Release } from "./types.js";
 import { fingerprintRelease } from "./trackers/core/parsing.js";
 import { trackerRegistry } from "./trackers/index.js";
+import type { DiscoveryBatch } from "./trackers/core/contracts.js";
 import type { CoverCacheStore } from "./cover-cache.js";
 
 describe("rule matching", () => {
@@ -96,6 +97,77 @@ describe("Kinozal search discovery migration", () => {
       );
     } finally {
       discover.mockRestore();
+      db.close();
+    }
+  });
+});
+
+describe("RuTracker feed continuity", () => {
+  it("recovers a non-overlapping feed window and processes buffered matches", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO subscriptions (
+        id, user_id, collection_id, type, name, required_terms, ignored_terms,
+        created_at, updated_at
+      ) VALUES ('rutracker-rule', ?, ?, 'rule', '', ?, '[]', ?, ?)
+    `).run(user.id, collection.id, JSON.stringify(["needle"]), timestamp, timestamp);
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES ('rutracker-rule', 'rutracker')").run();
+
+    const first = [release("1"), release("2")];
+    const next = [release("3"), release("4")];
+    const recovered = release("5");
+    const plugin = trackerRegistry.get("rutracker");
+    if (!plugin?.rules?.recover) throw new Error("RuTracker recovery is unavailable");
+    const discover = vi.spyOn(plugin.rules, "discover")
+      .mockResolvedValueOnce(feedBatch(first, "2026-08-31T10:00:00Z"))
+      .mockResolvedValueOnce(feedBatch(next, "2026-08-31T12:00:00Z"));
+    const recover = vi.spyOn(plugin.rules, "recover").mockResolvedValue({
+      releases: [recovered],
+      coverage: { source: "search", complete: true, oldestObservedAt: "2026-08-31T10:30:00Z" },
+      cursor: "2026-08-31T10:30:00Z",
+      sourceUrl: "https://rutracker.org/forum/tracker.php?nm=needle&o=1&s=2",
+    });
+    const notifyRelease = vi.fn(async () => undefined);
+    const telegram = {
+      canNotify: vi.fn(() => false),
+      notifyRelease,
+    } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 4)));
+
+    try {
+      expect((await scheduler.run("test")).changed).toBe(0);
+      expect((await scheduler.run("test")).changed).toBe(1);
+      expect(recover).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: user.id, baseUrl: "https://rutracker.org" }),
+        { requiredTerms: ["needle"] },
+        expect.any(String),
+      );
+      expect(notifyRelease).toHaveBeenCalledTimes(3);
+      expect(db.prepare(`
+        SELECT external_id FROM rule_matches WHERE subscription_id = 'rutracker-rule' ORDER BY external_id
+      `).all()).toEqual(["1", "2", "3", "4", "5"].map((external_id) => ({ external_id })));
+      expect(scheduler.discoveryHealth()[0]).toMatchObject({
+        trackerKey: "rutracker",
+        coverageStatus: "recovered",
+        unresolvedGapSince: undefined,
+      });
+      const latest = db.prepare(`
+        SELECT outcome, details FROM tracker_observations
+        WHERE tracker_key = 'rutracker' ORDER BY observed_at DESC LIMIT 1
+      `).get() as { outcome: string; details: string };
+      expect(latest.outcome).toBe("new-matches");
+      expect(JSON.parse(latest.details)).toMatchObject({
+        feedOverlapCount: 0,
+        feedCoverageStatus: "recovered",
+        recoveryCount: 1,
+        recoveryComplete: true,
+      });
+    } finally {
+      discover.mockRestore();
+      recover.mockRestore();
       db.close();
     }
   });
@@ -292,6 +364,29 @@ describe("direct subscription title synchronization", () => {
     }
   });
 });
+
+function release(externalId: string): Release {
+  return {
+    trackerKey: "rutracker",
+    externalId,
+    title: `Needle release ${externalId}`,
+    url: `https://rutracker.org/forum/viewtopic.php?t=${externalId}`,
+  };
+}
+
+function feedBatch(releases: Release[], oldestObservedAt: string): DiscoveryBatch {
+  const oldestMs = Date.parse(oldestObservedAt);
+  const timestamped = releases.map((item, index) => ({
+    ...item,
+    publishedAt: new Date(oldestMs + index * 60_000).toISOString(),
+  }));
+  return {
+    releases: timestamped,
+    coverage: { source: "feed", complete: false, oldestObservedAt },
+    cursor: timestamped.at(-1)?.publishedAt,
+    sourceUrl: "https://feed.rutracker.cc/atom/f/0.atom",
+  };
+}
 
 function directSnapshot(title: string, fingerprint: string, coverFile: string): DirectSnapshot {
   return {

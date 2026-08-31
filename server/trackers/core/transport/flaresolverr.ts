@@ -5,12 +5,16 @@ export interface BrowserPage {
   body: string;
   url: string;
   status: number;
+  cookies?: Array<{ name: string; value: string }>;
+  userAgent?: string;
 }
 
 interface SolverSolution {
   response?: string;
   status?: number;
   url?: string;
+  cookies?: Array<{ name?: string; value?: string }>;
+  userAgent?: string;
 }
 
 interface SolverResponse {
@@ -103,7 +107,18 @@ export class FlareSolverrClient {
     if (challengeDetected(body)) {
       throw new FlareSolverrError("RuTracker verification was not completed by the detail resolver", "challenge");
     }
-    return { body, status, url: result.solution?.url || url };
+    const cookies = result.solution?.cookies
+      ?.filter((cookie): cookie is { name: string; value: string } => (
+        typeof cookie.name === "string" && typeof cookie.value === "string"
+      ))
+      .map(({ name, value }) => ({ name, value }));
+    return {
+      body,
+      status,
+      url: result.solution?.url || url,
+      cookies,
+      userAgent: result.solution?.userAgent,
+    };
   }
 
   private async post(payload: Record<string, unknown>, signal?: AbortSignal): Promise<SolverResponse> {

@@ -507,6 +507,7 @@ export function registerRoutes(
   app.get("/api/system/status", { preHandler: requireReadyUser }, async () => ({
     scheduler: scheduler.status(),
     intervalMinutes: scheduler.pollIntervalMinutes(),
+    discoveryHealth: scheduler.discoveryHealth(),
   }));
 
   app.post("/api/system/poll", { preHandler: requireAdmin }, async () => ({ scheduler: await scheduler.run("admin") }));
@@ -517,7 +518,11 @@ export function registerRoutes(
     }), request.body, reply);
     if (!input) return;
     const schedulerStatus = scheduler.setPollIntervalMinutes(input.minutes);
-    return { intervalMinutes: scheduler.pollIntervalMinutes(), scheduler: schedulerStatus };
+    return {
+      intervalMinutes: scheduler.pollIntervalMinutes(),
+      scheduler: schedulerStatus,
+      discoveryHealth: scheduler.discoveryHealth(),
+    };
   });
 
   registerAdminRoutes(app, db);

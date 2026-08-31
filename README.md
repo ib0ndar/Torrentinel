@@ -24,6 +24,7 @@ Torrentinel watches torrent releases and tells you when something changes. It su
 - Tracker credentials, mirrors, and Telegram bots configured from the web interface
 - Administrator-managed accounts with no public registration
 - Configurable polling from 5 minutes to 6 hours
+- Persistent RuTracker feed buffering with overlap monitoring and authenticated gap recovery
 - Tracker diagnostics with seven-day log retention
 - Encrypted credentials and bot tokens in SQLite
 - Modular TypeScript tracker adapters
@@ -55,7 +56,7 @@ Torrentinel watches torrent releases and tells you when something changes. It su
 
 ### Docker Compose
 
-Docker Compose is the simplest way to run Torrentinel. It starts the application and a private FlareSolverr sidecar used for RuTracker detail pages.
+Docker Compose is the simplest way to run Torrentinel. It starts the application and a private FlareSolverr sidecar used for RuTracker detail pages and authenticated feed-gap recovery.
 
 ```sh
 git clone https://github.com/ib0ndar/Torrentinel.git
@@ -93,7 +94,7 @@ Application files and the SQLite database are stored in the `torrentinel_app` an
 
 ### Docker without Compose
 
-The application can run by itself if RuTracker browser resolution is not required:
+The application can run by itself if RuTracker browser resolution and authenticated feed-gap recovery are not required:
 
 ```sh
 docker run -d \
@@ -103,7 +104,7 @@ docker run -d \
   -v torrentinel_app:/var/lib/torrentinel \
   -v torrentinel_db:/data \
   -e PUBLIC_URL=http://localhost:8080 \
-  bah0/torrentinel:v0.3.1
+  bah0/torrentinel:v0.4.0
 ```
 
 ### Rootless Podman on RHEL
@@ -111,7 +112,7 @@ docker run -d \
 The `deploy/` directory contains Quadlet units for a rootless Podman deployment with named volumes, health checks, SELinux labeling, and an internal FlareSolverr network.
 
 ```sh
-podman build --format docker -t localhost/torrentinel:latest .
+podman pull docker.io/bah0/torrentinel:v0.4.0
 podman volume create torrentinel_app
 podman volume create torrentinel_db
 
@@ -127,7 +128,9 @@ The supplied unit publishes Torrentinel on TCP port `8999`. Update `PUBLIC_URL` 
 
 ## Configuration
 
-Tracker accounts, mirrors, and Telegram bots are configured from **Settings**. The polling interval and user accounts are managed from **Administration**.
+Tracker accounts, mirrors, and Telegram bots are configured from **Settings**. A RuTracker login is optional for ordinary public-feed monitoring and required only for authenticated recovery after a detected feed gap. The polling interval and user accounts are managed from **Administration**.
+
+The configured polling interval is the actual tracker request interval. Administration displays the current RuTracker rolling-feed window, consecutive-batch overlap, new-entry count, and safety margin. Every observed RuTracker entry is retained in a shared 14-day buffer before rule matching. When consecutive 150-entry batches do not overlap, Torrentinel marks coverage as degraded and uses registration-date-sorted, paginated RuTracker search to recover each active rule back to the last continuous poll. Coverage remains degraded if credentials are absent or the recovery boundary cannot be reached safely.
 
 Runtime settings can be supplied as environment variables:
 

@@ -100,6 +100,25 @@ export interface SchedulerStatus {
   trigger?: string;
 }
 
+export interface DiscoveryHealth {
+  trackerKey: TrackerKey;
+  fetchedAt: string;
+  entryCount: number;
+  overlapCount?: number;
+  newEntryCount: number;
+  oldestEntryAt?: string;
+  newestEntryAt?: string;
+  coverageMinutes?: number;
+  coverageStatus: "baseline" | "continuous" | "gap" | "recovered" | string;
+  lastContinuousAt?: string;
+  unresolvedGapSince?: string;
+  lastGapAt?: string;
+  recoveredAt?: string;
+  lastRecoveryAttemptAt?: string;
+  pollingIntervalMinutes: number;
+  safetyMargin?: number;
+}
+
 export interface TelegramStatus {
   configured: boolean;
   botUsername?: string;

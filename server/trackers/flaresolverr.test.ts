@@ -19,6 +19,8 @@ describe("FlareSolverr client", () => {
           status: 200,
           url: command.url,
           response: `<html><h1 class="maintitle">${command.url}</h1></html>`,
+          cookies: [{ name: "cf_clearance", value: "fixture" }],
+          userAgent: "Fixture browser agent",
         },
       });
     }));
@@ -29,6 +31,8 @@ describe("FlareSolverr client", () => {
     await client.close();
 
     expect(first.status).toBe(200);
+    expect(first.cookies).toEqual([{ name: "cf_clearance", value: "fixture" }]);
+    expect(first.userAgent).toBe("Fixture browser agent");
     expect(second.body).toContain("t=2");
     expect(commands.map((command) => command.cmd)).toEqual([
       "sessions.list", "sessions.create", "request.get", "request.get", "sessions.destroy",

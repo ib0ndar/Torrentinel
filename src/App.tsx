@@ -19,6 +19,7 @@ import type {
   AdminMirror,
   AdminUser,
   Collection,
+  DiscoveryHealth,
   DiagnosticsResponse,
   RuleMatch,
   SchedulerStatus,
@@ -525,7 +526,7 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
           <Field label="Tracker page URL" hint="Kinozal, Rutor, or RuTracker"><input type="url" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} autoFocus required /></Field>
           <InfoLine icon="clock">The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.</InfoLine>
         </> : <>
-          <Field label="Trackers"><div className="tracker-picker">{trackers.map((tracker) => <label key={tracker.key} className={selectedTrackers.includes(tracker.key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={selectedTrackers.includes(tracker.key)} onChange={() => setSelectedTrackers((current) => current.includes(tracker.key) ? current.filter((key) => key !== tracker.key) : [...current, tracker.key])} /><TrackerTag tracker={tracker.key} /><span>{tracker.displayName}</span>{!tracker.credentialsConfigured && tracker.key !== "rutor" && <small>credentials missing</small>}</label>)}</div></Field>
+          <Field label="Trackers"><div className="tracker-picker">{trackers.map((tracker) => <label key={tracker.key} className={selectedTrackers.includes(tracker.key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={selectedTrackers.includes(tracker.key)} onChange={() => setSelectedTrackers((current) => current.includes(tracker.key) ? current.filter((key) => key !== tracker.key) : [...current, tracker.key])} /><TrackerTag tracker={tracker.key} /><span>{tracker.displayName}</span>{!tracker.credentialsConfigured && tracker.key !== "rutor" && <small>{tracker.key === "rutracker" ? "gap recovery unavailable" : "credentials missing"}</small>}</label>)}</div></Field>
           <Field label="Required phrases" hint="Press Enter after each phrase. Every phrase must appear."><PhraseInput ariaLabel="Required phrases" value={required} onChange={setRequired} placeholder="Type a phrase and press Enter" /></Field>
           <Field label="Ignored phrases" hint="Press Enter after each phrase. Any match is rejected."><PhraseInput ariaLabel="Ignored phrases" value={ignored} onChange={setIgnored} placeholder="Type a phrase and press Enter" /></Field>
           <InfoLine icon="monitor">The first successful poll is a silent baseline. Only releases discovered afterward produce events.</InfoLine>
@@ -760,7 +761,7 @@ function Settings({ notify }: { notify: Notify }) {
           const draft = drafts[tracker.key];
           if (!draft) return <ListSkeleton key={tracker.key} />;
           return <section className="tracker-settings-row" key={tracker.key}>
-            <div className="integration-heading"><TrackerTag tracker={tracker.key} /><span><strong>{tracker.displayName}</strong><small>{tracker.key === "rutracker" ? tracker.credentialsConfigured ? `Public feed + protected details; login stored for ${tracker.username}` : "Public feed + protected detail resolver; login optional" : tracker.credentialsConfigured ? `Login stored for ${tracker.username}` : tracker.key === "kinozal" ? "Login required for polling" : "Login optional for this tracker"}</small></span><span className={`state ${tracker.credentialsConfigured || tracker.key !== "kinozal" ? "state--good" : "state--pending"}`}>{tracker.key === "rutracker" ? "Feed + details" : tracker.credentialsConfigured ? "Secured" : tracker.key === "kinozal" ? "Login missing" : "Public"}</span></div>
+            <div className="integration-heading"><TrackerTag tracker={tracker.key} /><span><strong>{tracker.displayName}</strong><small>{tracker.key === "rutracker" ? tracker.credentialsConfigured ? `Public feed + authenticated gap recovery; login stored for ${tracker.username}` : "Public feed monitoring; login enables coverage-gap recovery" : tracker.credentialsConfigured ? `Login stored for ${tracker.username}` : tracker.key === "kinozal" ? "Login required for polling" : "Login optional for this tracker"}</small></span><span className={`state ${tracker.credentialsConfigured || tracker.key !== "kinozal" ? "state--good" : "state--pending"}`}>{tracker.key === "rutracker" ? tracker.credentialsConfigured ? "Recovery ready" : "Feed only" : tracker.credentialsConfigured ? "Secured" : tracker.key === "kinozal" ? "Login missing" : "Public"}</span></div>
             <div className="tracker-settings-fields">
               <label className="settings-field settings-field--wide"><span>Mirror override</span><input type="url" value={draft.mirror} onChange={(event) => setDrafts((current) => ({ ...current, [tracker.key]: { ...draft, mirror: event.target.value } }))} placeholder={tracker.globalBaseUrl} /></label>
               <label className="settings-field"><span>Username</span><input value={draft.username} onChange={(event) => setDrafts((current) => ({ ...current, [tracker.key]: { ...draft, username: event.target.value } }))} autoComplete="off" /></label>
@@ -779,6 +780,7 @@ function Admin({ notify }: { notify: Notify }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [mirrors, setMirrors] = useState<AdminMirror[]>([]);
   const [status, setStatus] = useState<SchedulerStatus | null>(null);
+  const [discoveryHealth, setDiscoveryHealth] = useState<DiscoveryHealth[]>([]);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
   const [diagnosticTracker, setDiagnosticTracker] = useState<TrackerKey | "">("");
   const [diagnosticOutcome, setDiagnosticOutcome] = useState("");
@@ -792,11 +794,12 @@ function Admin({ notify }: { notify: Notify }) {
     const [userResult, mirrorResult, statusResult, diagnosticResult] = await Promise.all([
       api<{ users: AdminUser[] }>("/api/admin/users"),
       api<{ mirrors: AdminMirror[] }>("/api/admin/mirrors"),
-      api<{ scheduler: SchedulerStatus; intervalMinutes: number }>("/api/system/status"),
+      api<{ scheduler: SchedulerStatus; intervalMinutes: number; discoveryHealth: DiscoveryHealth[] }>("/api/system/status"),
       api<DiagnosticsResponse>("/api/admin/diagnostics?limit=100"),
     ]);
     setUsers(userResult.users); setMirrors(mirrorResult.mirrors); setStatus(statusResult.scheduler);
     setDiagnostics(diagnosticResult);
+    setDiscoveryHealth(statusResult.discoveryHealth);
     setIntervalMinutes(statusResult.intervalMinutes);
     setIntervalIndex(nearestPollIntervalIndex(statusResult.intervalMinutes));
   }, []);
@@ -835,13 +838,14 @@ function Admin({ notify }: { notify: Notify }) {
     const minutes = POLL_INTERVAL_OPTIONS[intervalIndex];
     setSavingInterval(true);
     try {
-      const result = await api<{ scheduler: SchedulerStatus; intervalMinutes: number }>("/api/admin/settings/poll-interval", {
+      const result = await api<{ scheduler: SchedulerStatus; intervalMinutes: number; discoveryHealth: DiscoveryHealth[] }>("/api/admin/settings/poll-interval", {
         method: "PUT",
         ...jsonBody({ minutes }),
       });
       setStatus(result.scheduler);
       setIntervalMinutes(result.intervalMinutes);
       setIntervalIndex(nearestPollIntervalIndex(result.intervalMinutes));
+      setDiscoveryHealth(result.discoveryHealth);
       notify(`Polling interval set to ${formatPollInterval(result.intervalMinutes)}`);
     } catch (error) {
       notify(errorMessage(error), "bad");
@@ -858,6 +862,17 @@ function Admin({ notify }: { notify: Notify }) {
     (!diagnosticTracker || observation.trackerKey === diagnosticTracker)
     && (!diagnosticOutcome || observation.outcome === diagnosticOutcome)
   ));
+  const rutrackerHealth = discoveryHealth.find((health) => health.trackerKey === "rutracker");
+  const selectedSafetyMargin = rutrackerHealth?.coverageMinutes
+    ? Math.round(rutrackerHealth.coverageMinutes / selectedInterval * 10) / 10
+    : undefined;
+  const coverageTone = !rutrackerHealth
+    ? "state--pending"
+    : rutrackerHealth.unresolvedGapSince || (selectedSafetyMargin !== undefined && selectedSafetyMargin < 1.5)
+      ? "state--error"
+      : selectedSafetyMargin !== undefined && selectedSafetyMargin < 2
+        ? "state--pending"
+        : "state--good";
 
   return (
     <Page title="Administration" eyebrow="Local service" description="Manage users, tracker access, polling, and diagnostic history." actions={<button className="button button--primary" onClick={() => setCreateUser(true)}><Icon name="plus" />New user</button>}>
@@ -890,6 +905,22 @@ function Admin({ notify }: { notify: Notify }) {
         <button className="button button--quiet" disabled={!intervalChanged || savingInterval} onClick={() => void applyPollInterval()}>{savingInterval ? "Applying…" : "Apply interval"}</button>
       </section>
 
+      <section className="coverage-strip" aria-labelledby="rutracker-coverage-heading">
+        <span className="schedule-icon"><Icon name={coverageTone === "state--error" ? "alert" : "monitor"} /></span>
+        <span className="coverage-copy">
+          <strong id="rutracker-coverage-heading">RuTracker feed coverage</strong>
+          <small>{rutrackerCoverageDescription(rutrackerHealth, selectedSafetyMargin)}</small>
+        </span>
+        {rutrackerHealth ? <div className="coverage-metrics">
+          <span><strong>{rutrackerHealth.entryCount}</strong><small>entries</small></span>
+          <span><strong>{rutrackerHealth.newEntryCount}</strong><small>new</small></span>
+          <span><strong>{rutrackerHealth.overlapCount ?? "—"}</strong><small>overlap</small></span>
+          <span><strong>{rutrackerHealth.coverageMinutes !== undefined ? formatCoverageMinutes(rutrackerHealth.coverageMinutes) : "—"}</strong><small>window</small></span>
+          <span><strong>{selectedSafetyMargin !== undefined ? `${selectedSafetyMargin}×` : "—"}</strong><small>margin</small></span>
+        </div> : <span className="coverage-empty">Available after the first RuTracker rule poll</span>}
+        <span className={`state ${coverageTone}`}>{rutrackerHealth?.unresolvedGapSince ? "Gap detected" : rutrackerHealth?.coverageStatus === "recovered" ? "Recovered" : rutrackerHealth ? "Continuous" : "Pending"}</span>
+      </section>
+
       <section className="table-section diagnostic-section">
         <div className="section-heading">
           <div><h2>Tracker logs</h2><p>Safe polling observations for investigating tracker behavior. Records expire after 168 hours.</p></div>
@@ -909,13 +940,28 @@ function Admin({ notify }: { notify: Notify }) {
           <div className="diagnostic-head"><span>Observed</span><span>Source</span><span>Operation</span><span>Outcome</span><span>Details</span><span>Duration</span></div>
           {visibleDiagnostics.map((observation) => {
             const diagnosticUrl = observation.resolvedUrl || observation.requestedUrl;
-            const detail = observation.errorMessage || observation.title || (observation.releaseCount !== null && observation.releaseCount !== undefined ? `${observation.releaseCount} releases observed` : "Tracker request completed");
+            const feedEntryCount = numericDetail(observation.details.feedEntryCount);
+            const feedSummary = feedEntryCount === undefined ? undefined : [
+              `${feedEntryCount} feed entries scanned`,
+              detailFragment(observation.details.feedNewEntryCount, "new"),
+              detailFragment(observation.details.feedOverlapCount, "overlap"),
+              detailFragment(observation.details.newMatchCount, "new matches"),
+            ].filter(Boolean).join(" · ");
+            const detail = observation.title || feedSummary || observation.errorMessage || (observation.releaseCount !== null && observation.releaseCount !== undefined ? `${observation.releaseCount} releases observed` : "Tracker request completed");
+            const coverageMinutes = numericDetail(observation.details.feedCoverageMinutes);
+            const diagnosticMeta = [
+              observation.errorMessage,
+              coverageMinutes !== undefined ? `${formatCoverageMinutes(coverageMinutes)} feed window` : "",
+              typeof observation.details.feedCoverageStatus === "string" ? `${observation.details.feedCoverageStatus} coverage` : "",
+              observation.httpStatus ? `HTTP ${observation.httpStatus}` : "",
+              observation.externalId ? `ID ${observation.externalId}` : "",
+            ].filter(Boolean).join(" · ");
             return <div className="diagnostic-row" key={observation.id}>
               <span className="diagnostic-time" title={new Date(observation.observedAt).toLocaleString()}>{relativeTime(observation.observedAt)}</span>
               <span className="diagnostic-source"><TrackerTag tracker={observation.trackerKey} /><span><strong>{trackerName(observation.trackerKey)}</strong><small>{observation.username}{observation.subscriptionId ? ` · subscription ${observation.subscriptionId}` : ""}</small></span></span>
               <span className="diagnostic-operation">{observation.operation.replace("-", " ")}</span>
               <span><span className={`state ${diagnosticStateClass(observation.outcome)}`}>{observation.outcome}</span></span>
-              <span className="diagnostic-detail"><strong>{detail}</strong><small>{[observation.httpStatus ? `HTTP ${observation.httpStatus}` : "", observation.externalId ? `ID ${observation.externalId}` : ""].filter(Boolean).join(" · ")}</small>{diagnosticUrl && <a href={diagnosticUrl} target="_blank" rel="noreferrer">{diagnosticUrl}</a>}</span>
+              <span className="diagnostic-detail"><strong>{detail}</strong><small>{diagnosticMeta}</small>{diagnosticUrl && <a href={diagnosticUrl} target="_blank" rel="noreferrer">{diagnosticUrl}</a>}</span>
               <span className="diagnostic-duration">{formatDiagnosticDuration(observation.durationMs)}</span>
             </div>;
           })}
@@ -1289,8 +1335,38 @@ function pollingCadence(minutes: number): string {
   return `Polling every ${formatPollInterval(minutes)}`;
 }
 
+function formatCoverageMinutes(minutes: number): string {
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = Math.round(minutes % 60);
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+}
+
+function rutrackerCoverageDescription(health: DiscoveryHealth | undefined, safetyMargin: number | undefined): string {
+  if (!health) return "The configured polling interval remains the actual tracker request interval.";
+  if (health.unresolvedGapSince) {
+    return `Continuity was lost ${relativeTime(health.unresolvedGapSince)}. Authenticated catch-up remains incomplete.`;
+  }
+  if (safetyMargin !== undefined && safetyMargin < 1.5) {
+    return `The selected interval is too close to the current ${formatCoverageMinutes(health.coverageMinutes || 0)} rolling window.`;
+  }
+  if (safetyMargin !== undefined && safetyMargin < 2) {
+    return `The selected interval leaves a narrow ${safetyMargin}× margin against feed rollover.`;
+  }
+  return `${health.entryCount} entries currently span ${formatCoverageMinutes(health.coverageMinutes || 0)}; the selected interval leaves a ${safetyMargin ?? "—"}× margin.`;
+}
+
+function numericDetail(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function detailFragment(value: unknown, label: string): string | undefined {
+  const number = numericDetail(value);
+  return number === undefined ? undefined : `${number} ${label}`;
+}
+
 function diagnosticStateClass(outcome: string): string {
-  if (["error", "failed", "missing", "blocked", "auth", "parse", "network", "unsupported"].includes(outcome)) return "state--error";
+  if (["error", "failed", "missing", "blocked", "auth", "parse", "network", "unsupported", "coverage-gap"].includes(outcome)) return "state--error";
   if (["changed", "new-matches"].includes(outcome)) return "state--updated";
   if (["skipped", "temporarily-unavailable", "challenge"].includes(outcome)) return "state--pending";
   return "state--good";

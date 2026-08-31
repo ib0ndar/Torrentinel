@@ -382,6 +382,14 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .interval-scale span { position: absolute; translate: -50% 0; }
 .interval-scale .scale-first { translate: 0 0; }
 .interval-scale .scale-last { translate: -100% 0; }
+.coverage-strip { min-height: 92px; display: grid; grid-template-columns: auto minmax(210px, 1fr) auto auto; align-items: center; gap: 18px; border-bottom: 1px solid var(--line); }
+.coverage-copy { min-width: 0; display: grid; gap: 5px; }
+.coverage-copy strong { font-size: 14px; }
+.coverage-copy small, .coverage-empty { color: var(--dim); font-size: 11px; line-height: 1.45; }
+.coverage-metrics { display: flex; align-items: center; gap: 19px; }
+.coverage-metrics > span { display: grid; min-width: 44px; gap: 3px; text-align: right; }
+.coverage-metrics strong { color: var(--ink); font-size: 13px; font-variant-numeric: tabular-nums; }
+.coverage-metrics small { color: var(--dim); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .table-section { padding: 42px 0 12px; border-bottom: 1px solid var(--line); }
 .data-table { margin-top: 23px; }
 .table-head, .table-row { display: grid; grid-template-columns: minmax(180px, 1.2fr) 110px 90px 100px 110px minmax(170px, .8fr); align-items: center; gap: 14px; }
@@ -449,6 +457,9 @@ input::placeholder, textarea::placeholder { color: #52607c; }
   .subscription-head, .subscription-open { grid-template-columns: minmax(220px, 1fr) 84px 90px 122px; gap: 12px; }
   .settings-section { grid-template-columns: 1fr; gap: 24px; }
   .admin-schedule { grid-template-columns: 180px minmax(260px, 1fr) auto; gap: 20px; }
+  .coverage-strip { grid-template-columns: auto minmax(190px, 1fr) auto; }
+  .coverage-metrics { grid-column: 2 / -1; justify-content: flex-start; padding-bottom: 15px; }
+  .coverage-metrics > span { text-align: left; }
 }
 
 @media (max-width: 780px) {
@@ -484,6 +495,10 @@ input::placeholder, textarea::placeholder { color: #52607c; }
   .interval-control { padding-top: 19px; }
   .interval-readout { top: -10px; }
   .admin-schedule > .button { width: 100%; }
+  .coverage-strip { grid-template-columns: auto 1fr; padding: 18px 0; }
+  .coverage-strip > .state { display: inline-flex; justify-self: start; grid-column: 2; }
+  .coverage-metrics { grid-column: 1 / -1; padding-bottom: 0; overflow-x: auto; }
+  .coverage-empty { grid-column: 1 / -1; }
   .diagnostic-section .section-heading { flex-direction: column; }
   .diagnostic-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .diagnostic-controls select { flex: 1 1 130px; }

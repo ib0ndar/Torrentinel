@@ -22,6 +22,7 @@ export class TrackerHttpError extends TrackerError {
 
 export class CookieSession {
   private readonly cookies = new Map<string, string>();
+  private userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36 Torrentinel/0.1";
   authenticated = false;
 
   clear(): void {
@@ -29,14 +30,29 @@ export class CookieSession {
     this.authenticated = false;
   }
 
+  seedCookies(cookies: Array<{ name: string; value: string }>, userAgent?: string): void {
+    this.cookies.clear();
+    for (const cookie of cookies) {
+      if (cookie.name && cookie.value) this.cookies.set(cookie.name, cookie.value);
+    }
+    if (userAgent) this.userAgent = userAgent;
+  }
+
   async get(url: string, signal?: AbortSignal): Promise<HttpResult> {
     return this.request(url, { method: "GET", signal });
   }
 
-  async postForm(url: string, values: Record<string, string>, signal?: AbortSignal): Promise<HttpResult> {
+  async postForm(
+    url: string,
+    values: Record<string, string>,
+    signal?: AbortSignal,
+    additionalHeaders?: RequestInit["headers"],
+  ): Promise<HttpResult> {
+    const headers = new Headers(additionalHeaders);
+    headers.set("content-type", "application/x-www-form-urlencoded");
     return this.request(url, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers,
       body: new URLSearchParams(values).toString(),
       signal,
     });
@@ -51,7 +67,7 @@ export class CookieSession {
       const timeout = AbortSignal.timeout(config.requestTimeoutMs);
       const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
       const headers = new Headers(init.headers);
-      headers.set("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36 Torrentinel/0.1");
+      headers.set("user-agent", this.userAgent);
       headers.set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
       headers.set("accept-language", "en-US,en;q=0.8,ru;q=0.7");
       if (this.cookies.size > 0) {

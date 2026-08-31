@@ -152,6 +152,40 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     );
     CREATE INDEX IF NOT EXISTS idx_rule_matches_subscription ON rule_matches(subscription_id, discovered_at DESC);
 
+    CREATE TABLE IF NOT EXISTS tracker_release_buffer (
+      tracker_key TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT NOT NULL,
+      magnet TEXT,
+      torrent_url TEXT,
+      published_at TEXT,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      PRIMARY KEY (tracker_key, external_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tracker_release_buffer_seen
+      ON tracker_release_buffer(tracker_key, last_seen_at DESC);
+
+    CREATE TABLE IF NOT EXISTS tracker_feed_state (
+      tracker_key TEXT PRIMARY KEY,
+      fetched_at TEXT NOT NULL,
+      entry_count INTEGER NOT NULL,
+      oldest_entry_at TEXT,
+      newest_entry_at TEXT,
+      previous_entry_ids TEXT NOT NULL DEFAULT '[]',
+      overlap_count INTEGER,
+      new_entry_count INTEGER NOT NULL DEFAULT 0,
+      coverage_minutes REAL,
+      coverage_status TEXT NOT NULL DEFAULT 'baseline',
+      last_continuous_at TEXT,
+      unresolved_gap_since TEXT,
+      last_gap_at TEXT,
+      recovered_at TEXT,
+      last_recovery_attempt_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS scheduler_runs (
       id TEXT PRIMARY KEY,
       trigger TEXT NOT NULL,

@@ -50,6 +50,7 @@ export interface DirectMonitor {
 
 export interface RuleDiscoveryProvider {
   discover(context: TrackerContext, query?: RuleDiscoveryQuery): Promise<DiscoveryBatch>;
+  recover?(context: TrackerContext, query: RuleDiscoveryQuery, since: string): Promise<DiscoveryBatch>;
 }
 
 export interface TrackerPlugin {
