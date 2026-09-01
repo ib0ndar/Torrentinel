@@ -58,7 +58,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - [Supported trackers](#supported-trackers)
 - [Project status and platform scope](#project-status-and-platform-scope)
 - [Installation](#installation)
-  - [Native Linux](#native-linux)
+  - [Direct installation on Linux](#direct-installation-on-linux)
   - [Docker Compose](#docker-compose)
   - [Podman Quadlet](#podman-quadlet)
 - [Configuration](#configuration)
@@ -108,23 +108,23 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 
 Torrentinel is pre-1.0 software. Releases may change configuration, tracker behavior, or database structure. Database migrations run automatically at startup, but rollback is not guaranteed; read the [changelog](CHANGELOG.md) and create a paired backup before every update.
 
-Native deployment is supported on Linux with Node.js 22.20 or newer. The supplied systemd unit is the maintained native service definition. Container images target Linux on `amd64` and `arm64`; Docker Desktop may run those images, but macOS and Windows hosts are not part of the maintained deployment test matrix.
+Direct installation on a Linux host is supported with Node.js 22.20 or newer. The supplied systemd unit is the maintained service definition for this deployment method. Container images target Linux on `amd64` and `arm64`; Docker Desktop may run those images, but macOS and Windows hosts are not part of the maintained deployment test matrix.
 
 Torrentinel does not claim a fixed CPU or RAM minimum because tracker activity and FlareSolverr use vary. FlareSolverr starts a headless browser and is the heaviest component; the supplied container definitions provide it with 512 MiB of shared memory. Small hosts should monitor memory during RuTracker detail and recovery operations.
 
 ## Installation
 
-Torrentinel can run directly as a Node.js service or as a container. Docker Compose and Podman include a private FlareSolverr sidecar. A native installation can use the same RuTracker features when FlareSolverr supports the host architecture and is installed separately.
+Torrentinel can be installed directly on a Linux host as a Node.js service, without Docker, Podman, or another container runtime. It can also run as a container. Docker Compose and Podman include a private FlareSolverr sidecar. A direct installation can use the same RuTracker features when FlareSolverr supports the host architecture and is installed separately.
 
 | Method | Best for | RuTracker detail pages and gap recovery | Host requirements |
 | --- | --- | --- | --- |
-| [Native Linux](#native-linux) | Minimal overhead and direct service integration | Available with a separate local FlareSolverr service | Node.js 22.20+, npm, a service manager |
+| [Direct Linux installation](#direct-installation-on-linux) | Minimal overhead and direct service integration | Available with a separate local FlareSolverr service | Node.js 22.20+, npm, a service manager |
 | [Docker Compose](#docker-compose) | The shortest complete installation | Included | Docker Engine and Compose v2 |
 | [Podman Quadlet](#podman-quadlet) | Rootless, systemd-managed containers | Included | Podman with Quadlet, systemd user services, cgroup v2 |
 
 All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Each example resolves GitHub's latest stable release when you run it and uses that same tag for the remaining commands. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
 
-### Native Linux
+### Direct installation on Linux
 
 Install a system-wide Node.js 22.20 or newer release, npm, and Git using the method recommended by your Linux distribution. Python 3, `make`, and a C/C++ compiler may also be required when npm cannot use a prebuilt native module. Confirm the runtime before continuing:
 
@@ -175,7 +175,7 @@ sudo systemctl status torrentinel.service --no-pager
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-Public RuTracker feed monitoring works without FlareSolverr. RuTracker detail-page monitoring and authenticated recovery require a separate FlareSolverr service listening only on `127.0.0.1:8191`. Follow the upstream [FlareSolverr native Linux instructions](https://github.com/FlareSolverr/FlareSolverr#precompiled-binaries) and confirm its address matches `FLARESOLVERR_URL`.
+Public RuTracker feed monitoring works without FlareSolverr. RuTracker detail-page monitoring and authenticated recovery require a separate FlareSolverr service listening only on `127.0.0.1:8191`. Follow the upstream [FlareSolverr instructions for precompiled Linux binaries](https://github.com/FlareSolverr/FlareSolverr#precompiled-binaries) and confirm its address matches `FLARESOLVERR_URL`.
 
 > [!WARNING]
 > FlareSolverr provides a browser-control API without Torrentinel authentication. Keep it on loopback or a private container network and never expose port `8191` publicly.
@@ -267,9 +267,9 @@ Do not expose a new installation to an untrusted network until the default admin
 
 A RuTracker login is optional for ordinary public-feed monitoring and required for authenticated recovery after a detected feed gap. The configured polling interval is the actual tracker request interval. Administration displays the rolling-feed window, consecutive-batch overlap, new-entry count, and safety margin.
 
-Runtime settings are read from the process environment. Native systemd uses `/etc/torrentinel/torrentinel.env`, Docker Compose uses `.env`, and Podman uses `~/.config/containers/systemd/torrentinel.env`.
+Runtime settings are read from the process environment. The direct systemd installation uses `/etc/torrentinel/torrentinel.env`, Docker Compose uses `.env`, and Podman uses `~/.config/containers/systemd/torrentinel.env`.
 
-| Setting | Native Linux | Docker Compose | Podman Quadlet | Purpose |
+| Setting | Direct Linux installation | Docker Compose | Podman Quadlet | Purpose |
 | --- | --- | --- | --- | --- |
 | `HOST` | `127.0.0.1`, editable | Fixed to image default `0.0.0.0` | Fixed to image default `0.0.0.0` | Application listen address |
 | `PORT` | `8080`, editable | Internal port `8080` | Internal port `8080` | Application container/process port |
