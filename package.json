@@ -1,6 +1,6 @@
 {
   "name": "torrentinel",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -11,6 +11,7 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:web": "vite",
     "build": "npm run typecheck && tsc -p tsconfig.server.json && vite build",
+    "check:release": "node scripts/check-release-version.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "start": "node dist/server/index.js",
     "test": "vitest run",

@@ -2,6 +2,20 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.4.3] - 2026-09-01
+
+### Added
+
+- A GitHub Actions verification workflow for tests, production builds, release-version consistency, Compose validation, and container builds.
+- Security reporting and contribution policies, plus a dedicated operations guide covering updates, health checks, logs, backups, restores, troubleshooting, and uninstall procedures.
+- An automated release-version check spanning the package metadata, changelog, README examples, Compose image, and Podman Quadlet image.
+
+### Changed
+
+- The README now opens with clear project positioning, suitability guidance, a Docker Compose quick start, navigation, project status, platform scope, and responsible-use guidance.
+- Configuration settings distinguish user-configurable values from internal container defaults, while operations detail moves into focused documentation without reducing the three installation paths.
+- Theme-aware branding, portable image URLs, imperative troubleshooting guidance, and reliable Mermaid line breaks improve GitHub rendering.
+
 ## [0.4.2] - 2026-08-31
 
 ### Added
@@ -164,6 +178,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.4.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.3
 [0.4.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.2
 [0.4.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.0
