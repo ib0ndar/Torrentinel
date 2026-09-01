@@ -34,8 +34,12 @@ Torrentinel is designed for people who want to follow releases over time, includ
 
 This is the shortest complete deployment and includes the private FlareSolverr sidecar used for RuTracker detail pages and authenticated feed-gap recovery.
 
+The first two commands ask GitHub for the latest stable release tag automatically and store it in `RELEASE`; there is no version number to replace manually.
+
 ```sh
-RELEASE=v0.4.3
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
 git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
 cd Torrentinel
 cp .env.example .env
@@ -118,7 +122,7 @@ Torrentinel can run directly as a Node.js service or as a container. Docker Comp
 | [Docker Compose](#docker-compose) | The shortest complete installation | Included | Docker Engine and Compose v2 |
 | [Podman Quadlet](#podman-quadlet) | Rootless, systemd-managed containers | Included | Podman with Quadlet, systemd user services, cgroup v2 |
 
-All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
+All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Each example resolves GitHub's latest stable release when you run it and uses that same tag for the remaining commands. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
 
 ### Native Linux
 
@@ -133,7 +137,9 @@ git --version
 Create a dedicated system account named `torrentinel` with your distribution's account-management tool. The account does not need an interactive shell. Build on the target host, or on a Linux system with the same architecture, libc, and Node.js ABI:
 
 ```sh
-RELEASE=v0.4.3
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
 git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
 cd Torrentinel
 npm ci
@@ -181,7 +187,9 @@ If the host does not use systemd, run `/usr/bin/env node /opt/torrentinel/dist/s
 Docker Compose runs Torrentinel and FlareSolverr on a private container network and stores persistent data in two named volumes.
 
 ```sh
-RELEASE=v0.4.3
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
 git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
 cd Torrentinel
 cp .env.example .env
@@ -214,7 +222,9 @@ systemctl --user --version
 The cgroup command must report `v2`. Install the tagged deployment files and create a private local environment file:
 
 ```sh
-RELEASE=v0.4.3
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
 git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
 cd Torrentinel
 install -d -m 0700 "$HOME/.config/containers/systemd"

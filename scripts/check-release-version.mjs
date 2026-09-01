@@ -29,10 +29,20 @@ for (const [name, path, pattern] of textChecks) {
 }
 
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
-const pinnedReleases = [...readme.matchAll(/^RELEASE=(v\d+\.\d+\.\d+)$/gm)].map((match) => match[1]);
-if (pinnedReleases.length === 0) throw new Error("README.md contains no pinned RELEASE examples");
-for (const pinnedRelease of pinnedReleases) {
-  if (pinnedRelease !== tag) throw new Error(`README.md pins ${pinnedRelease}; expected ${tag}`);
+const hardcodedReadmeReleases = [...readme.matchAll(/^RELEASE=["']?v\d+\.\d+\.\d+["']?$/gm)].map((match) => match[0]);
+if (hardcodedReadmeReleases.length > 0) {
+  throw new Error(`README.md contains hardcoded release assignments: ${hardcodedReadmeReleases.join(", ")}`);
 }
 
-console.log(`Release metadata is consistent for ${tag}`);
+const latestReleaseUrl = "https://github.com/ib0ndar/Torrentinel/releases/latest";
+const releaseResolver = 'RELEASE="${release_url##*/}"';
+const latestReleaseSnippet = `release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \\
+  ${latestReleaseUrl})"
+${releaseResolver}`;
+const resolverCount = readme.split(releaseResolver).length - 1;
+const completeSnippetCount = readme.split(latestReleaseSnippet).length - 1;
+if (resolverCount === 0 || completeSnippetCount !== resolverCount) {
+  throw new Error("README.md latest-release examples must pair the GitHub latest URL with the shell release resolver");
+}
+
+console.log(`Release metadata is consistent for ${tag}; README installation examples resolve the latest stable release dynamically`);
