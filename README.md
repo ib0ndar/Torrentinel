@@ -1,3 +1,5 @@
+<meta name="google-site-verification" content="xchJFmR-94RP-zCzAMkMpK2YC7ROKEFirdHPKYobe_0" />
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ib0ndar/Torrentinel/main/public/brand/torrentinel-lockup.svg">
