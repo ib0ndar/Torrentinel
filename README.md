@@ -29,12 +29,12 @@ Torrentinel is a self-hosted watchlist and change-detection service. It monitors
 
 Torrentinel is designed for people who want to follow releases over time, including changes to an existing tracker topic. It complements download clients and media automation rather than replacing them.
 
-| Use Torrentinel when you want to | Choose another tool when you primarily want to |
-| --- | --- |
-| Watch specific tracker pages for later changes | Send matching releases automatically to a download client |
-| Discover new posts matching simple required and ignored phrases | Manage a large catalogue of indexers or Usenet providers |
-| Keep private per-user collections, history, and read state | Manage a movie, television, or music library |
-| Receive Telegram notifications without connecting a download client | React to real-time IRC announces or build a general automation pipeline |
+**Use Torrentinel when you want to:**
+
+- Watch specific tracker pages for later changes
+- Discover new posts matching simple required and ignored phrases
+- Keep private per-user collections, history, and read state
+- Receive Telegram notifications without connecting a download client
 
 ## Quick start with Docker Compose
 
