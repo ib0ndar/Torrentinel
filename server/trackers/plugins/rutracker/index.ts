@@ -1,5 +1,6 @@
 import type { TrackerPlugin } from "../../core/contracts.js";
 import { hostMatchesManifest } from "../../core/contracts.js";
+import { IntegratedBrowserClient } from "../../core/transport/browser.js";
 import { RutrackerDirectMonitor, type RutrackerDetailProvider } from "./direct.js";
 import { rutrackerManifest } from "./manifest.js";
 import { RutrackerRuleDiscovery } from "./rules.js";
@@ -10,8 +11,9 @@ export function createRutrackerPlugin(detailProvider?: RutrackerDetailProvider):
     const path = url.pathname.startsWith("/forum/") ? url.pathname : `/forum${url.pathname}`;
     return new URL(`${path}${url.search}`, baseUrl).toString();
   };
-  const direct = new RutrackerDirectMonitor(normalizeUrl, detailProvider);
-  const searchRecovery = new RutrackerSearchRecovery();
+  const sharedBrowser = detailProvider || new IntegratedBrowserClient();
+  const direct = new RutrackerDirectMonitor(normalizeUrl, sharedBrowser);
+  const searchRecovery = new RutrackerSearchRecovery(() => sharedBrowser);
   return {
     manifest: rutrackerManifest,
     matchesUrl: (url) => hostMatchesManifest(url.hostname, rutrackerManifest),

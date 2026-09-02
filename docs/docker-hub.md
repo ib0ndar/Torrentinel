@@ -16,7 +16,7 @@ Torrentinel complements download clients and media automation. It does not downl
 - Multi-user collections and administration
 - Encrypted tracker credentials and Telegram tokens
 - Feed-overlap diagnostics and authenticated RuTracker gap recovery
-- Published Linux images for `amd64` and `arm64`
+- Source-built Linux container support for `amd64` and `arm64`
 
 ## Supported trackers
 
@@ -28,18 +28,18 @@ Torrentinel complements download clients and media automation. It does not downl
 
 ## Deployment
 
-Docker Compose is the recommended complete container deployment. It starts Torrentinel and a private FlareSolverr sidecar, stores application data in named volumes, and includes a health check.
+The experimental `torrentinel_integrated` branch builds one complete Torrentinel container with its Patchright browser, stores application data in named volumes, and includes a health check. It does not require or expose a browser sidecar.
 
 The canonical repository contains the current Compose file, Podman Quadlets, direct Linux instructions, configuration reference, backup guidance, screenshots, and release notes:
 
 **[github.com/ib0ndar/Torrentinel](https://github.com/ib0ndar/Torrentinel)**
 
-Use the installation commands from the repository README. They resolve GitHub's latest stable release automatically, ensuring that the deployment files and `bah0/torrentinel` image use the same version.
+Use the branch-specific installation commands from the repository README. The integrated canary is built from source and is not represented by the latest stable `bah0/torrentinel` image.
 
 ## Important operational notes
 
 - Change the initial administration password immediately after first sign-in.
-- Keep FlareSolverr on its private container network; never publish its API port.
+- Do not publish or mount the integrated browser profile separately; protect it as part of the application-data volume.
 - Back up the database and application-data volumes together because encrypted integrations require the matching generated key.
 - Read the changelog and create a backup before upgrading this pre-1.0 project.
 

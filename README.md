@@ -21,6 +21,9 @@
 
 Torrentinel is a self-hosted watchlist and change-detection service. It monitors selected tracker releases, detects changes to titles, artwork, magnets, torrent files, and metadata, discovers new phrase matches, keeps per-user history, and sends Telegram notifications.
 
+> [!IMPORTANT]
+> This `torrentinel_integrated` branch is an experimental canary. It replaces the FlareSolverr sidecar with a Patchright-controlled browser inside the Torrentinel image. Keep it separate from the production deployment and its data volumes until RuTracker detail monitoring and gap recovery have been observed over time.
+
 <p align="center">
   <img src="docs/screenshots/product-tour.gif" alt="Torrentinel product tour showing release monitoring, change history, and tracker diagnostics" width="960">
 </p>
@@ -38,21 +41,18 @@ Torrentinel is designed for people who want to follow releases over time, includ
 
 ## Quick start with Docker Compose
 
-This is the shortest complete deployment and includes the private FlareSolverr sidecar used for RuTracker detail pages and authenticated feed-gap recovery.
-
-The first two commands ask GitHub for the latest stable release tag automatically and store it in `RELEASE`; there is no version number to replace manually.
+This is the shortest complete deployment. It builds one Torrentinel image containing the application, Patchright, Chrome or Chromium, and a private virtual display. No browser sidecar or second service is required.
 
 ```sh
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-  https://github.com/ib0ndar/Torrentinel/releases/latest)"
-RELEASE="${release_url##*/}"
-git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
-cd Torrentinel
+git clone --branch torrentinel_integrated --depth 1 \
+  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
+cd Torrentinel-integrated
 cp .env.example .env
 # Edit .env now if the public URL or host port will differ.
 docker compose config
+docker compose build
 docker compose up -d
-curl -fsS http://127.0.0.1:8080/api/health
+curl -fsS http://127.0.0.1:18080/api/health
 ```
 
 Open the configured URL and complete the [first sign-in](#first-sign-in).
@@ -83,10 +83,11 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - Administrator-managed accounts with no public registration
 - Configurable polling from 5 minutes to 6 hours
 - Persistent RuTracker feed buffering with overlap monitoring and authenticated gap recovery
+- Integrated Patchright browser for RuTracker detail pages and challenge clearance
 - Tracker diagnostics with seven-day log retention
 - Encrypted credentials and bot tokens in SQLite
 - Modular TypeScript tracker adapters
-- Multi-architecture images for `linux/amd64` and `linux/arm64`
+- Source-built container support for `linux/amd64` and `linux/arm64`
 
 ## Screenshots
 
@@ -114,21 +115,21 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 
 Torrentinel is pre-1.0 software. Releases may change configuration, tracker behavior, or database structure. Database migrations run automatically at startup, but rollback is not guaranteed; read the [changelog](CHANGELOG.md) and create a paired backup before every update.
 
-Direct installation on a Linux host is supported with Node.js 22.20 or newer. The supplied systemd unit is the maintained service definition for this deployment method. Container images target Linux on `amd64` and `arm64`; Docker Desktop may run those images, but macOS and Windows hosts are not part of the maintained deployment test matrix.
+Direct installation on a Linux host is supported with Node.js 22.20 or newer and a Patchright-compatible browser. The supplied systemd unit is the maintained service definition for this deployment method. Source-built container images target Linux on `amd64` and `arm64`; Docker Desktop may run them, but macOS and Windows hosts are not part of the maintained deployment test matrix.
 
-Torrentinel does not claim a fixed CPU or RAM minimum because tracker activity and FlareSolverr use vary. FlareSolverr starts a headless browser and is the heaviest component; the supplied container definitions provide it with 512 MiB of shared memory. Small hosts should monitor memory during RuTracker detail and recovery operations.
+Torrentinel does not claim a fixed CPU or RAM minimum because tracker activity and browser use vary. The integrated browser is the heaviest component and starts only when RuTracker needs it. The supplied container definitions provide 512 MiB of shared memory. Small hosts should monitor memory during RuTracker detail and recovery operations.
 
 ## Installation
 
-Torrentinel can be installed directly on a Linux host as a Node.js service, without Docker, Podman, or another container runtime. It can also run as a container. Docker Compose and Podman include a private FlareSolverr sidecar. A direct installation can use the same RuTracker features when FlareSolverr supports the host architecture and is installed separately.
+Torrentinel can be installed directly on a Linux host as a Node.js service, without Docker, Podman, or another container runtime. It can also run as one container. The integrated browser is launched by Torrentinel and retains reusable clearance state in the application-data directory.
 
 | Method | Best for | RuTracker detail pages and gap recovery | Host requirements |
 | --- | --- | --- | --- |
-| [Direct Linux installation](#direct-installation-on-linux) | Minimal overhead and direct service integration | Available with a separate local FlareSolverr service | Node.js 22.20+, npm, a service manager |
+| [Direct Linux installation](#direct-installation-on-linux) | Minimal overhead and direct service integration | Included when a compatible browser is installed | Node.js 22.20+, npm, Chrome/Chromium, a service manager |
 | [Docker Compose](#docker-compose) | The shortest complete installation | Included | Docker Engine and Compose v2 |
 | [Podman Quadlet](#podman-quadlet) | Rootless, systemd-managed containers | Included | Podman with Quadlet, systemd user services, cgroup v2 |
 
-All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Each example resolves GitHub's latest stable release when you run it and uses that same tag for the remaining commands. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
+All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. The examples on this branch build `torrentinel_integrated` from source because no experimental image is published. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
 
 ### Direct installation on Linux
 
@@ -143,11 +144,9 @@ git --version
 Create a dedicated system account named `torrentinel` with your distribution's account-management tool. The account does not need an interactive shell. Build on the target host, or on a Linux system with the same architecture, libc, and Node.js ABI:
 
 ```sh
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-  https://github.com/ib0ndar/Torrentinel/releases/latest)"
-RELEASE="${release_url##*/}"
-git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
-cd Torrentinel
+git clone --branch torrentinel_integrated --depth 1 \
+  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
+cd Torrentinel-integrated
 npm ci
 npm run build
 npm prune --omit=dev
@@ -181,23 +180,18 @@ sudo systemctl status torrentinel.service --no-pager
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-Public RuTracker feed monitoring works without FlareSolverr. RuTracker detail-page monitoring and authenticated recovery require a separate FlareSolverr service listening only on `127.0.0.1:8191`. Follow the upstream [FlareSolverr instructions for precompiled Linux binaries](https://github.com/FlareSolverr/FlareSolverr#precompiled-binaries) and confirm its address matches `FLARESOLVERR_URL`.
-
-> [!WARNING]
-> FlareSolverr provides a browser-control API without Torrentinel authentication. Keep it on loopback or a private container network and never expose port `8191` publicly.
+Direct installations must provide a Patchright-compatible Chrome or Chromium binary. Use `BROWSER_CHANNEL=chrome` for an installed Google Chrome, or `BROWSER_CHANNEL=chromium` for the browser installed by Patchright. Browser package and display setup varies by Linux distribution; Docker Compose is the reproducible deployment path for this experimental branch.
 
 If the host does not use systemd, run `/usr/bin/env node /opt/torrentinel/dist/server/index.js` under its service manager with the variables from `deploy/native/torrentinel.env` and write access to both `/var/lib/torrentinel` subdirectories.
 
 ### Docker Compose
 
-Docker Compose runs Torrentinel and FlareSolverr on a private container network and stores persistent data in two named volumes.
+Docker Compose builds and runs one Torrentinel container and stores persistent data in two named volumes. The application volume also retains the integrated browser profile and its reusable challenge-clearance cookies.
 
 ```sh
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-  https://github.com/ib0ndar/Torrentinel/releases/latest)"
-RELEASE="${release_url##*/}"
-git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
-cd Torrentinel
+git clone --branch torrentinel_integrated --depth 1 \
+  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
+cd Torrentinel-integrated
 cp .env.example .env
 ```
 
@@ -205,19 +199,19 @@ Edit `.env`, especially `PUBLIC_URL`, `TORRENTINEL_PORT`, and `SESSION_COOKIE_SE
 
 ```sh
 docker compose config
-docker compose pull
+docker compose build
 docker compose up -d
 docker compose ps
-curl -fsS http://127.0.0.1:8080/api/health
+curl -fsS http://127.0.0.1:18080/api/health
 ```
 
 If `TORRENTINEL_PORT` is changed, use that port in the health-check URL. View logs with the commands in the [operations guide](docs/operations.md#logs).
 
-Running only the Torrentinel image is supported for advanced deployments, but RuTracker detail pages and authenticated feed-gap recovery remain unavailable until a FlareSolverr service is connected through `FLARESOLVERR_URL`.
+`docker compose ps` should list only `torrentinel-integrated`. Chrome runs inside that container and does not expose a separate API or network port. The default canary port and volumes are deliberately distinct from the stable deployment.
 
 ### Podman Quadlet
 
-The supplied Quadlets run both containers rootlessly under the current user's systemd manager. They are not specific to one Linux distribution, but they require Quadlet support and cgroup v2:
+The supplied Quadlets run the single source-built container rootlessly under the current user's systemd manager. They are not specific to one Linux distribution, but they require Quadlet support and cgroup v2:
 
 ```sh
 podman --version
@@ -228,33 +222,30 @@ systemctl --user --version
 The cgroup command must report `v2`. Install the tagged deployment files and create a private local environment file:
 
 ```sh
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-  https://github.com/ib0ndar/Torrentinel/releases/latest)"
-RELEASE="${release_url##*/}"
-git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
-cd Torrentinel
+git clone --branch torrentinel_integrated --depth 1 \
+  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
+cd Torrentinel-integrated
+podman build --file Containerfile --tag localhost/torrentinel:v0.5.0-integrated.1 .
 install -d -m 0700 "$HOME/.config/containers/systemd"
 install -m 0644 \
-  deploy/*.container deploy/*.network deploy/*.volume \
+  deploy/*.container deploy/*.volume \
   "$HOME/.config/containers/systemd/"
 install -m 0600 \
-  deploy/torrentinel.env.example \
-  "$HOME/.config/containers/systemd/torrentinel.env"
+  deploy/torrentinel-integrated.env.example \
+  "$HOME/.config/containers/systemd/torrentinel-integrated.env"
 ```
 
-Edit `~/.config/containers/systemd/torrentinel.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied Quadlet publishes TCP port `8999`. Pre-pull the images so the first service start is predictable, enable the user manager at boot, and start Torrentinel:
+Edit `~/.config/containers/systemd/torrentinel-integrated.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied Quadlet publishes TCP port `8999`. Enable the user manager at boot and start Torrentinel:
 
 ```sh
-podman pull "docker.io/bah0/torrentinel:$RELEASE"
-podman pull ghcr.io/flaresolverr/flaresolverr:v3.5.0
 sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload
-systemctl --user start torrentinel.service
-systemctl --user status torrentinel.service --no-pager
+systemctl --user start torrentinel-integrated.service
+systemctl --user status torrentinel-integrated.service --no-pager
 curl -fsS http://127.0.0.1:8999/api/health
 ```
 
-The `.volume` Quadlets create `torrentinel_app` and `torrentinel_db` automatically. If systemd does not generate `torrentinel.service`, follow the [Podman troubleshooting guidance](docs/operations.md#troubleshooting).
+The `.volume` Quadlets create `torrentinel_integrated_app` and `torrentinel_integrated_db` automatically. If systemd does not generate `torrentinel-integrated.service`, follow the [Podman troubleshooting guidance](docs/operations.md#troubleshooting).
 
 ### First sign-in
 
@@ -273,31 +264,32 @@ Do not expose a new installation to an untrusted network until the default admin
 
 A RuTracker login is optional for ordinary public-feed monitoring and required for authenticated recovery after a detected feed gap. The configured polling interval is the actual tracker request interval. Administration displays the rolling-feed window, consecutive-batch overlap, new-entry count, and safety margin.
 
-Runtime settings are read from the process environment. The direct systemd installation uses `/etc/torrentinel/torrentinel.env`, Docker Compose uses `.env`, and Podman uses `~/.config/containers/systemd/torrentinel.env`.
+Runtime settings are read from the process environment. The direct systemd installation uses `/etc/torrentinel/torrentinel.env`, Docker Compose uses `.env`, and Podman uses `~/.config/containers/systemd/torrentinel-integrated.env`.
 
 | Setting | Direct Linux installation | Docker Compose | Podman Quadlet | Purpose |
 | --- | --- | --- | --- | --- |
 | `HOST` | `127.0.0.1`, editable | Fixed to image default `0.0.0.0` | Fixed to image default `0.0.0.0` | Application listen address |
 | `PORT` | `8080`, editable | Internal port `8080` | Internal port `8080` | Application container/process port |
-| `TORRENTINEL_PORT` | Not used | `8080`, editable | Not used | Docker host port mapped to internal `8080` |
+| `TORRENTINEL_PORT` | Not used | `18080`, editable | Not used | Docker canary host port mapped to internal `8080` |
 | `PUBLIC_URL` | Editable | Editable | Editable | Externally reachable URL without a trailing slash |
 | `DATA_DIR` | `/var/lib/torrentinel/database` | Fixed volume path `/data` | Fixed volume path `/data` | SQLite database directory |
-| `APP_DATA_DIR` | `/var/lib/torrentinel/application` | Fixed volume path `/var/lib/torrentinel` | Fixed volume path `/var/lib/torrentinel` | Encryption key and cached-cover directory |
+| `APP_DATA_DIR` | `/var/lib/torrentinel/application` | Fixed volume path `/var/lib/torrentinel` | Fixed volume path `/var/lib/torrentinel` | Encryption key, cached covers, and browser profiles |
 | `POLL_INTERVAL_MINUTES` | Editable, default `60` | Editable, default `60` | Editable, default `60` | Initial interval before an administrator saves a value |
 | `POLL_STARTUP_DELAY_SECONDS` | Editable, default `20` | Editable, default `20` | Editable, default `20` | Delay before the startup poll |
 | `TRACKER_REQUEST_TIMEOUT_MS` | Editable, default `30000` | Editable, default `30000` | Editable, default `30000` | Tracker HTTP timeout |
-| `FLARESOLVERR_URL` | Editable loopback URL | Fixed private sidecar URL | Editable private sidecar URL | FlareSolverr API address |
-| `FLARESOLVERR_TIMEOUT_MS` | Editable, default `120000` | Editable, default `120000` | Editable, default `120000` | Browser resolver timeout |
+| `BROWSER_TIMEOUT_MS` | Editable, default `120000` | Editable, default `120000` | Editable, default `120000` | Integrated browser navigation and challenge timeout |
+| `BROWSER_HEADLESS` | Editable, default `true` | Editable, default `false` | Editable, default `false` | Use headless mode; containers use a private virtual display by default |
+| `BROWSER_CHANNEL` | Editable, default `auto` | Editable, default `auto` | Editable, default `auto` | `auto` selects Chrome on `amd64` and bundled Chromium on `arm64` |
 | `SESSION_DAYS` | Editable, default `30` | Editable, default `30` | Editable, default `30` | Login-session lifetime |
 | `SESSION_COOKIE_SECURE` | Editable, default `false` | Editable, default `false` | Editable, default `false` | Set to `true` when the public URL uses HTTPS |
 
-The standalone container image accepts all runtime variables directly. The supported Compose and Quadlet definitions intentionally fix their internal listen ports, data paths, and private-network topology; use the documented host-port setting instead of changing container internals.
+The standalone container image accepts all runtime variables directly. The supported Compose and Quadlet definitions intentionally fix their internal listen ports and data paths; use the documented host-port setting instead of changing container internals.
 
 Tracker passwords and Telegram tokens are configured only in the web interface and are never environment variables.
 
 ### Reverse proxy and HTTPS
 
-When a reverse proxy terminates HTTPS, point it at Torrentinel's host port, set `PUBLIC_URL` to the final `https://` address, and set `SESSION_COOKIE_SECURE=true`. The native service binds to loopback by default and is ready for this arrangement. Container ports bind on the host, so restrict them with the host firewall when only the reverse proxy should have access. FlareSolverr must remain on its private network or loopback address and must never be routed through the public proxy.
+When a reverse proxy terminates HTTPS, point it at Torrentinel's host port, set `PUBLIC_URL` to the final `https://` address, and set `SESSION_COOKIE_SECURE=true`. The native service binds to loopback by default and is ready for this arrangement. Container ports bind on the host, so restrict them with the host firewall when only the reverse proxy should have access. The integrated browser has no listening port.
 
 ## Telegram notifications
 
@@ -316,12 +308,13 @@ flowchart LR
   Browser["Web interface"] --> App["Torrentinel<br/>Fastify + React"]
   App --> DB["SQLite"]
   App --> Plugins["Tracker adapters"]
+  Plugins --> IntegratedBrowser["Integrated Patchright browser"]
   Plugins --> Trackers["Kinozal · Rutor · RuTracker"]
-  Plugins --> Resolver["FlareSolverr"]
+  IntegratedBrowser --> Trackers
   App --> Telegram["Telegram Bot API"]
 ```
 
-The API, React interface, scheduler, Telegram worker, and SQLite database run in one Node.js process, either directly on Linux or inside a container. Tracker-specific behavior is isolated behind shared direct-subscription and rule-discovery contracts under `server/trackers/plugins/`.
+The API, React interface, scheduler, Telegram worker, and SQLite access run in one Node.js process. RuTracker can start one serialized Chrome child process on demand; both processes remain inside the same service or container. Tracker-specific behavior is isolated behind shared direct-subscription and rule-discovery contracts under `server/trackers/plugins/`.
 
 ## Operations and backups
 

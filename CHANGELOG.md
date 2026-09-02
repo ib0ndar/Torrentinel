@@ -2,6 +2,28 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.0-integrated.1] - 2026-09-03
+
+### Added
+
+- An in-process Patchright provider with a persistent browser profile, challenge settlement, reusable clearance cookies, request cancellation, and orderly shutdown.
+- Architecture-aware browser packaging: Google Chrome on `linux/amd64` and Patchright Chromium on `linux/arm64`.
+- Unit coverage for browser-session reuse, challenge clearance, navigation-race recovery, and persistent-challenge failure.
+
+### Changed
+
+- RuTracker detail monitoring and authenticated gap recovery share one serialized browser session instead of calling a FlareSolverr API.
+- Docker Compose and Podman now run one source-built Torrentinel container with a private virtual display and 512 MiB of shared memory.
+- The application-data backup set now includes the persistent browser profile.
+
+### Removed
+
+- The FlareSolverr client, sidecar service, Quadlet, URL setting, and unauthenticated browser-control port.
+
+### Fixed
+
+- Updated Fastify and its URL-validation dependencies to releases containing the available fixes for current schema-validation and URI-normalization advisories.
+
 ## [0.4.3] - 2026-09-01
 
 ### Added

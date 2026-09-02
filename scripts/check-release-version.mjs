@@ -4,6 +4,8 @@ const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.me
 const packageLock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
 const version = packageJson.version;
 const tag = `v${version}`;
+const isPrerelease = version.includes("-");
+const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 const checks = [
   ["package-lock.json root version", packageLock.version, version],
@@ -11,10 +13,20 @@ const checks = [
 ];
 
 const textChecks = [
-  ["compose.yaml image", "../compose.yaml", new RegExp(`image: bah0/torrentinel:${tag.replaceAll(".", "\\.")}\\b`)],
-  ["Podman Quadlet image", "../deploy/torrentinel.container", new RegExp(`Image=docker\\.io/bah0/torrentinel:${tag.replaceAll(".", "\\.")}\\b`)],
+  ["compose.yaml image", "../compose.yaml", new RegExp(isPrerelease
+    ? `image: ["']?torrentinel:${escapedTag}["']?$`
+    : `image: bah0/torrentinel:${escapedTag}\\b`, "m")],
+  ["Podman Quadlet image", isPrerelease
+    ? "../deploy/torrentinel-integrated.container"
+    : "../deploy/torrentinel.container", new RegExp(isPrerelease
+    ? `Image=localhost/torrentinel:${escapedTag}$`
+    : `Image=docker\\.io/bah0/torrentinel:${escapedTag}\\b`, "m")],
   ["changelog heading", "../CHANGELOG.md", new RegExp(`^## \\[${version.replaceAll(".", "\\.")}\\]`, "m")],
-  ["changelog release link", "../CHANGELOG.md", new RegExp(`^\\[${version.replaceAll(".", "\\.")}\\]: .*/${tag.replaceAll(".", "\\.")}$`, "m")],
+  ...isPrerelease ? [] : [[
+    "changelog release link",
+    "../CHANGELOG.md",
+    new RegExp(`^\\[${version.replaceAll(".", "\\.")}\\]: .*/${escapedTag}$`, "m"),
+  ]],
 ];
 
 for (const [name, actual, expected] of checks) {
@@ -34,15 +46,23 @@ if (hardcodedReadmeReleases.length > 0) {
   throw new Error(`README.md contains hardcoded release assignments: ${hardcodedReadmeReleases.join(", ")}`);
 }
 
-const latestReleaseUrl = "https://github.com/ib0ndar/Torrentinel/releases/latest";
-const releaseResolver = 'RELEASE="${release_url##*/}"';
-const latestReleaseSnippet = `release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \\
+if (isPrerelease) {
+  if (!readme.includes("--branch torrentinel_integrated")) {
+    throw new Error("README.md prerelease examples must check out torrentinel_integrated");
+  }
+} else {
+  const latestReleaseUrl = "https://github.com/ib0ndar/Torrentinel/releases/latest";
+  const releaseResolver = 'RELEASE="${release_url##*/}"';
+  const latestReleaseSnippet = `release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \\
   ${latestReleaseUrl})"
 ${releaseResolver}`;
-const resolverCount = readme.split(releaseResolver).length - 1;
-const completeSnippetCount = readme.split(latestReleaseSnippet).length - 1;
-if (resolverCount === 0 || completeSnippetCount !== resolverCount) {
-  throw new Error("README.md latest-release examples must pair the GitHub latest URL with the shell release resolver");
+  const resolverCount = readme.split(releaseResolver).length - 1;
+  const completeSnippetCount = readme.split(latestReleaseSnippet).length - 1;
+  if (resolverCount === 0 || completeSnippetCount !== resolverCount) {
+    throw new Error("README.md latest-release examples must pair the GitHub latest URL with the shell release resolver");
+  }
 }
 
-console.log(`Release metadata is consistent for ${tag}; README installation examples resolve the latest stable release dynamically`);
+console.log(isPrerelease
+  ? `Prerelease metadata is consistent for ${tag}; README examples use torrentinel_integrated`
+  : `Release metadata is consistent for ${tag}; README installation examples resolve the latest stable release dynamically`);

@@ -1,6 +1,6 @@
 {
   "name": "torrentinel",
-  "version": "0.4.3",
+  "version": "0.5.0-integrated.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -23,8 +23,9 @@
     "bcryptjs": "3.0.3",
     "better-sqlite3": "13.0.3",
     "cheerio": "1.2.0",
-    "fastify": "5.11.2",
+    "fastify": "5.12.1",
     "nanoid": "6.0.1",
+    "patchright": "1.62.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.4.3"

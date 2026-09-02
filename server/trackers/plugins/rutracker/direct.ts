@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import type { DirectMonitor } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
 import { absoluteImageUrl, cleanText, externalIdFromUrl, fingerprintRelease } from "../../core/parsing.js";
-import { FlareSolverrClient, type BrowserPage } from "../../core/transport/flaresolverr.js";
+import { IntegratedBrowserClient, type BrowserPage } from "../../core/transport/browser.js";
 import type { Release } from "../../../types.js";
 import { rutrackerManifest } from "./manifest.js";
 
@@ -14,7 +14,7 @@ export interface RutrackerDetailProvider {
 export class RutrackerDirectMonitor implements DirectMonitor {
   constructor(
     private readonly normalizeUrl: (url: URL, baseUrl: string) => string,
-    private readonly detailProvider: RutrackerDetailProvider = new FlareSolverrClient(),
+    private readonly detailProvider: RutrackerDetailProvider = new IntegratedBrowserClient(),
   ) {}
 
   async fetchSnapshot(url: string, context: Parameters<DirectMonitor["fetchSnapshot"]>[1]) {

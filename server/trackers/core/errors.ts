@@ -39,5 +39,7 @@ export class TrackerError extends Error {
 
 export function challengeDetected(body: string): boolean {
   return /<title>\s*(?:Just a moment|Attention Required)/i.test(body)
-    || /cf-chl-|challenge-platform|Подтвердите, что вы человек|Выполнение проверки безопасности/i.test(body);
+    || /(?:id|class)=["'][^"']*(?:cf-chl-widget|cf-turnstile|cf-browser-verification|challenge-running|challenge-stage|cf-wrapper)/iu.test(body)
+    || /(?:window\.)?_cf_chl_opt\s*=/iu.test(body)
+    || /Подтвердите, что вы человек|Выполнение проверки безопасности/iu.test(body);
 }

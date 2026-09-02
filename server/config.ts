@@ -10,6 +10,14 @@ function integer(name: string, fallback: number): number {
   return value;
 }
 
+function boolean(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`${name} must be true or false`);
+}
+
 const dataDir = resolve(process.env.DATA_DIR || "./data");
 const appDataDir = resolve(process.env.APP_DATA_DIR || "./app-data");
 
@@ -30,11 +38,13 @@ export const config = {
   databasePath: resolve(dataDir, "torrentinel.db"),
   encryptionKeyPath: resolve(appDataDir, "master.key"),
   coverCacheDir: resolve(appDataDir, "covers"),
+  browserProfileDir: resolve(appDataDir, "browser-profiles"),
   pollIntervalMinutes: integer("POLL_INTERVAL_MINUTES", 60),
   pollStartupDelaySeconds: integer("POLL_STARTUP_DELAY_SECONDS", 20),
   requestTimeoutMs: integer("TRACKER_REQUEST_TIMEOUT_MS", 30_000),
-  flaresolverrUrl: process.env.FLARESOLVERR_URL || "http://127.0.0.1:8191/v1",
-  flaresolverrTimeoutMs: integer("FLARESOLVERR_TIMEOUT_MS", 120_000),
+  browserTimeoutMs: integer("BROWSER_TIMEOUT_MS", 120_000),
+  browserHeadless: boolean("BROWSER_HEADLESS", true),
+  browserChannel: process.env.BROWSER_CHANNEL || "auto",
   sessionDays: integer("SESSION_DAYS", 30),
   sessionCookieSecure: process.env.SESSION_COOKIE_SECURE === "true",
 };

@@ -16,8 +16,11 @@ The response contains no passwords, tokens, cookies, encryption keys, or tracker
 Use the port belonging to the selected deployment:
 
 ```sh
-# Native Linux or the default Docker Compose port
+# Native Linux
 curl -fsS http://127.0.0.1:8080/api/health
+
+# Default Docker Compose canary port
+curl -fsS http://127.0.0.1:18080/api/health
 
 # Supplied Podman Quadlet
 curl -fsS http://127.0.0.1:8999/api/health
@@ -30,40 +33,33 @@ Check service state with one of:
 ```sh
 sudo systemctl status torrentinel.service --no-pager
 docker compose ps
-systemctl --user status torrentinel.service --no-pager
+systemctl --user status torrentinel-integrated.service --no-pager
 ```
 
 ## Logs
 
-Follow the application logs for the selected deployment:
+Follow the application and integrated-browser logs for the selected deployment:
 
 ```sh
 sudo journalctl -u torrentinel.service -f
 docker compose logs -f torrentinel
-journalctl --user -u torrentinel.service -f
-```
-
-For container deployments, inspect FlareSolverr separately when RuTracker detail pages or authenticated recovery fail:
-
-```sh
-docker compose logs -f flaresolverr
-journalctl --user -u torrentinel_flaresolverr.service -f
+journalctl --user -u torrentinel-integrated.service -f
 ```
 
 Sanitize output before sharing it. Remove cookies, credentials, tokens, private mirrors, and user-specific tracker URLs.
 
 ## Updating
 
-Read [CHANGELOG.md](../CHANGELOG.md) and back up both persistent data locations before every update. Replace `vX.Y.Z` below with the selected published release.
+Read [CHANGELOG.md](../CHANGELOG.md) and back up both persistent data locations before every update. This experimental deployment follows the `torrentinel_integrated` branch until it is ready to become a versioned release.
 
 ### Native Linux
 
 Build on the target host, or on a Linux system with the same architecture, libc, and Node.js ABI:
 
 ```sh
-RELEASE=vX.Y.Z
-git fetch --tags --prune
-git checkout "$RELEASE"
+git fetch origin torrentinel_integrated
+git switch torrentinel_integrated
+git pull --ff-only origin torrentinel_integrated
 npm ci
 npm run build
 npm prune --omit=dev
@@ -76,45 +72,45 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 ### Docker Compose
 
-Checking out the release updates the image pin in `compose.yaml`:
+Rebuild the source image after updating the branch:
 
 ```sh
-RELEASE=vX.Y.Z
-git fetch --tags --prune
-git checkout "$RELEASE"
+git fetch origin torrentinel_integrated
+git switch torrentinel_integrated
+git pull --ff-only origin torrentinel_integrated
 docker compose config
-docker compose pull
+docker compose build --pull
 docker compose up -d
 docker compose ps
 ```
 
 ### Podman Quadlet
 
-Install the updated declarative units without overwriting the local environment file:
+Build the updated image and install the declarative units without overwriting the local environment file:
 
 ```sh
-RELEASE=vX.Y.Z
-git fetch --tags --prune
-git checkout "$RELEASE"
+git fetch origin torrentinel_integrated
+git switch torrentinel_integrated
+git pull --ff-only origin torrentinel_integrated
+podman build --pull --file Containerfile --tag localhost/torrentinel:v0.5.0-integrated.1 .
 install -m 0644 \
-  deploy/*.container deploy/*.network deploy/*.volume \
+  deploy/*.container deploy/*.volume \
   "$HOME/.config/containers/systemd/"
-podman pull "docker.io/bah0/torrentinel:$RELEASE"
 systemctl --user daemon-reload
-systemctl --user restart torrentinel.service
-systemctl --user status torrentinel.service --no-pager
+systemctl --user restart torrentinel-integrated.service
+systemctl --user status torrentinel-integrated.service --no-pager
 curl -fsS http://127.0.0.1:8999/api/health
 ```
 
 ## Data and backups
 
-Torrentinel keeps its SQLite database separately from its generated encryption key and cached covers:
+Torrentinel keeps its SQLite database separately from its generated encryption key, cached covers, and integrated-browser profile:
 
-| Deployment | Database | Encryption key and covers |
+| Deployment | Database | Encryption key, covers, and browser profile |
 | --- | --- | --- |
 | Native Linux | `/var/lib/torrentinel/database` | `/var/lib/torrentinel/application` |
-| Docker Compose | `torrentinel_db` volume | `torrentinel_app` volume |
-| Podman Quadlet | `torrentinel_db` volume | `torrentinel_app` volume |
+| Docker Compose | `torrentinel_integrated_db` volume | `torrentinel_integrated_app` volume |
+| Podman Quadlet | `torrentinel_integrated_db` volume | `torrentinel_integrated_app` volume |
 
 > [!IMPORTANT]
 > Stop Torrentinel and back up both locations together. A database restored without its matching application-data directory cannot decrypt saved tracker credentials or Telegram tokens.
@@ -135,8 +131,8 @@ sudo systemctl start torrentinel.service
 backup_dir="torrentinel-backup-$(date +%F)"
 install -d -m 0700 "$backup_dir"
 docker compose stop torrentinel
-docker cp torrentinel:/data "$backup_dir/database"
-docker cp torrentinel:/var/lib/torrentinel "$backup_dir/application"
+docker cp torrentinel-integrated:/data "$backup_dir/database"
+docker cp torrentinel-integrated:/var/lib/torrentinel "$backup_dir/application"
 docker compose start torrentinel
 tar -czf "$backup_dir.tar.gz" "$backup_dir"
 ```
@@ -146,10 +142,10 @@ tar -czf "$backup_dir.tar.gz" "$backup_dir"
 ```sh
 backup_dir="torrentinel-backup-$(date +%F)"
 install -d -m 0700 "$backup_dir"
-systemctl --user stop torrentinel.service
-podman volume export -o "$backup_dir/database.tar" torrentinel_db
-podman volume export -o "$backup_dir/application.tar" torrentinel_app
-systemctl --user start torrentinel.service
+systemctl --user stop torrentinel-integrated.service
+podman volume export -o "$backup_dir/database.tar" torrentinel_integrated_db
+podman volume export -o "$backup_dir/application.tar" torrentinel_integrated_app
+systemctl --user start torrentinel-integrated.service
 tar -czf "$backup_dir.tar.gz" "$backup_dir"
 ```
 
@@ -171,11 +167,12 @@ Podman volume archives created above can be loaded into empty replacement volume
 - If the health request fails, run the status and log commands for the selected deployment method.
 - If native startup reports a permission failure, confirm the `torrentinel` account can write to both `/var/lib/torrentinel/database` and `/var/lib/torrentinel/application`.
 - If saved integrations cannot be decrypted, restore the database and application-data directory from the same backup.
-- If RuTracker detail or recovery requests fail, inspect the FlareSolverr logs and confirm `FLARESOLVERR_URL` matches the private sidecar or loopback service.
-- If Podman does not generate `torrentinel.service`, validate the generated unit and inspect generator errors:
+- If RuTracker detail or recovery requests fail, inspect the Torrentinel log for an integrated-browser error. Confirm the application-data directory is writable, the container has at least 512 MiB of shared memory, and `BROWSER_CHANNEL` remains `auto` unless a compatible browser was deliberately installed.
+- If the container browser cannot start, rebuild the image for the NAS architecture instead of copying an image built for another CPU architecture.
+- If Podman does not generate `torrentinel-integrated.service`, validate the generated unit and inspect generator errors:
 
   ```sh
-  systemd-analyze --user --generators=true verify torrentinel.service
+  systemd-analyze --user --generators=true verify torrentinel-integrated.service
   ```
 
 ## Uninstalling
@@ -200,12 +197,12 @@ Run this from the checked-out release directory:
 docker compose down
 ```
 
-This retains `torrentinel_db` and `torrentinel_app`. After verifying the backup, `docker compose down --volumes` also removes those named volumes.
+This retains `torrentinel_integrated_db` and `torrentinel_integrated_app`. After verifying the backup, `docker compose down --volumes` also removes those named volumes.
 
 ### Podman Quadlet
 
 ```sh
-systemctl --user disable --now torrentinel.service
+systemctl --user disable --now torrentinel-integrated.service
 ```
 
-Remove the Torrentinel `.container`, `.network`, and `.volume` files from `~/.config/containers/systemd`, then run `systemctl --user daemon-reload`. Retain `torrentinel_db` and `torrentinel_app` until the backup has been verified; remove them with `podman volume rm` only when their exact names have been confirmed with `podman volume ls`.
+Remove the Torrentinel integrated `.container` and `.volume` files from `~/.config/containers/systemd`, then run `systemctl --user daemon-reload`. Retain `torrentinel_integrated_db` and `torrentinel_integrated_app` until the backup has been verified; remove them with `podman volume rm` only when their exact names have been confirmed with `podman volume ls`.

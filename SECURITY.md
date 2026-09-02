@@ -16,6 +16,6 @@ The maintainer will acknowledge a complete report when practical, investigate it
 
 - Keep Torrentinel and its reverse proxy updated.
 - Use HTTPS for any deployment reachable beyond a trusted local network.
-- Keep FlareSolverr private; never publish its API port to the internet.
-- Restrict access to the SQLite database, application-data directory, backups, and environment files.
+- Restrict access to the SQLite database, application-data directory, integrated-browser profile, backups, and environment files. Browser profiles can contain reusable challenge-clearance cookies.
+- Do not add a public debugging or browser-control port; the integrated browser requires no inbound network access.
 - Back up the database and application-data directory together because encrypted integrations require the matching generated key.

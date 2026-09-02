@@ -12,7 +12,7 @@ import {
   externalIdFromUrl,
   uniqueReleases,
 } from "../../core/parsing.js";
-import { FlareSolverrClient, type BrowserPage } from "../../core/transport/flaresolverr.js";
+import { IntegratedBrowserClient, type BrowserPage } from "../../core/transport/browser.js";
 import { CookieSession, type HttpResult } from "../../core/transport/http.js";
 import type { Release } from "../../../types.js";
 
@@ -51,7 +51,7 @@ export class RutrackerSearchRecovery {
 
   constructor(
     private readonly clearanceFactory: (sessionId: string) => RutrackerClearanceProvider = (sessionId) => (
-      new FlareSolverrClient(undefined, sessionId)
+      new IntegratedBrowserClient(sessionId)
     ),
     private readonly httpFactory: () => RutrackerHttpSession = () => new CookieSession(),
   ) {}
@@ -117,7 +117,8 @@ export class RutrackerSearchRecovery {
   }
 
   async close(): Promise<void> {
-    await Promise.all([...this.clients.values()].map(async (client) => client.clearance.close?.()));
+    const clearanceProviders = new Set([...this.clients.values()].map((client) => client.clearance));
+    await Promise.all([...clearanceProviders].map(async (clearance) => clearance.close?.()));
     this.clients.clear();
   }
 

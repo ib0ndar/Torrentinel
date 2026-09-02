@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { BrowserPage } from "../../core/transport/flaresolverr.js";
+import type { BrowserPage } from "../../core/transport/browser.js";
 import type { HttpResult } from "../../core/transport/http.js";
 import {
   RutrackerSearchRecovery,
