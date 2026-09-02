@@ -169,10 +169,12 @@ Podman volume archives created above can be loaded into empty replacement volume
 - If saved integrations cannot be decrypted, restore the database and application-data directory from the same backup.
 - If RuTracker detail or recovery requests fail, inspect the Torrentinel log for an integrated-browser error. Confirm the application-data directory is writable, the container has at least 512 MiB of shared memory, and `BROWSER_CHANNEL` remains `auto` unless a compatible browser was deliberately installed.
 - If the container browser cannot start, rebuild the image for the NAS architecture instead of copying an image built for another CPU architecture.
-- If Podman does not generate `torrentinel-integrated.service`, validate the generated unit and inspect generator errors:
+- If Podman does not generate `torrentinel-integrated.service`, reload the user manager and inspect the unit status and journal:
 
   ```sh
-  systemd-analyze --user --generators=true verify torrentinel-integrated.service
+  systemctl --user daemon-reload
+  systemctl --user status torrentinel-integrated.service --no-pager
+  journalctl --user -u torrentinel-integrated.service -n 100 --no-pager
   ```
 
 ## Uninstalling
