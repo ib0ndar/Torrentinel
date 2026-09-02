@@ -7,7 +7,7 @@ After=network-online.target
 Image=localhost/torrentinel:v0.5.0-integrated.1
 ContainerName=torrentinel-integrated
 UserNS=keep-id
-PublishPort=8999:8080/tcp
+PublishPort=18080:8080/tcp
 Volume=torrentinel-integrated-app.volume:/var/lib/torrentinel:Z,U
 Volume=torrentinel-integrated-db.volume:/data:Z,U
 HealthCmd=node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"

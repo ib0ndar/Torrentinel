@@ -235,14 +235,14 @@ install -m 0600 \
   "$HOME/.config/containers/systemd/torrentinel-integrated.env"
 ```
 
-Edit `~/.config/containers/systemd/torrentinel-integrated.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied Quadlet publishes TCP port `8999`. Enable the user manager at boot and start Torrentinel:
+Edit `~/.config/containers/systemd/torrentinel-integrated.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied canary Quadlet publishes TCP port `18080`, separate from the stable deployment's default port. Enable the user manager at boot and start Torrentinel:
 
 ```sh
 sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload
 systemctl --user start torrentinel-integrated.service
 systemctl --user status torrentinel-integrated.service --no-pager
-curl -fsS http://127.0.0.1:8999/api/health
+curl -fsS http://127.0.0.1:18080/api/health
 ```
 
 The `.volume` Quadlets create `torrentinel_integrated_app` and `torrentinel_integrated_db` automatically. If systemd does not generate `torrentinel-integrated.service`, follow the [Podman troubleshooting guidance](docs/operations.md#troubleshooting).

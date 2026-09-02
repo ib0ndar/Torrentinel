@@ -22,8 +22,8 @@ curl -fsS http://127.0.0.1:8080/api/health
 # Default Docker Compose canary port
 curl -fsS http://127.0.0.1:18080/api/health
 
-# Supplied Podman Quadlet
-curl -fsS http://127.0.0.1:8999/api/health
+# Supplied Podman canary Quadlet
+curl -fsS http://127.0.0.1:18080/api/health
 ```
 
 If Docker Compose uses a custom `TORRENTINEL_PORT`, substitute that host port.
@@ -99,7 +99,7 @@ install -m 0644 \
 systemctl --user daemon-reload
 systemctl --user restart torrentinel-integrated.service
 systemctl --user status torrentinel-integrated.service --no-pager
-curl -fsS http://127.0.0.1:8999/api/health
+curl -fsS http://127.0.0.1:18080/api/health
 ```
 
 ## Data and backups
