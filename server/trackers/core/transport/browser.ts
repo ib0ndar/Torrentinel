@@ -105,13 +105,11 @@ export class IntegratedBrowserClient {
           }
           await field.fill(value, { timeout: remaining(deadline) });
         }
-        await Promise.all([
-          page.waitForNavigation({
-            waitUntil: "domcontentloaded",
-            timeout: remaining(deadline),
-          }),
-          form.evaluate("element => HTMLFormElement.prototype.submit.call(element)"),
-        ]);
+        const submit = form.locator('input[type="submit"], button[type="submit"], button:not([type])').first();
+        if (await submit.count() === 0) {
+          throw new Error(`Browser form submit control was not found: ${submission.formSelector}`);
+        }
+        await submit.click({ timeout: remaining(deadline) });
       }),
       signal,
     );

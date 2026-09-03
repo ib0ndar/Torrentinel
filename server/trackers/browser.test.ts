@@ -145,7 +145,7 @@ describe("integrated browser client", () => {
       username: "fixture-user",
       password: "fixture-password",
     });
-    expect(fixture.submit).toHaveBeenCalledOnce();
+    expect(fixture.clickSubmit).toHaveBeenCalledOnce();
   });
 
   it("retries page reads while a challenge redirect is still navigating", async () => {
@@ -198,15 +198,6 @@ function fakeBrowser(navigations: Array<Array<string | Error>>) {
     return null;
   });
   const filledFields: Record<string, string> = {};
-  const submit = vi.fn(async () => {
-    navigationIndex += 1;
-    currentUrl = "https://kinozal.me/";
-    responseObserver?.({
-      frame: () => mainFrame,
-      request: () => ({ resourceType: () => "document" }),
-      status: () => 200,
-    } as unknown as Response);
-  });
   const fieldLocator = (selector: string) => {
     const name = selector.match(/^\[name="(.+)"\]$/u)?.[1] || selector;
     const locator = {
@@ -216,11 +207,26 @@ function fakeBrowser(navigations: Array<Array<string | Error>>) {
     };
     return locator;
   };
+  const clickSubmit = vi.fn(async () => {
+    navigationIndex += 1;
+    currentUrl = "https://kinozal.me/";
+    responseObserver?.({
+      frame: () => mainFrame,
+      request: () => ({ resourceType: () => "document" }),
+      status: () => 200,
+    } as unknown as Response);
+  });
+  const submitLocator = {
+    first: () => submitLocator,
+    count: vi.fn(async () => 1),
+    click: clickSubmit,
+  };
   const formLocator = {
     first: () => formLocator,
     count: vi.fn(async () => 1),
-    locator: vi.fn((selector: string) => fieldLocator(selector)),
-    evaluate: submit,
+    locator: vi.fn((selector: string) => (
+      selector.includes('input[type="submit"]') ? submitLocator : fieldLocator(selector)
+    )),
   };
   const page = {
     setDefaultTimeout: vi.fn(),
@@ -252,7 +258,7 @@ function fakeBrowser(navigations: Array<Array<string | Error>>) {
     cookies: vi.fn(async () => [{ name: "cf_clearance", value: "fixture" }]),
     close,
   } as unknown as BrowserContext;
-  return { context, goto, content: page.content, close, filledFields, submit };
+  return { context, goto, content: page.content, close, filledFields, clickSubmit };
 }
 
 async function tempDirectory(): Promise<string> {
