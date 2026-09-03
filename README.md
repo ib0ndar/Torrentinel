@@ -129,7 +129,7 @@ Torrentinel can be installed directly on a Linux host as a Node.js service, with
 | [Docker Compose](#docker-compose) | The shortest complete installation | Included | Docker Engine and Compose v2 |
 | [Podman Quadlet](#podman-quadlet) | Rootless, systemd-managed containers | Included | Podman with Quadlet, systemd user services, cgroup v2 |
 
-All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Container examples use the separately tagged experimental image `bah0/torrentinel:v0.5.0-integrated.2`; it does not replace the stable `latest` channel. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
+All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Container examples use the separately tagged experimental image `bah0/torrentinel:v0.5.0-integrated.3`; it does not replace the stable `latest` channel. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
 
 ### Direct installation on Linux
 
@@ -225,7 +225,7 @@ The cgroup command must report `v2`. Install the tagged deployment files and cre
 git clone --branch torrentinel_integrated --depth 1 \
   https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
 cd Torrentinel-integrated
-podman pull docker.io/bah0/torrentinel:v0.5.0-integrated.2
+podman pull docker.io/bah0/torrentinel:v0.5.0-integrated.3
 install -d -m 0700 "$HOME/.config/containers/systemd"
 install -m 0644 \
   deploy/*.container deploy/*.volume \

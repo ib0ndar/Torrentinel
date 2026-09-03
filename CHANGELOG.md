@@ -2,7 +2,7 @@
 
 All notable changes to Torrentinel are documented in this file.
 
-## [0.5.0-integrated.2] - 2026-09-04
+## [0.5.0-integrated.3] - 2026-09-04
 
 ### Added
 
@@ -13,7 +13,8 @@ All notable changes to Torrentinel are documented in this file.
 ### Changed
 
 - Kinozal login, direct monitoring, and rule discovery now use the in-process Patchright browser instead of the plain HTTP transport.
-- The experimental multi-architecture image is published separately from the stable channel as `bah0/torrentinel:v0.5.0-integrated.2`.
+- The experimental multi-architecture image is published separately from the stable channel as `bah0/torrentinel:v0.5.0-integrated.3`.
+- Stale Chrome profile locks left by a container restart are removed only when their control socket is gone, so persistent browser sessions can restart without an unlock dialog.
 
 ### Fixed
 

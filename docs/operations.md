@@ -92,7 +92,7 @@ Pull the updated experimental image and install the declarative units without ov
 git fetch origin torrentinel_integrated
 git switch torrentinel_integrated
 git pull --ff-only origin torrentinel_integrated
-podman pull docker.io/bah0/torrentinel:v0.5.0-integrated.2
+podman pull docker.io/bah0/torrentinel:v0.5.0-integrated.3
 install -m 0644 \
   deploy/*.container deploy/*.volume \
   "$HOME/.config/containers/systemd/"

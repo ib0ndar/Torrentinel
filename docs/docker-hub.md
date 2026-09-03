@@ -34,7 +34,7 @@ The canonical repository contains the current Compose file, Podman Quadlets, dir
 
 **[github.com/ib0ndar/Torrentinel](https://github.com/ib0ndar/Torrentinel)**
 
-Use the branch-specific installation commands from the repository README. The integrated canary is published as `bah0/torrentinel:v0.5.0-integrated.2` for `linux/amd64` and `linux/arm64`; it remains separate from the stable `bah0/torrentinel:latest` image.
+Use the branch-specific installation commands from the repository README. The integrated canary is published as `bah0/torrentinel:v0.5.0-integrated.3` for `linux/amd64` and `linux/arm64`; it remains separate from the stable `bah0/torrentinel:latest` image.
 
 ## Important operational notes
 

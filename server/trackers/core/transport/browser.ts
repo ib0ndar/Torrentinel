@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { lstat, mkdir, readlink, rm, stat } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { resolve } from "node:path";
 import { chromium, type BrowserContext, type Page, type Response } from "patchright";
@@ -11,6 +11,7 @@ const SESSION_TTL_MS = 120 * 60 * 1_000;
 const CHALLENGE_POLL_MS = 500;
 const CHALLENGE_SETTLE_MS = 1_000;
 const NAVIGATION_RETRY_MS = 50;
+const PROFILE_SINGLETON_FILES = ["SingletonLock", "SingletonSocket", "SingletonCookie"] as const;
 
 type BrowserContextLauncher = (profileDirectory: string) => Promise<BrowserContext>;
 
@@ -144,6 +145,7 @@ export class IntegratedBrowserClient {
     );
     await mkdir(profileDirectory, { recursive: true, mode: 0o700 });
     try {
+      await removeStaleProfileSingletons(profileDirectory);
       this.context = await (this.options.launchContext || launchContext)(profileDirectory);
       this.contextCreatedAt = Date.now();
     } catch (error) {
@@ -258,6 +260,59 @@ export class IntegratedBrowserClient {
     this.queue = result.then(() => undefined, () => undefined);
     return result;
   }
+}
+
+/**
+ * Chrome stores its process lock in the persistent profile while the control
+ * socket lives in the container's ephemeral /tmp. A clean container stop may
+ * still leave the profile symlinks behind. If their socket target is gone,
+ * remove only those Chrome singleton entries before launching the profile.
+ */
+async function removeStaleProfileSingletons(profileDirectory: string): Promise<void> {
+  const entries = PROFILE_SINGLETON_FILES.map((name) => resolve(profileDirectory, name));
+  const present = await Promise.all(entries.map((entry) => pathEntryExists(entry)));
+  if (!present.some(Boolean)) return;
+
+  const socketEntry = resolve(profileDirectory, "SingletonSocket");
+  const socketTarget = await linkTarget(socketEntry);
+  if (socketTarget && await pathTargetExists(resolve(profileDirectory, socketTarget))) {
+    throw new Error("browser profile is already in use by an active Chrome process");
+  }
+
+  await Promise.all(entries.map((entry) => rm(entry, { force: true })));
+}
+
+async function pathEntryExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (isMissingPathError(error)) return false;
+    throw error;
+  }
+}
+
+async function pathTargetExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if (isMissingPathError(error)) return false;
+    throw error;
+  }
+}
+
+async function linkTarget(path: string): Promise<string | undefined> {
+  try {
+    return await readlink(path);
+  } catch (error) {
+    if (isMissingPathError(error)) return undefined;
+    throw error;
+  }
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 function launchContext(profileDirectory: string): Promise<BrowserContext> {

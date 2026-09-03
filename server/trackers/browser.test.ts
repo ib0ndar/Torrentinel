@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +42,59 @@ describe("integrated browser client", () => {
     expect(launch).toHaveBeenCalledTimes(1);
     expect(fixture.goto).toHaveBeenCalledTimes(2);
     expect(fixture.close).toHaveBeenCalledOnce();
+  });
+
+  it("removes stale Chrome profile locks after a container restart", async () => {
+    const fixture = fakeBrowser([["<html><h1 class='maintitle'>Ready</h1></html>"]]);
+    const root = await tempDirectory();
+    const sessionId = "stale-profile-session";
+    const profile = profileDirectory(root, sessionId);
+    await mkdir(profile, { recursive: true });
+    await symlink("old-container-123", join(profile, "SingletonLock"));
+    await symlink("old-cookie", join(profile, "SingletonCookie"));
+    await symlink(join(root, "missing-singleton.sock"), join(profile, "SingletonSocket"));
+    const launch = vi.fn(async (directory: string) => {
+      expect(directory).toBe(profile);
+      await expect(lstat(join(profile, "SingletonLock"))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(lstat(join(profile, "SingletonCookie"))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(lstat(join(profile, "SingletonSocket"))).rejects.toMatchObject({ code: "ENOENT" });
+      return fixture.context;
+    });
+    const client = new IntegratedBrowserClient(sessionId, {
+      launchContext: launch,
+      profileRoot: root,
+      timeoutMs: 50,
+    });
+
+    await expect(client.get("https://rutracker.org/forum/viewtopic.php?t=6"))
+      .resolves.toMatchObject({ status: 200 });
+    await client.close();
+
+    expect(launch).toHaveBeenCalledOnce();
+  });
+
+  it("does not remove profile locks whose Chrome socket is still present", async () => {
+    const root = await tempDirectory();
+    const sessionId = "active-profile-session";
+    const profile = profileDirectory(root, sessionId);
+    const activeSocket = join(root, "active-singleton.sock");
+    await mkdir(profile, { recursive: true });
+    await writeFile(activeSocket, "active");
+    await symlink("current-container-456", join(profile, "SingletonLock"));
+    await symlink(activeSocket, join(profile, "SingletonSocket"));
+    const launch = vi.fn();
+    const client = new IntegratedBrowserClient(sessionId, {
+      launchContext: launch,
+      profileRoot: root,
+      timeoutMs: 50,
+    });
+
+    await expect(client.get("https://rutracker.org/forum/viewtopic.php?t=7"))
+      .rejects.toThrow("profile is already in use by an active Chrome process");
+
+    expect(launch).not.toHaveBeenCalled();
+    await expect(lstat(join(profile, "SingletonLock"))).resolves.toBeDefined();
+    await client.close();
   });
 
   it("waits for a challenged navigation to clear in the same session", async () => {
@@ -205,4 +259,8 @@ async function tempDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "torrentinel-browser-test-"));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function profileDirectory(root: string, sessionId: string): string {
+  return join(root, createHash("sha256").update(sessionId).digest("hex").slice(0, 24));
 }
