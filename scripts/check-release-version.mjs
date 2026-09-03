@@ -14,12 +14,12 @@ const checks = [
 
 const textChecks = [
   ["compose.yaml image", "../compose.yaml", new RegExp(isPrerelease
-    ? `image: ["']?torrentinel:${escapedTag}["']?$`
+    ? `image: ["']?bah0/torrentinel:${escapedTag}["']?$`
     : `image: bah0/torrentinel:${escapedTag}\\b`, "m")],
   ["Podman Quadlet image", isPrerelease
     ? "../deploy/torrentinel-integrated.container"
     : "../deploy/torrentinel.container", new RegExp(isPrerelease
-    ? `Image=localhost/torrentinel:${escapedTag}$`
+    ? `Image=docker\\.io/bah0/torrentinel:${escapedTag}$`
     : `Image=docker\\.io/bah0/torrentinel:${escapedTag}\\b`, "m")],
   ["changelog heading", "../CHANGELOG.md", new RegExp(`^## \\[${version.replaceAll(".", "\\.")}\\]`, "m")],
   ...isPrerelease ? [] : [[

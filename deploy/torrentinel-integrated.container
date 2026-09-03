@@ -4,7 +4,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Container]
-Image=localhost/torrentinel:v0.5.0-integrated.1
+Image=docker.io/bah0/torrentinel:v0.5.0-integrated.2
 ContainerName=torrentinel-integrated
 UserNS=keep-id
 PublishPort=18080:8080/tcp

@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { resolve } from "node:path";
 import { chromium, type BrowserContext, type Page, type Response } from "patchright";
 import { config } from "../../../config.js";
+import type { TrackerKey } from "../../../types.js";
 import { challengeDetected, TrackerError } from "../errors.js";
 
 const SESSION_TTL_MS = 120 * 60 * 1_000;
@@ -13,10 +14,12 @@ const NAVIGATION_RETRY_MS = 50;
 
 type BrowserContextLauncher = (profileDirectory: string) => Promise<BrowserContext>;
 
-interface IntegratedBrowserOptions {
+export interface IntegratedBrowserOptions {
   launchContext?: BrowserContextLauncher;
   profileRoot?: string;
   timeoutMs?: number;
+  trackerKey?: TrackerKey;
+  trackerName?: string;
 }
 
 export interface BrowserPage {
@@ -27,17 +30,28 @@ export interface BrowserPage {
   userAgent?: string;
 }
 
+export interface BrowserFormSubmission {
+  pageUrl: string;
+  formSelector: string;
+  values: Record<string, string>;
+}
+
 export class IntegratedBrowserError extends TrackerError {
-  constructor(message: string, code: "challenge" | "temporary" = "temporary", cause?: unknown) {
-    super(code, message, { trackerKey: "rutracker", retryable: true, cause });
+  constructor(
+    message: string,
+    code: "challenge" | "temporary" = "temporary",
+    trackerKey: TrackerKey = "rutracker",
+    cause?: unknown,
+  ) {
+    super(code, message, { trackerKey, retryable: true, cause });
     this.name = "IntegratedBrowserError";
   }
 }
 
 /**
- * Runs RuTracker browser navigation inside the Torrentinel process. Each logical
- * session gets an isolated persistent Chrome profile so Cloudflare clearance and
- * the browser fingerprint survive both requests and application restarts.
+ * Runs tracker browser navigation inside the Torrentinel process. Each logical
+ * session gets an isolated persistent Chrome profile so authenticated state,
+ * challenge clearance, and the browser fingerprint survive application restarts.
  */
 export class IntegratedBrowserClient {
   private context?: BrowserContext;
@@ -53,21 +67,69 @@ export class IntegratedBrowserClient {
     return this.serialized(() => this.getPage(url, signal));
   }
 
+  submitForm(submission: BrowserFormSubmission, signal?: AbortSignal): Promise<BrowserPage> {
+    return this.serialized(() => this.submitFormPage(submission, signal));
+  }
+
   close(): Promise<void> {
     return this.serialized(() => this.resetContext());
   }
 
   private async getPage(url: string, signal?: AbortSignal): Promise<BrowserPage> {
+    return this.withContextRetry(
+      (context) => this.requestPage(context, url, signal),
+      signal,
+    );
+  }
+
+  private async submitFormPage(
+    submission: BrowserFormSubmission,
+    signal?: AbortSignal,
+  ): Promise<BrowserPage> {
+    return this.withContextRetry(
+      (context) => this.requestPage(context, submission.pageUrl, signal, async (page, deadline) => {
+        await page.goto(submission.pageUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: remaining(deadline),
+        });
+        await this.ensureChallengeCleared(page, deadline, signal);
+        const form = page.locator(submission.formSelector).first();
+        if (await form.count() === 0) {
+          throw new Error(`Browser form was not found: ${submission.formSelector}`);
+        }
+        for (const [name, value] of Object.entries(submission.values)) {
+          const field = form.locator(`[name=${JSON.stringify(name)}]`).first();
+          if (await field.count() === 0) {
+            throw new Error(`Browser form field was not found: ${name}`);
+          }
+          await field.fill(value, { timeout: remaining(deadline) });
+        }
+        await Promise.all([
+          page.waitForNavigation({
+            waitUntil: "domcontentloaded",
+            timeout: remaining(deadline),
+          }),
+          form.evaluate("element => HTMLFormElement.prototype.submit.call(element)"),
+        ]);
+      }),
+      signal,
+    );
+  }
+
+  private async withContextRetry<T>(
+    request: (context: BrowserContext) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     signal?.throwIfAborted();
     await this.ensureContext();
     try {
-      return await this.requestPage(url, signal);
+      return await request(this.contextOrThrow());
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
       if (isBrowserClosedError(error)) {
         await this.resetContext();
         await this.ensureContext();
-        return this.requestPage(url, signal);
+        return request(this.contextOrThrow());
       }
       throw error;
     }
@@ -86,13 +148,16 @@ export class IntegratedBrowserClient {
       this.contextCreatedAt = Date.now();
     } catch (error) {
       await this.resetContext();
-      throw new IntegratedBrowserError(`RuTracker integrated browser could not start: ${errorMessage(error)}`, "temporary", error);
+      throw this.browserError(`could not start: ${errorMessage(error)}`, "temporary", error);
     }
   }
 
-  private async requestPage(url: string, signal?: AbortSignal): Promise<BrowserPage> {
-    const context = this.context;
-    if (!context) throw new IntegratedBrowserError("RuTracker integrated browser session is unavailable");
+  private async requestPage(
+    context: BrowserContext,
+    url: string,
+    signal?: AbortSignal,
+    navigate?: (page: Page, deadline: number) => Promise<void>,
+  ): Promise<BrowserPage> {
     const page = await this.sessionPage(context);
     const timeoutMs = this.options.timeoutMs || config.browserTimeoutMs;
     page.setDefaultTimeout(timeoutMs);
@@ -108,18 +173,17 @@ export class IntegratedBrowserClient {
     const deadline = Date.now() + timeoutMs;
 
     try {
-      await page.goto(url, {
-        waitUntil: "domcontentloaded",
-        timeout: remaining(deadline),
-      });
-      await settleChallenge(page, deadline, signal);
-      const body = await readPageContent(page, deadline, signal);
-      if (challengeDetected(body)) {
-        throw new IntegratedBrowserError("RuTracker verification was not completed by the integrated browser", "challenge");
+      if (navigate) await navigate(page, deadline);
+      else {
+        await page.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: remaining(deadline),
+        });
       }
+      const body = await this.ensureChallengeCleared(page, deadline, signal);
       const status = documentStatus ?? 200;
       if (status < 200 || status >= 300) {
-        throw new IntegratedBrowserError(`RuTracker integrated browser returned HTTP ${status}`);
+        throw this.browserError(`returned HTTP ${status}`);
       }
       const cookies = (await context.cookies(page.url()))
         .map(({ name, value }) => ({ name, value }));
@@ -134,11 +198,42 @@ export class IntegratedBrowserClient {
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
       if (error instanceof TrackerError) throw error;
-      throw new IntegratedBrowserError(`RuTracker integrated browser failed: ${errorMessage(error)}`, "temporary", error);
+      throw this.browserError(`failed: ${errorMessage(error)}`, "temporary", error);
     } finally {
       signal?.removeEventListener("abort", abort);
       page.off("response", observeDocument);
     }
+  }
+
+  private async ensureChallengeCleared(
+    page: Page,
+    deadline: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await settleChallenge(page, deadline, signal);
+    const body = await readPageContent(page, deadline, signal);
+    if (challengeDetected(body)) {
+      throw this.browserError("verification was not completed", "challenge");
+    }
+    return body;
+  }
+
+  private contextOrThrow(): BrowserContext {
+    if (this.context) return this.context;
+    throw this.browserError("session is unavailable");
+  }
+
+  private browserError(
+    message: string,
+    code: "challenge" | "temporary" = "temporary",
+    cause?: unknown,
+  ): IntegratedBrowserError {
+    return new IntegratedBrowserError(
+      `${this.options.trackerName || "RuTracker"} integrated browser ${message}`,
+      code,
+      this.options.trackerKey || "rutracker",
+      cause,
+    );
   }
 
   private async sessionPage(context: BrowserContext): Promise<Page> {

@@ -22,7 +22,7 @@
 Torrentinel is a self-hosted watchlist and change-detection service. It monitors selected tracker releases, detects changes to titles, artwork, magnets, torrent files, and metadata, discovers new phrase matches, keeps per-user history, and sends Telegram notifications.
 
 > [!IMPORTANT]
-> This `torrentinel_integrated` branch is an experimental canary. It replaces the FlareSolverr sidecar with a Patchright-controlled browser inside the Torrentinel image. Keep it separate from the production deployment and its data volumes until RuTracker detail monitoring and gap recovery have been observed over time.
+> This `torrentinel_integrated` branch is an experimental canary. It replaces the FlareSolverr sidecar with a Patchright-controlled browser inside the Torrentinel image. Keep it separate from the production deployment and its data volumes until Kinozal and RuTracker monitoring have been observed over time.
 
 <p align="center">
   <img src="docs/screenshots/product-tour.gif" alt="Torrentinel product tour showing release monitoring, change history, and tracker diagnostics" width="960">
@@ -83,7 +83,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - Administrator-managed accounts with no public registration
 - Configurable polling from 5 minutes to 6 hours
 - Persistent RuTracker feed buffering with overlap monitoring and authenticated gap recovery
-- Integrated Patchright browser for RuTracker detail pages and challenge clearance
+- Integrated Patchright browser for Kinozal login/search and RuTracker detail pages and challenge clearance
 - Tracker diagnostics with seven-day log retention
 - Encrypted credentials and bot tokens in SQLite
 - Modular TypeScript tracker adapters
@@ -117,19 +117,19 @@ Torrentinel is pre-1.0 software. Releases may change configuration, tracker beha
 
 Direct installation on a Linux host is supported with Node.js 22.20 or newer and a Patchright-compatible browser. The supplied systemd unit is the maintained service definition for this deployment method. Source-built container images target Linux on `amd64` and `arm64`; Docker Desktop may run them, but macOS and Windows hosts are not part of the maintained deployment test matrix.
 
-Torrentinel does not claim a fixed CPU or RAM minimum because tracker activity and browser use vary. The integrated browser is the heaviest component and starts only when RuTracker needs it. The supplied container definitions provide 512 MiB of shared memory. Small hosts should monitor memory during RuTracker detail and recovery operations.
+Torrentinel does not claim a fixed CPU or RAM minimum because tracker activity and browser use vary. The integrated browser is the heaviest component and starts when Kinozal or RuTracker needs it. The supplied container definitions provide 512 MiB of shared memory. Small hosts should monitor memory during browser-backed tracker operations.
 
 ## Installation
 
 Torrentinel can be installed directly on a Linux host as a Node.js service, without Docker, Podman, or another container runtime. It can also run as one container. The integrated browser is launched by Torrentinel and retains reusable clearance state in the application-data directory.
 
-| Method | Best for | RuTracker detail pages and gap recovery | Host requirements |
+| Method | Best for | Browser-backed tracker access | Host requirements |
 | --- | --- | --- | --- |
 | [Direct Linux installation](#direct-installation-on-linux) | Minimal overhead and direct service integration | Included when a compatible browser is installed | Node.js 22.20+, npm, Chrome/Chromium, a service manager |
 | [Docker Compose](#docker-compose) | The shortest complete installation | Included | Docker Engine and Compose v2 |
 | [Podman Quadlet](#podman-quadlet) | Rootless, systemd-managed containers | Included | Podman with Quadlet, systemd user services, cgroup v2 |
 
-All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. The examples on this branch build `torrentinel_integrated` from source because no experimental image is published. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
+All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Container examples use the separately tagged experimental image `bah0/torrentinel:v0.5.0-integrated.2`; it does not replace the stable `latest` channel. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
 
 ### Direct installation on Linux
 
@@ -186,7 +186,7 @@ If the host does not use systemd, run `/usr/bin/env node /opt/torrentinel/dist/s
 
 ### Docker Compose
 
-Docker Compose builds and runs one Torrentinel container and stores persistent data in two named volumes. The application volume also retains the integrated browser profile and its reusable challenge-clearance cookies.
+Docker Compose runs one Torrentinel container and stores persistent data in two named volumes. The application volume also retains the integrated browser profiles and their reusable login and challenge-clearance cookies.
 
 ```sh
 git clone --branch torrentinel_integrated --depth 1 \
@@ -199,7 +199,7 @@ Edit `.env`, especially `PUBLIC_URL`, `TORRENTINEL_PORT`, and `SESSION_COOKIE_SE
 
 ```sh
 docker compose config
-docker compose build
+docker compose pull
 docker compose up -d
 docker compose ps
 curl -fsS http://127.0.0.1:18080/api/health
@@ -211,7 +211,7 @@ If `TORRENTINEL_PORT` is changed, use that port in the health-check URL. View lo
 
 ### Podman Quadlet
 
-The supplied Quadlets run the single source-built container rootlessly under the current user's systemd manager. They are not specific to one Linux distribution, but they require Quadlet support and cgroup v2:
+The supplied Quadlets run the separately tagged experimental container rootlessly under the current user's systemd manager. They are not specific to one Linux distribution, but they require Quadlet support and cgroup v2:
 
 ```sh
 podman --version
@@ -225,7 +225,7 @@ The cgroup command must report `v2`. Install the tagged deployment files and cre
 git clone --branch torrentinel_integrated --depth 1 \
   https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
 cd Torrentinel-integrated
-podman build --file Containerfile --tag localhost/torrentinel:v0.5.0-integrated.1 .
+podman pull docker.io/bah0/torrentinel:v0.5.0-integrated.2
 install -d -m 0700 "$HOME/.config/containers/systemd"
 install -m 0644 \
   deploy/*.container deploy/*.volume \

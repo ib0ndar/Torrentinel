@@ -1,9 +1,9 @@
 import type { DirectMonitor } from "../../core/contracts.js";
 import { fingerprintRelease } from "../../core/parsing.js";
-import type { KinozalSessionManager } from "./auth.js";
+import type { KinozalPageSession } from "./auth.js";
 import { parseKinozalDirect } from "./parser.js";
 
-export function createKinozalDirectMonitor(session: KinozalSessionManager, normalizeUrl: (url: URL, baseUrl: string) => string): DirectMonitor {
+export function createKinozalDirectMonitor(session: KinozalPageSession, normalizeUrl: (url: URL, baseUrl: string) => string): DirectMonitor {
   return {
     async fetchSnapshot(url, context) {
       const normalized = normalizeUrl(new URL(url), context.baseUrl);

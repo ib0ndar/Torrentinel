@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TrackerError } from "../core/errors.js";
+import type { BrowserPage } from "../core/transport/browser.js";
 import { TrackerPluginRegistry } from "../core/registry.js";
+import { KinozalSessionManager } from "./kinozal/auth.js";
 import { createKinozalPlugin } from "./kinozal/index.js";
 import { parseKinozalSearch } from "./kinozal/parser.js";
 import { createRutorPlugin } from "./rutor/index.js";
@@ -33,44 +35,66 @@ describe("tracker plugin contract", () => {
 
 describe("Kinozal plugin", () => {
   it("requires credentials and refreshes an expired authenticated session", async () => {
-    const plugin = createKinozalPlugin();
+    const directPage = fixture("kinozal/fixtures/direct.html");
+    const recentPage = fixture("kinozal/fixtures/recent.html");
+    const loginPage = fixture("kinozal/fixtures/login.html");
+    const signedInPage = "<html><a href='/logout.php'>fixture-user</a></html>";
+    let authenticated = false;
+    let expireDetailSession = true;
+    let loginRequests = 0;
+    let detailRequests = 0;
+    let browseUrl = "";
+    const close = vi.fn(async () => undefined);
+    const get = vi.fn(async (url: string): Promise<BrowserPage> => {
+      if (url === "https://kinozal.tv") {
+        return browserPage(authenticated ? signedInPage : loginPage, url);
+      }
+      if (url.includes("details.php")) {
+        detailRequests += 1;
+        if (expireDetailSession) {
+          expireDetailSession = false;
+          authenticated = false;
+          return browserPage(loginPage, url);
+        }
+        return browserPage(directPage, url);
+      }
+      if (url.includes("browse.php")) {
+        browseUrl = url;
+        return browserPage(recentPage, url);
+      }
+      throw new Error(`Unexpected fixture URL: ${url}`);
+    });
+    const submitForm = vi.fn(async (submission: { values: Record<string, string> }): Promise<BrowserPage> => {
+      loginRequests += 1;
+      expect(submission.values).toEqual({
+        username: "fixture-user",
+        password: "fixture-password",
+      });
+      authenticated = true;
+      return browserPage(signedInPage, "https://kinozal.tv/");
+    });
+    const session = new KinozalSessionManager(() => ({ get, submitForm, close }));
+    const plugin = createKinozalPlugin(session);
     await expect(plugin.rules!.discover(
       { baseUrl: "https://kinozal.tv" },
       { requiredTerms: ["film", "2160p"] },
     ))
       .rejects.toMatchObject<Partial<TrackerError>>({ code: "authentication" });
 
-    const directPage = fixture("kinozal/fixtures/direct.html");
-    const recentPage = fixture("kinozal/fixtures/recent.html");
-    const loginPage = fixture("kinozal/fixtures/login.html");
-    let loginRequests = 0;
-    let detailRequests = 0;
-    let browseUrl = "";
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url.includes("takelogin.php")) {
-        loginRequests += 1;
-        return new Response("<a href='/userdetails.php?id=1'>fixture-user</a>", {
-          status: 200,
-          headers: { "set-cookie": `session=${loginRequests}; Path=/` },
-        });
-      }
-      if (url.includes("details.php")) {
-        detailRequests += 1;
-        return new Response(detailRequests === 1 ? loginPage : directPage, { status: 200 });
-      }
-      if (url.includes("browse.php")) {
-        browseUrl = url;
-        return new Response(recentPage, { status: 200 });
-      }
-      return new Response("not found", { status: 404 });
-    }));
-    const context = { baseUrl: "https://kinozal.tv", username: "fixture-user", password: "fixture-password" };
+    const context = {
+      userId: "fixture-user-id",
+      baseUrl: "https://kinozal.tv",
+      username: "fixture-user",
+      password: "fixture-password",
+    };
 
     const direct = await plugin.direct!.fetchSnapshot("https://kinozal.tv/details.php?id=71", context);
     const batch = await plugin.rules!.discover(context, { requiredTerms: ["Film", "2160p"] });
+    await plugin.close?.();
 
     expect(loginRequests).toBe(2);
+    expect(detailRequests).toBe(2);
+    expect(close).toHaveBeenCalledOnce();
     expect(direct).toMatchObject({
       externalId: "71",
       title: "Film 2026",
@@ -84,6 +108,37 @@ describe("Kinozal plugin", () => {
     expect(batch.coverage).toEqual({ source: "search", complete: false });
     expect(batch.sourceUrl).toBe(browseUrl);
     expect(batch.releases[0]).toMatchObject({ externalId: "71", title: "Film 2026 BDRip" });
+  });
+
+  it("backs off browser login after a challenge instead of retrying for every rule", async () => {
+    const loginPage = fixture("kinozal/fixtures/login.html");
+    let now = Date.parse("2026-09-04T00:00:00Z");
+    const get = vi.fn(async (url: string) => browserPage(loginPage, url));
+    const submitForm = vi.fn(async () => {
+      throw new TrackerError("challenge", "Fixture challenge", { trackerKey: "kinozal" });
+    });
+    const session = new KinozalSessionManager(
+      () => ({ get, submitForm }),
+      { now: () => now, retryBackoffMs: 60_000 },
+    );
+    const plugin = createKinozalPlugin(session);
+    const context = {
+      userId: "fixture-user-id",
+      baseUrl: "https://kinozal.tv",
+      username: "fixture-user",
+      password: "fixture-password",
+    };
+
+    await expect(plugin.direct!.fetchSnapshot("https://kinozal.tv/details.php?id=71", context))
+      .rejects.toMatchObject<Partial<TrackerError>>({ code: "challenge" });
+    await expect(plugin.rules!.discover(context, { requiredTerms: ["Film"] }))
+      .rejects.toMatchObject<Partial<TrackerError>>({ code: "rate-limit" });
+    expect(submitForm).toHaveBeenCalledTimes(1);
+
+    now += 60_001;
+    await expect(plugin.rules!.discover(context, { requiredTerms: ["Film"] }))
+      .rejects.toMatchObject<Partial<TrackerError>>({ code: "challenge" });
+    expect(submitForm).toHaveBeenCalledTimes(2);
   });
 
   it("rejects a catalogue search without required phrases", async () => {
@@ -175,6 +230,10 @@ describe("RuTracker plugin", () => {
 
 function fixture(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8");
+}
+
+function browserPage(body: string, url: string): BrowserPage {
+  return { body, url, status: 200 };
 }
 
 function fakeDetailProvider() {

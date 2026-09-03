@@ -1,9 +1,9 @@
 import type { RuleDiscoveryProvider } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
-import type { KinozalSessionManager } from "./auth.js";
+import type { KinozalPageSession } from "./auth.js";
 import { parseKinozalSearch } from "./parser.js";
 
-export function createKinozalRuleDiscovery(session: KinozalSessionManager): RuleDiscoveryProvider {
+export function createKinozalRuleDiscovery(session: KinozalPageSession): RuleDiscoveryProvider {
   return {
     async discover(context, query) {
       const requiredTerms = query?.requiredTerms.map((term) => term.trim()).filter(Boolean) || [];

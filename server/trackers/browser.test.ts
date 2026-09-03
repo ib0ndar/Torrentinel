@@ -62,6 +62,38 @@ describe("integrated browser client", () => {
     expect(fixture.goto).toHaveBeenCalledOnce();
   });
 
+  it("submits an existing browser form and retains its resulting session", async () => {
+    const fixture = fakeBrowser([
+      ["<html><form action='/takelogin.php'><input name='username'><input name='password'><input name='returnto'></form></html>"],
+      ["<html><a href='/logout.php'>Signed in</a></html>"],
+    ]);
+    const client = new IntegratedBrowserClient("form-session", {
+      launchContext: async () => fixture.context,
+      profileRoot: await tempDirectory(),
+      timeoutMs: 100,
+      trackerKey: "kinozal",
+      trackerName: "Kinozal",
+    });
+
+    const result = await client.submitForm({
+      pageUrl: "https://kinozal.me/",
+      formSelector: 'form[action*="takelogin.php"]',
+      values: {
+        username: "fixture-user",
+        password: "fixture-password",
+      },
+    });
+    await client.close();
+
+    expect(result).toMatchObject({ status: 200, url: "https://kinozal.me/" });
+    expect(result.body).toContain("Signed in");
+    expect(fixture.filledFields).toEqual({
+      username: "fixture-user",
+      password: "fixture-password",
+    });
+    expect(fixture.submit).toHaveBeenCalledOnce();
+  });
+
   it("retries page reads while a challenge redirect is still navigating", async () => {
     const fixture = fakeBrowser([[
       new Error("page.content: Unable to retrieve content because the page is navigating and changing the content."),
@@ -111,6 +143,31 @@ function fakeBrowser(navigations: Array<Array<string | Error>>) {
     } as unknown as Response);
     return null;
   });
+  const filledFields: Record<string, string> = {};
+  const submit = vi.fn(async () => {
+    navigationIndex += 1;
+    currentUrl = "https://kinozal.me/";
+    responseObserver?.({
+      frame: () => mainFrame,
+      request: () => ({ resourceType: () => "document" }),
+      status: () => 200,
+    } as unknown as Response);
+  });
+  const fieldLocator = (selector: string) => {
+    const name = selector.match(/^\[name="(.+)"\]$/u)?.[1] || selector;
+    const locator = {
+      first: () => locator,
+      count: vi.fn(async () => 1),
+      fill: vi.fn(async (value: string) => { filledFields[name] = value; }),
+    };
+    return locator;
+  };
+  const formLocator = {
+    first: () => formLocator,
+    count: vi.fn(async () => 1),
+    locator: vi.fn((selector: string) => fieldLocator(selector)),
+    evaluate: submit,
+  };
   const page = {
     setDefaultTimeout: vi.fn(),
     mainFrame: () => mainFrame,
@@ -126,9 +183,11 @@ function fakeBrowser(navigations: Array<Array<string | Error>>) {
     }),
     url: () => currentUrl,
     evaluate: vi.fn(async () => "Fixture browser agent"),
+    locator: vi.fn(() => formLocator),
     isClosed: () => false,
     frames: () => [],
     mouse: { move: vi.fn(), down: vi.fn(), up: vi.fn() },
+    waitForNavigation: vi.fn(async () => null),
     waitForLoadState: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
   } as unknown as Page;
@@ -139,7 +198,7 @@ function fakeBrowser(navigations: Array<Array<string | Error>>) {
     cookies: vi.fn(async () => [{ name: "cf_clearance", value: "fixture" }]),
     close,
   } as unknown as BrowserContext;
-  return { context, goto, content: page.content, close };
+  return { context, goto, content: page.content, close, filledFields, submit };
 }
 
 async function tempDirectory(): Promise<string> {

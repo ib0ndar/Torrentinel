@@ -72,27 +72,27 @@ curl -fsS http://127.0.0.1:8080/api/health
 
 ### Docker Compose
 
-Rebuild the source image after updating the branch:
+Pull the branch's separately tagged experimental image after updating the deployment files:
 
 ```sh
 git fetch origin torrentinel_integrated
 git switch torrentinel_integrated
 git pull --ff-only origin torrentinel_integrated
 docker compose config
-docker compose build --pull
+docker compose pull
 docker compose up -d
 docker compose ps
 ```
 
 ### Podman Quadlet
 
-Build the updated image and install the declarative units without overwriting the local environment file:
+Pull the updated experimental image and install the declarative units without overwriting the local environment file:
 
 ```sh
 git fetch origin torrentinel_integrated
 git switch torrentinel_integrated
 git pull --ff-only origin torrentinel_integrated
-podman build --pull --file Containerfile --tag localhost/torrentinel:v0.5.0-integrated.1 .
+podman pull docker.io/bah0/torrentinel:v0.5.0-integrated.2
 install -m 0644 \
   deploy/*.container deploy/*.volume \
   "$HOME/.config/containers/systemd/"
@@ -167,7 +167,7 @@ Podman volume archives created above can be loaded into empty replacement volume
 - If the health request fails, run the status and log commands for the selected deployment method.
 - If native startup reports a permission failure, confirm the `torrentinel` account can write to both `/var/lib/torrentinel/database` and `/var/lib/torrentinel/application`.
 - If saved integrations cannot be decrypted, restore the database and application-data directory from the same backup.
-- If RuTracker detail or recovery requests fail, inspect the Torrentinel log for an integrated-browser error. Confirm the application-data directory is writable, the container has at least 512 MiB of shared memory, and `BROWSER_CHANNEL` remains `auto` unless a compatible browser was deliberately installed.
+- If Kinozal or RuTracker browser-backed requests fail, inspect the Torrentinel log for an integrated-browser error. Confirm the application-data directory is writable, the container has at least 512 MiB of shared memory, and `BROWSER_CHANNEL` remains `auto` unless a compatible browser was deliberately installed. Kinozal pauses browser retries for 15 minutes after a failed login or challenge attempt so one outage does not repeat the same request for every rule.
 - If the container browser cannot start, rebuild the image for the NAS architecture instead of copying an image built for another CPU architecture.
 - If Podman does not generate `torrentinel-integrated.service`, reload the user manager and inspect the unit status and journal:
 

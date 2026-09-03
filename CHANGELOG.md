@@ -2,6 +2,23 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.0-integrated.2] - 2026-09-04
+
+### Added
+
+- Browser-native form submission for authenticated trackers without exposing a browser-control port.
+- Per-user Kinozal browser profiles that retain login and challenge-clearance state across application restarts.
+- A 15-minute retry backoff after a failed Kinozal browser or login attempt, preventing every rule from repeating the same blocked request.
+
+### Changed
+
+- Kinozal login, direct monitoring, and rule discovery now use the in-process Patchright browser instead of the plain HTTP transport.
+- The experimental multi-architecture image is published separately from the stable channel as `bah0/torrentinel:v0.5.0-integrated.2`.
+
+### Fixed
+
+- Kinozal requests can complete Cloudflare's interactive verification before authenticated detail and search pages are parsed.
+
 ## [0.5.0-integrated.1] - 2026-09-03
 
 ### Added

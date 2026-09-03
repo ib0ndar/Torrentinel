@@ -2,12 +2,12 @@ name: torrentinel-integrated
 
 services:
   torrentinel:
-    image: "torrentinel:v0.5.0-integrated.1"
+    image: "bah0/torrentinel:v0.5.0-integrated.2"
     build:
       context: .
       dockerfile: Containerfile
       args:
-        VERSION: "0.5.0-integrated.1"
+        VERSION: "0.5.0-integrated.2"
         VCS_REF: "torrentinel_integrated"
     container_name: torrentinel-integrated
     restart: unless-stopped
