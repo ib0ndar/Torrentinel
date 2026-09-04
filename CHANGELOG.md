@@ -16,7 +16,7 @@ All notable changes to Torrentinel are documented in this file.
 
 ### Fixed
 
-- Production dependency pruning no longer waits for npm audit or funding network calls during container builds.
+- Dependency installation and production pruning no longer wait for npm audit or funding network calls during container builds.
 
 ## [0.5.0-integrated.3] - 2026-09-04
 
