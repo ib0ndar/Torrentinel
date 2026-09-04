@@ -2,6 +2,22 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.0-integrated.4] - 2026-09-04
+
+### Added
+
+- A lazy, persistent in-container browser fallback for Rutor when its HTTP fast path receives an HTTP 403 or recognizable interactive verification page.
+- Focused transport tests covering the normal HTTP path, browser fallback, clearance reuse, lifecycle cleanup, and non-challenge failures.
+
+### Changed
+
+- Successful Rutor browser clearance now seeds cookies and the browser user-agent back into the existing HTTP session, allowing later requests to return to the low-overhead path.
+- Rutor browser resources are created only after a challenge and are closed through the standard tracker-plugin shutdown lifecycle.
+
+### Fixed
+
+- Production dependency pruning no longer waits for npm audit or funding network calls during container builds.
+
 ## [0.5.0-integrated.3] - 2026-09-04
 
 ### Added

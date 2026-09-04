@@ -12,7 +12,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 
 FROM docker.io/library/node:22-bookworm-slim AS runtime
 

@@ -28,13 +28,13 @@ Torrentinel complements download clients and media automation. It does not downl
 
 ## Deployment
 
-The experimental `torrentinel_integrated` branch provides one complete Torrentinel container with its Patchright browser, stores application data in named volumes, and includes a health check. It does not require or expose a browser sidecar. Kinozal login/search and RuTracker detail/recovery traffic use the browser when interactive verification is required.
+The experimental `torrentinel_integrated` branch provides one complete Torrentinel container with its Patchright browser, stores application data in named volumes, and includes a health check. It does not require or expose a browser sidecar. Kinozal login/search and RuTracker detail/recovery traffic use the browser when interactive verification is required, while Rutor stays on direct HTTP unless a challenge triggers the browser fallback.
 
 The canonical repository contains the current Compose file, Podman Quadlets, direct Linux instructions, configuration reference, backup guidance, screenshots, and release notes:
 
 **[github.com/ib0ndar/Torrentinel](https://github.com/ib0ndar/Torrentinel)**
 
-Use the branch-specific installation commands from the repository README. The integrated canary is published as `bah0/torrentinel:v0.5.0-integrated.3` for `linux/amd64` and `linux/arm64`; it remains separate from the stable `bah0/torrentinel:latest` image.
+Use the branch-specific installation commands from the repository README. The integrated canary is published as `bah0/torrentinel:v0.5.0-integrated.4` for `linux/amd64` and `linux/arm64`; it remains separate from the stable `bah0/torrentinel:latest` image.
 
 ## Important operational notes
 

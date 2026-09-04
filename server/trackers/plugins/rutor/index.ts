@@ -5,8 +5,7 @@ import { rutorManifest } from "./manifest.js";
 import { createRutorRuleDiscovery } from "./rules.js";
 import { RutorTransport } from "./transport.js";
 
-export function createRutorPlugin(): TrackerPlugin {
-  const transport = new RutorTransport();
+export function createRutorPlugin(transport = new RutorTransport()): TrackerPlugin {
   const normalizeUrl = (url: URL, baseUrl: string) => new URL(`${url.pathname}${url.search}`, baseUrl).toString();
   return {
     manifest: rutorManifest,
@@ -14,5 +13,6 @@ export function createRutorPlugin(): TrackerPlugin {
     normalizeUrl,
     direct: createRutorDirectMonitor(transport, normalizeUrl),
     rules: createRutorRuleDiscovery(transport),
+    close: () => transport.close(),
   };
 }
