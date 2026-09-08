@@ -21,9 +21,6 @@
 
 Torrentinel is a self-hosted watchlist and change-detection service. It monitors selected tracker releases, detects changes to titles, artwork, magnets, torrent files, and metadata, discovers new phrase matches, keeps per-user history, and sends Telegram notifications.
 
-> [!IMPORTANT]
-> This `torrentinel_integrated` branch is an experimental canary. It replaces the FlareSolverr sidecar with a Patchright-controlled browser inside the Torrentinel image. Keep it separate from the production deployment and its data volumes until Kinozal and RuTracker monitoring have been observed over time.
-
 <p align="center">
   <img src="docs/screenshots/product-tour.gif" alt="Torrentinel product tour showing release monitoring, change history, and tracker diagnostics" width="960">
 </p>
@@ -41,18 +38,22 @@ Torrentinel is designed for people who want to follow releases over time, includ
 
 ## Quick start with Docker Compose
 
-This is the shortest complete deployment. It builds one Torrentinel image containing the application, Patchright, Chrome or Chromium, and a private virtual display. No browser sidecar or second service is required.
+This is the shortest complete deployment. It runs one Torrentinel image containing the application, Patchright, Chrome or Chromium, and a private virtual display. No browser sidecar or second service is required.
+
+The first two commands ask GitHub for the latest stable release tag automatically and store it in `RELEASE`; there is no version number to replace manually.
 
 ```sh
-git clone --branch torrentinel_integrated --depth 1 \
-  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
-cd Torrentinel-integrated
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
+git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
+cd Torrentinel
 cp .env.example .env
 # Edit .env now if the public URL or host port will differ.
 docker compose config
-docker compose build
+docker compose pull
 docker compose up -d
-curl -fsS http://127.0.0.1:18080/api/health
+curl -fsS http://127.0.0.1:8080/api/health
 ```
 
 Open the configured URL and complete the [first sign-in](#first-sign-in).
@@ -129,7 +130,7 @@ Torrentinel can be installed directly on a Linux host as a Node.js service, with
 | [Docker Compose](#docker-compose) | The shortest complete installation | Included | Docker Engine and Compose v2 |
 | [Podman Quadlet](#podman-quadlet) | Rootless, systemd-managed containers | Included | Podman with Quadlet, systemd user services, cgroup v2 |
 
-All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Container examples use the separately tagged experimental image `bah0/torrentinel:v0.5.0-integrated.4`; it does not replace the stable `latest` channel. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
+All methods require Git and `curl`, plus outbound HTTPS access to the configured trackers and Telegram when notifications are enabled. Each example resolves GitHub's latest stable release when you run it and uses that same tag for the remaining commands. Choose the final HTTP port and `PUBLIC_URL` before linking Telegram or placing Torrentinel behind a reverse proxy.
 
 ### Direct installation on Linux
 
@@ -144,9 +145,11 @@ git --version
 Create a dedicated system account named `torrentinel` with your distribution's account-management tool. The account does not need an interactive shell. Build on the target host, or on a Linux system with the same architecture, libc, and Node.js ABI:
 
 ```sh
-git clone --branch torrentinel_integrated --depth 1 \
-  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
-cd Torrentinel-integrated
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
+git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
+cd Torrentinel
 npm ci
 npm run build
 npm prune --omit=dev
@@ -180,7 +183,7 @@ sudo systemctl status torrentinel.service --no-pager
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-Direct installations must provide a Patchright-compatible Chrome or Chromium binary. Use `BROWSER_CHANNEL=chrome` for an installed Google Chrome, or `BROWSER_CHANNEL=chromium` for the browser installed by Patchright. Browser package and display setup varies by Linux distribution; Docker Compose is the reproducible deployment path for this experimental branch.
+Direct installations must provide a Patchright-compatible Chrome or Chromium binary. Use `BROWSER_CHANNEL=chrome` for an installed Google Chrome, or `BROWSER_CHANNEL=chromium` for the browser installed by Patchright. Browser package and display setup varies by Linux distribution; Docker Compose provides the reproducible container deployment path.
 
 If the host does not use systemd, run `/usr/bin/env node /opt/torrentinel/dist/server/index.js` under its service manager with the variables from `deploy/native/torrentinel.env` and write access to both `/var/lib/torrentinel` subdirectories.
 
@@ -189,9 +192,11 @@ If the host does not use systemd, run `/usr/bin/env node /opt/torrentinel/dist/s
 Docker Compose runs one Torrentinel container and stores persistent data in two named volumes. The application volume also retains the integrated browser profiles and their reusable login and challenge-clearance cookies.
 
 ```sh
-git clone --branch torrentinel_integrated --depth 1 \
-  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
-cd Torrentinel-integrated
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
+git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
+cd Torrentinel
 cp .env.example .env
 ```
 
@@ -202,16 +207,16 @@ docker compose config
 docker compose pull
 docker compose up -d
 docker compose ps
-curl -fsS http://127.0.0.1:18080/api/health
+curl -fsS http://127.0.0.1:8080/api/health
 ```
 
 If `TORRENTINEL_PORT` is changed, use that port in the health-check URL. View logs with the commands in the [operations guide](docs/operations.md#logs).
 
-`docker compose ps` should list only `torrentinel-integrated`. Chrome runs inside that container and does not expose a separate API or network port. The default canary port and volumes are deliberately distinct from the stable deployment.
+`docker compose ps` should list only `torrentinel`. Chrome runs inside that container and does not expose a separate API or network port.
 
 ### Podman Quadlet
 
-The supplied Quadlets run the separately tagged experimental container rootlessly under the current user's systemd manager. They are not specific to one Linux distribution, but they require Quadlet support and cgroup v2:
+The supplied Quadlets run Torrentinel rootlessly under the current user's systemd manager. They are not specific to one Linux distribution, but they require Quadlet support and cgroup v2:
 
 ```sh
 podman --version
@@ -222,30 +227,32 @@ systemctl --user --version
 The cgroup command must report `v2`. Install the tagged deployment files and create a private local environment file:
 
 ```sh
-git clone --branch torrentinel_integrated --depth 1 \
-  https://github.com/ib0ndar/Torrentinel.git Torrentinel-integrated
-cd Torrentinel-integrated
-podman pull docker.io/bah0/torrentinel:v0.5.0-integrated.4
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+  https://github.com/ib0ndar/Torrentinel/releases/latest)"
+RELEASE="${release_url##*/}"
+git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
+cd Torrentinel
+podman pull "docker.io/bah0/torrentinel:$RELEASE"
 install -d -m 0700 "$HOME/.config/containers/systemd"
 install -m 0644 \
   deploy/*.container deploy/*.volume \
   "$HOME/.config/containers/systemd/"
 install -m 0600 \
-  deploy/torrentinel-integrated.env.example \
-  "$HOME/.config/containers/systemd/torrentinel-integrated.env"
+  deploy/torrentinel.env.example \
+  "$HOME/.config/containers/systemd/torrentinel.env"
 ```
 
-Edit `~/.config/containers/systemd/torrentinel-integrated.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied canary Quadlet publishes TCP port `18080`, separate from the stable deployment's default port. Enable the user manager at boot and start Torrentinel:
+Edit `~/.config/containers/systemd/torrentinel.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied Quadlet publishes TCP port `8999`. Enable the user manager at boot and start Torrentinel:
 
 ```sh
 sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload
-systemctl --user start torrentinel-integrated.service
-systemctl --user status torrentinel-integrated.service --no-pager
-curl -fsS http://127.0.0.1:18080/api/health
+systemctl --user start torrentinel.service
+systemctl --user status torrentinel.service --no-pager
+curl -fsS http://127.0.0.1:8999/api/health
 ```
 
-The `.volume` Quadlets create `torrentinel_integrated_app` and `torrentinel_integrated_db` automatically. If systemd does not generate `torrentinel-integrated.service`, follow the [Podman troubleshooting guidance](docs/operations.md#troubleshooting).
+The `.volume` Quadlets create `torrentinel_app` and `torrentinel_db` automatically. If systemd does not generate `torrentinel.service`, follow the [Podman troubleshooting guidance](docs/operations.md#troubleshooting).
 
 ### First sign-in
 
@@ -264,13 +271,13 @@ Do not expose a new installation to an untrusted network until the default admin
 
 A RuTracker login is optional for ordinary public-feed monitoring and required for authenticated recovery after a detected feed gap. The configured polling interval is the actual tracker request interval. Administration displays the rolling-feed window, consecutive-batch overlap, new-entry count, and safety margin.
 
-Runtime settings are read from the process environment. The direct systemd installation uses `/etc/torrentinel/torrentinel.env`, Docker Compose uses `.env`, and Podman uses `~/.config/containers/systemd/torrentinel-integrated.env`.
+Runtime settings are read from the process environment. The direct systemd installation uses `/etc/torrentinel/torrentinel.env`, Docker Compose uses `.env`, and Podman uses `~/.config/containers/systemd/torrentinel.env`.
 
 | Setting | Direct Linux installation | Docker Compose | Podman Quadlet | Purpose |
 | --- | --- | --- | --- | --- |
 | `HOST` | `127.0.0.1`, editable | Fixed to image default `0.0.0.0` | Fixed to image default `0.0.0.0` | Application listen address |
 | `PORT` | `8080`, editable | Internal port `8080` | Internal port `8080` | Application container/process port |
-| `TORRENTINEL_PORT` | Not used | `18080`, editable | Not used | Docker canary host port mapped to internal `8080` |
+| `TORRENTINEL_PORT` | Not used | `8080`, editable | Not used | Docker host port mapped to internal `8080` |
 | `PUBLIC_URL` | Editable | Editable | Editable | Externally reachable URL without a trailing slash |
 | `DATA_DIR` | `/var/lib/torrentinel/database` | Fixed volume path `/data` | Fixed volume path `/data` | SQLite database directory |
 | `APP_DATA_DIR` | `/var/lib/torrentinel/application` | Fixed volume path `/var/lib/torrentinel` | Fixed volume path `/var/lib/torrentinel` | Encryption key, cached covers, and browser profiles |

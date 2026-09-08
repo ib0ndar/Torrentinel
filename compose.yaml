@@ -1,21 +1,21 @@
-name: torrentinel-integrated
+name: torrentinel
 
 services:
   torrentinel:
-    image: "bah0/torrentinel:v0.5.0-integrated.4"
+    image: bah0/torrentinel:v0.5.0
     build:
       context: .
       dockerfile: Containerfile
       args:
-        VERSION: "0.5.0-integrated.4"
-        VCS_REF: "torrentinel_integrated"
-    container_name: torrentinel-integrated
+        VERSION: "0.5.0"
+        VCS_REF: "v0.5.0"
+    container_name: torrentinel
     restart: unless-stopped
     shm_size: 512m
     ports:
-      - "${TORRENTINEL_PORT:-18080}:8080"
+      - "${TORRENTINEL_PORT:-8080}:8080"
     environment:
-      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:18080}"
+      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
       POLL_INTERVAL_MINUTES: "${POLL_INTERVAL_MINUTES:-60}"
       POLL_STARTUP_DELAY_SECONDS: "${POLL_STARTUP_DELAY_SECONDS:-20}"
       TRACKER_REQUEST_TIMEOUT_MS: "${TRACKER_REQUEST_TIMEOUT_MS:-30000}"
@@ -30,6 +30,6 @@ services:
 
 volumes:
   torrentinel_app:
-    name: torrentinel_integrated_app
+    name: torrentinel_app
   torrentinel_db:
-    name: torrentinel_integrated_db
+    name: torrentinel_db

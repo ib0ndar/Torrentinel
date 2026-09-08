@@ -2,6 +2,32 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.0] - 2026-09-08
+
+### Added
+
+- A persistent Patchright browser inside the Torrentinel process, replacing the external FlareSolverr service and its unauthenticated browser-control port.
+- Architecture-aware browser packaging with Google Chrome on `linux/amd64` and Patchright Chromium on `linux/arm64`.
+- Per-user Kinozal browser profiles, browser-native login, reusable authenticated sessions, and bounded retry backoff.
+- A lazy browser fallback for Rutor challenges that returns to the lower-overhead HTTP path after seeding reusable clearance cookies.
+- Focused coverage for browser-session reuse, login submission, challenge handling, Rutor fallback, lifecycle cleanup, and restart recovery.
+
+### Changed
+
+- Docker Compose and Podman now deploy one self-contained Torrentinel container with a private virtual display and 512 MiB of shared memory.
+- RuTracker detail monitoring and authenticated feed-gap recovery share serialized, persistent browser sessions.
+- Browser profiles are retained with the encryption key and cover cache in the application-data volume and are included in paired backups.
+- Dependency installation and production pruning no longer wait for npm audit or funding network calls during container builds.
+
+### Removed
+
+- The FlareSolverr client, sidecar container, private network, URL setting, timeout setting, and standalone Quadlet.
+
+### Fixed
+
+- Stale Chrome profile locks are removed only when their control socket is no longer active, allowing safe recovery after a container restart.
+- Current Fastify URL-validation dependencies include the available schema-validation and URI-normalization security fixes.
+
 ## [0.5.0-integrated.4] - 2026-09-04
 
 ### Added
@@ -234,6 +260,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.5.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.0
 [0.4.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.3
 [0.4.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.2
 [0.4.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.1
