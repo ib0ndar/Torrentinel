@@ -1253,7 +1253,10 @@ function EmptyState({ icon, title, text, action }: { icon: IconName; title: stri
 
 function EmptyCompact({ text }: { text: string }) { return <div className="empty-compact">{text}</div>; }
 function ListSkeleton() { return <div className="skeleton"><span /><span /><span /></div>; }
-function TrackerTag({ tracker }: { tracker: TrackerKey }) { return <span className={`tracker-tag tracker-tag--${tracker}`} title={trackerName(tracker)}>{tracker === "rutracker" ? "RT" : tracker === "kinozal" ? "KZ" : "RU"}</span>; }
+function TrackerTag({ tracker }: { tracker: TrackerKey }) {
+  const name = trackerName(tracker);
+  return <span className="tracker-tag" title={name}><img src={`/tracker-favicons/${tracker}.ico`} alt={`${name} favicon`} width="20" height="20" /></span>;
+}
 
 function BrandMark({ size = 32 }: { size?: number }) {
   return <img className="brand-mark" src="/brand/torrentinel-mark.svg" width={size} height={size} alt="" aria-hidden="true" />;
