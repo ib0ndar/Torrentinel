@@ -181,6 +181,10 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .tracker-stack { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .tracker-tag { width: 31px; height: 24px; display: inline-grid; place-items: center; }
 .tracker-tag img { display: block; width: 20px; height: 20px; object-fit: contain; }
+.tracker-tag--abbreviations { border: 1px solid var(--line-strong); border-radius: 5px; background: rgba(255,255,255,.025); color: var(--muted); font-size: 10px; font-weight: 850; letter-spacing: .02em; }
+.tracker-tag--abbreviations.tracker-tag--kinozal { color: #f1c66d; border-color: rgba(241,198,109,.24); background: rgba(241,198,109,.07); }
+.tracker-tag--abbreviations.tracker-tag--rutracker { color: #79aefe; border-color: rgba(121,174,254,.24); background: rgba(121,174,254,.07); }
+.tracker-tag--abbreviations.tracker-tag--rutor { color: #d88dff; border-color: rgba(216,141,255,.22); background: rgba(216,141,255,.07); }
 .time-cell { color: var(--muted); font-size: 13px; }
 .row-status { display: flex; align-items: center; gap: 10px; padding-right: 35px; }
 .state { display: inline-flex; align-items: center; min-height: 26px; border-radius: 13px; padding: 0 9px; background: rgba(255,255,255,.045); color: var(--muted); font-size: 11px; font-weight: 750; white-space: nowrap; }
@@ -307,6 +311,17 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .settings-copy h2, .table-section h2 { font-size: 19px; letter-spacing: -.025em; }
 .settings-copy p { max-width: 390px; margin-top: 10px; color: var(--muted); font-size: 14px; line-height: 1.55; }
 .settings-control { min-width: 0; }
+.marker-options { display: grid; gap: 8px; min-width: 0; border: 0; padding: 0; }
+.marker-options__legend { margin-bottom: 1px; padding: 0; color: var(--muted); font-size: 13px; }
+.marker-option { min-height: 74px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: rgba(11,16,32,.28); cursor: pointer; transition: border-color .14s ease, background .14s ease; }
+.marker-option:hover { border-color: var(--line-strong); background: rgba(255,255,255,.025); }
+.marker-option--active { border-color: rgba(34,211,238,.3); background: var(--accent-soft); }
+.marker-option input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.marker-option__copy { min-width: 0; display: grid; gap: 5px; }
+.marker-option__copy strong { font-size: 13px; }
+.marker-option__copy small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.marker-preview { display: flex; align-items: center; gap: 5px; padding-left: 12px; }
+.marker-options:disabled { opacity: .68; }
 .notice, .linked-account { min-height: 66px; display: flex; align-items: center; gap: 13px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 8px; }
 .notice .icon { color: var(--warning); }
 .notice span, .linked-account > span:nth-child(2) { display: grid; gap: 4px; }

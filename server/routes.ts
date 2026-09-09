@@ -70,7 +70,7 @@ export function registerRoutes(
     const input = parse(credentialsSchema, request.body, reply);
     if (!input) return;
     const row = db.prepare(`
-      SELECT id, username, password_hash, is_admin, disabled, must_change_password
+      SELECT id, username, password_hash, is_admin, disabled, must_change_password, tracker_marker_style
       FROM users WHERE username = ?
     `).get(input.username) as UserDbRow | undefined;
     if (!row || row.disabled || !(await compare(input.password, row.password_hash))) {
@@ -104,6 +104,15 @@ export function registerRoutes(
       UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?
     `).run(await hash(input.newPassword, 12), timestamp, request.user.id);
     request.user.mustChangePassword = false;
+    return { user: request.user };
+  });
+
+  app.put("/api/settings/source-markers", { preHandler: requireReadyUser }, async (request, reply) => {
+    const input = parse(z.object({ trackerMarkerStyle: z.enum(["icons", "abbreviations"]) }), request.body, reply);
+    if (!input || !request.user) return;
+    db.prepare("UPDATE users SET tracker_marker_style = ?, updated_at = ? WHERE id = ?")
+      .run(input.trackerMarkerStyle, nowIso(), request.user.id);
+    request.user.trackerMarkerStyle = input.trackerMarkerStyle;
     return { user: request.user };
   });
 
@@ -774,7 +783,13 @@ function adapterForUserUrl(db: SqliteDatabase, userId: string, value: string) {
 }
 
 function serializeUser(row: UserDbRow) {
-  return { id: row.id, username: row.username, isAdmin: Boolean(row.is_admin), mustChangePassword: Boolean(row.must_change_password) };
+  return {
+    id: row.id,
+    username: row.username,
+    isAdmin: Boolean(row.is_admin),
+    mustChangePassword: Boolean(row.must_change_password),
+    trackerMarkerStyle: row.tracker_marker_style,
+  };
 }
 
 function serializeCollection(value: unknown) {
@@ -917,7 +932,7 @@ function isUniqueError(error: unknown): boolean {
   return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);
 }
 
-interface UserDbRow { id: string; username: string; password_hash: string; is_admin: number; disabled: number; must_change_password: number }
+interface UserDbRow { id: string; username: string; password_hash: string; is_admin: number; disabled: number; must_change_password: number; tracker_marker_style: "icons" | "abbreviations" }
 interface SubscriptionDbRow {
   id: string; collection_id: string; collection_name: string; type: "direct" | "rule"; name: string;
   direct_url: string | null; required_terms: string; ignored_terms: string; tracker_keys: string | null;

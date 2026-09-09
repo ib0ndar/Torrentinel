@@ -2,13 +2,13 @@ name: torrentinel
 
 services:
   torrentinel:
-    image: bah0/torrentinel:v0.5.1
+    image: bah0/torrentinel:v0.5.2
     build:
       context: .
       dockerfile: Containerfile
       args:
-        VERSION: "0.5.1"
-        VCS_REF: "v0.5.1"
+        VERSION: "0.5.2"
+        VCS_REF: "v0.5.2"
     container_name: torrentinel
     restart: unless-stopped
     shm_size: 512m

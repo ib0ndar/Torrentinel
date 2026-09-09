@@ -1,11 +1,13 @@
 export type TrackerKey = "kinozal" | "rutor" | "rutracker";
 export type SubscriptionType = "direct" | "rule";
+export type TrackerMarkerStyle = "icons" | "abbreviations";
 
 export interface User {
   id: string;
   username: string;
   isAdmin: boolean;
   mustChangePassword: boolean;
+  trackerMarkerStyle: TrackerMarkerStyle;
 }
 
 export interface Collection {

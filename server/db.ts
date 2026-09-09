@@ -26,6 +26,7 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
       is_admin INTEGER NOT NULL DEFAULT 0,
       disabled INTEGER NOT NULL DEFAULT 0,
       must_change_password INTEGER NOT NULL DEFAULT 0,
+      tracker_marker_style TEXT NOT NULL DEFAULT 'icons' CHECK(tracker_marker_style IN ('icons', 'abbreviations')),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -283,6 +284,12 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
 }
 
 function migrate(db: SqliteDatabase): void {
+  const userColumns = db.prepare("PRAGMA table_info(users)")
+    .all() as Array<{ name: string }>;
+  if (!userColumns.some((column) => column.name === "tracker_marker_style")) {
+    db.exec("ALTER TABLE users ADD COLUMN tracker_marker_style TEXT NOT NULL DEFAULT 'icons'");
+  }
+
   const trackerStateColumns = db.prepare("PRAGMA table_info(subscription_tracker_state)")
     .all() as Array<{ name: string }>;
   if (!trackerStateColumns.some((column) => column.name === "discovery_revision")) {

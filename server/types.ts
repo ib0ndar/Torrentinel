@@ -1,12 +1,14 @@
 export const TRACKER_KEYS = ["kinozal", "rutor", "rutracker"] as const;
 export type TrackerKey = (typeof TRACKER_KEYS)[number];
 export type SubscriptionType = "direct" | "rule";
+export type TrackerMarkerStyle = "icons" | "abbreviations";
 
 export interface AuthUser {
   id: string;
   username: string;
   isAdmin: boolean;
   mustChangePassword: boolean;
+  trackerMarkerStyle: TrackerMarkerStyle;
 }
 
 export interface Release {

@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
 import { config } from "./config.js";
-import type { AuthUser } from "./types.js";
+import type { AuthUser, TrackerMarkerStyle } from "./types.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -19,6 +19,7 @@ interface UserRow {
   is_admin: number;
   disabled: number;
   must_change_password: number;
+  tracker_marker_style: TrackerMarkerStyle;
 }
 
 function tokenHash(token: string): string {
@@ -31,6 +32,7 @@ function toAuthUser(row: UserRow): AuthUser {
     username: row.username,
     isAdmin: Boolean(row.is_admin),
     mustChangePassword: Boolean(row.must_change_password),
+    trackerMarkerStyle: row.tracker_marker_style,
   };
 }
 
@@ -42,7 +44,7 @@ export function registerAuth(app: FastifyInstance, db: SqliteDatabase): void {
     if (!token) return;
 
     const row = db.prepare(`
-      SELECT u.id, u.username, u.is_admin, u.disabled, u.must_change_password
+      SELECT u.id, u.username, u.is_admin, u.disabled, u.must_change_password, u.tracker_marker_style
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ? AND s.expires_at > ?

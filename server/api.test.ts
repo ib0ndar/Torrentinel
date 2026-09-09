@@ -51,6 +51,26 @@ describe("authenticated API", () => {
         payload: { currentPassword: "admin", newPassword: "Admin-Test-2026!" },
       });
       expect(changed.statusCode).toBe(200);
+      expect(changed.json().user.trackerMarkerStyle).toBe("icons");
+
+      const markerPreference = await app.inject({
+        method: "PUT",
+        url: "/api/settings/source-markers",
+        headers: { cookie: adminCookie },
+        payload: { trackerMarkerStyle: "abbreviations" },
+      });
+      expect(markerPreference.statusCode).toBe(200);
+      expect(markerPreference.json().user.trackerMarkerStyle).toBe("abbreviations");
+      expect(db.prepare("SELECT tracker_marker_style FROM users WHERE username = 'admin'").get())
+        .toEqual({ tracker_marker_style: "abbreviations" });
+
+      const invalidMarkerPreference = await app.inject({
+        method: "PUT",
+        url: "/api/settings/source-markers",
+        headers: { cookie: adminCookie },
+        payload: { trackerMarkerStyle: "logos" },
+      });
+      expect(invalidMarkerPreference.statusCode).toBe(400);
 
       const trackerSettings = await app.inject({
         method: "PUT",

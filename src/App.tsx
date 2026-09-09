@@ -28,6 +28,7 @@ import type {
   TelegramStatus,
   Tracker,
   TrackerKey,
+  TrackerMarkerStyle,
   User,
 } from "./types";
 
@@ -62,6 +63,7 @@ type DialogApi = {
 };
 
 const DialogContext = createContext<DialogApi | null>(null);
+const TrackerMarkerStyleContext = createContext<TrackerMarkerStyle>("icons");
 
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
@@ -113,21 +115,23 @@ export default function App() {
   if (user.mustChangePassword) return <ChangePassword user={user} onChanged={setUser} notify={notify} />;
 
   return (
-    <DialogProvider>
-      <AppShell
+    <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}>
+      <DialogProvider>
+        <AppShell
           user={user}
           setUser={setUser}
           notify={notify}
           path={path}
           navigate={navigate}
           renderPage={(intervalMinutes) => path === "/settings"
-            ? <Settings notify={notify} />
+            ? <Settings user={user} onUserChange={setUser} notify={notify} />
             : path === "/admin" && user.isAdmin
               ? <Admin notify={notify} />
               : <Workspace notify={notify} intervalMinutes={intervalMinutes} />}
         />
         {toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}
-    </DialogProvider>
+      </DialogProvider>
+    </TrackerMarkerStyleContext.Provider>
   );
 }
 
@@ -647,7 +651,7 @@ function EditSubscriptionForm({ item, busy, onCancel, onSave }: { item: Subscrip
 
 type TrackerSettingsDraft = { mirror: string; username: string; password: string; saving: boolean };
 
-function Settings({ notify }: { notify: Notify }) {
+function Settings({ user, onUserChange, notify }: { user: User; onUserChange: (user: User) => void; notify: Notify }) {
   const dialog = useDialog();
   const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
   const [link, setLink] = useState<{ code: string; expiresAt: string; deepLink?: string } | null>(null);
@@ -655,6 +659,7 @@ function Settings({ notify }: { notify: Notify }) {
   const [drafts, setDrafts] = useState<Partial<Record<TrackerKey, TrackerSettingsDraft>>>({});
   const [botToken, setBotToken] = useState("");
   const [telegramBusy, setTelegramBusy] = useState(false);
+  const [markerBusy, setMarkerBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [telegramResult, trackerResult] = await Promise.all([
@@ -741,8 +746,36 @@ function Settings({ notify }: { notify: Notify }) {
     try { await api(`/api/trackers/${tracker.key}/settings`, { method: "PUT", ...jsonBody({ clearCredentials: true }) }); await load(); notify(`${tracker.displayName} login removed`); }
     catch (error) { notify(errorMessage(error), "bad"); }
   }
+  async function setMarkerStyle(trackerMarkerStyle: TrackerMarkerStyle) {
+    if (markerBusy || trackerMarkerStyle === user.trackerMarkerStyle) return;
+    setMarkerBusy(true);
+    try {
+      const result = await api<{ user: User }>("/api/settings/source-markers", {
+        method: "PUT",
+        ...jsonBody({ trackerMarkerStyle }),
+      });
+      onUserChange(result.user);
+      notify("Source marker preference saved");
+    } catch (error) {
+      notify(errorMessage(error), "bad");
+    } finally {
+      setMarkerBusy(false);
+    }
+  }
   return (
-    <Page title="Settings" eyebrow="Delivery & access" description="Configure private tracker access and Telegram delivery for this account.">
+    <Page title="Settings" eyebrow="Preferences & access" description="Personalize source markers and configure private tracker access and Telegram delivery.">
+      <section className="settings-section settings-section--top">
+        <div className="settings-copy"><h2>Source markers</h2><p>Choose how trackers are identified throughout the monitor, details, settings, and diagnostics views.</p></div>
+        <fieldset className="marker-options" disabled={markerBusy}>
+          <legend className="marker-options__legend">Source marker style</legend>
+          {(["icons", "abbreviations"] as const).map((style) => <label key={style} className={user.trackerMarkerStyle === style ? "marker-option marker-option--active" : "marker-option"}>
+            <input type="radio" name="tracker-marker-style" value={style} checked={user.trackerMarkerStyle === style} onChange={() => void setMarkerStyle(style)} />
+            <span className="marker-option__copy"><strong>{style === "icons" ? "Website icons" : "Abbreviation badges"}</strong><small>{style === "icons" ? "Use each tracker’s published favicon" : "Use the RT, RU, and KZ letter markers"}</small></span>
+            <span className="marker-preview" aria-hidden="true">{(["kinozal", "rutor", "rutracker"] as TrackerKey[]).map((tracker) => <TrackerTag key={tracker} tracker={tracker} variant={style} decorative />)}</span>
+          </label>)}
+        </fieldset>
+      </section>
+
       <section className="settings-section settings-section--top">
         <div className="settings-copy"><h2>Telegram bot</h2><p>Create a bot with BotFather, store its token securely, then link the private chat that should receive changes.</p></div>
         <div className="settings-control">
@@ -1253,9 +1286,14 @@ function EmptyState({ icon, title, text, action }: { icon: IconName; title: stri
 
 function EmptyCompact({ text }: { text: string }) { return <div className="empty-compact">{text}</div>; }
 function ListSkeleton() { return <div className="skeleton"><span /><span /><span /></div>; }
-function TrackerTag({ tracker }: { tracker: TrackerKey }) {
+function TrackerTag({ tracker, variant: forcedVariant, decorative = false }: { tracker: TrackerKey; variant?: TrackerMarkerStyle; decorative?: boolean }) {
+  const preferredVariant = useContext(TrackerMarkerStyleContext);
+  const variant = forcedVariant || preferredVariant;
   const name = trackerName(tracker);
-  return <span className="tracker-tag" title={name}><img src={`/tracker-favicons/${tracker}.ico`} alt={`${name} favicon`} width="20" height="20" /></span>;
+  const marker = variant === "icons"
+    ? <img src={`/tracker-favicons/${tracker}.ico`} alt="" width="20" height="20" />
+    : tracker === "rutracker" ? "RT" : tracker === "kinozal" ? "KZ" : "RU";
+  return <span className={`tracker-tag tracker-tag--${variant} tracker-tag--${tracker}`} title={decorative ? undefined : name} role={decorative ? undefined : "img"} aria-label={decorative ? undefined : name}>{marker}</span>;
 }
 
 function BrandMark({ size = 32 }: { size?: number }) {

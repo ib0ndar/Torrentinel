@@ -2,6 +2,12 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.2] - 2026-09-09
+
+### Added
+
+- An account-specific Source markers setting for choosing website favicons or abbreviation badges, with favicons enabled by default.
+
 ## [0.5.1] - 2026-09-09
 
 ### Changed
@@ -266,6 +272,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.5.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.2
 [0.5.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.1
 [0.5.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.0
 [0.4.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.4.3
