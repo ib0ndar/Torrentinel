@@ -332,7 +332,7 @@ export class Scheduler {
           this.db.prepare(`
             UPDATE subscriptions
             SET name = ?, current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
-                last_changed_at = ?, last_error = NULL, is_updated = 1, updated_at = ?
+                last_changed_at = ?, last_error = NULL, updated_at = ?
             WHERE id = ?
           `).run(currentSnapshot.title, currentSnapshot.fingerprint, JSON.stringify(currentSnapshot), checkedAt, checkedAt, checkedAt, row.id);
           this.db.prepare(`
@@ -617,7 +617,7 @@ export class Scheduler {
         `).run(nanoid(), subscriptionId, rule.user_id, summary, JSON.stringify({ releases }), timestamp);
         this.db.prepare(`
           UPDATE subscriptions
-          SET last_changed_at = ?, is_updated = 1, updated_at = ? WHERE id = ?
+          SET last_changed_at = ?, updated_at = ? WHERE id = ?
         `).run(timestamp, timestamp, subscriptionId);
       })();
       status.changed += 1;

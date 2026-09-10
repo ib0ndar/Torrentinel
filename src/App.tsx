@@ -3,11 +3,11 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useId,
   useMemo,
   useRef,
@@ -310,7 +310,7 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "unread" | "updated" | "errors">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "errors">("all");
   const [search, setSearch] = useState("");
   const [newCollection, setNewCollection] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -354,7 +354,6 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
   const selected = collections.find((collection) => collection.id === selectedId);
   const visible = useMemo(() => subscriptions.filter((item) => {
     if (filter === "unread" && !item.isUnread) return false;
-    if (filter === "updated" && !item.isUpdated) return false;
     if (filter === "errors" && !item.lastError) return false;
     return !search || `${item.label} ${item.requiredTerms.join(" ")} ${item.trackerKeys.join(" ")}`.toLowerCase().includes(search.toLowerCase());
   }), [subscriptions, filter, search]);
@@ -405,7 +404,7 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
             <button key={collection.id} className={`collection-item ${selectedId === collection.id ? "collection-item--active" : ""}`} onClick={() => setSelectedId(collection.id)}>
               <span className="collection-glyph">{collection.name.slice(0, 1).toUpperCase()}</span>
               <span className="collection-copy"><strong>{collection.name}</strong><small>{collection.subscriptionCount} subscriptions</small></span>
-              {(collection.unreadCount > 0 || collection.updatedCount > 0) && <span className="count-badge">{collection.unreadCount || collection.updatedCount}</span>}
+              {collection.unreadCount > 0 && <span className="count-badge">{collection.unreadCount}</span>}
             </button>
           ))}
         </div>
@@ -427,7 +426,7 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
 
             <div className="list-toolbar">
               <div className="filter-tabs">
-                {(["all", "unread", "updated", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{capitalize(name)}</button>)}
+                {(["all", "unread", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{capitalize(name)}</button>)}
               </div>
               <label className="search-box"><Icon name="search" size={16} /><input placeholder="Filter this collection" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
             </div>
@@ -435,7 +434,7 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
             <div className="subscription-head"><span>Subscription</span><span>Source</span><span>Last check</span><span>Status</span></div>
             <div className="subscription-list">
               {loading ? <ListSkeleton /> : visible.map((item, index) => (
-                <SubscriptionRow key={item.id} item={item} index={index} onOpen={() => setSelectedSubscription(item.id)} onChanged={refresh} notify={notify} />
+                <SubscriptionRow key={item.id} item={item} index={index} onOpen={() => setSelectedSubscription(item.id)} />
               ))}
               {!loading && visible.length === 0 && <EmptyState icon="monitor" title={subscriptions.length ? "Nothing matches this view" : "No subscriptions yet"} text={subscriptions.length ? "Try a different status filter or search." : "Add a direct tracker link or a rule to begin monitoring."} action={!subscriptions.length ? <button className="button button--primary" onClick={() => setCreateOpen(true)}>Add subscription</button> : undefined} />}
             </div>
@@ -450,38 +449,21 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
   );
 }
 
-function SubscriptionRow({ item, index, onOpen, onChanged, notify }: { item: Subscription; index: number; onOpen: () => void; onChanged: () => Promise<void>; notify: Notify }) {
-  async function markRead(event: ReactMouseEvent) {
-    event.stopPropagation();
-    try {
-      await api(`/api/subscriptions/${item.id}/read`, { method: "POST", ...jsonBody({ read: item.isUnread }) });
-      await onChanged();
-    } catch (error) { notify(errorMessage(error), "bad"); }
-  }
-
+function SubscriptionRow({ item, index, onOpen }: { item: Subscription; index: number; onOpen: () => void }) {
   return (
-    <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""} ${item.isUpdated ? "subscription-row--updated" : ""}`} style={{ "--row-index": index } as CSSProperties}>
+    <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""}`} style={{ "--row-index": index } as CSSProperties}>
       <button type="button" className="subscription-open" onClick={onOpen}>
         <span className="subscription-main">
-          <span className={`type-icon type-icon--${item.type} ${item.isUpdated ? "type-icon--updated" : ""}`}><Icon name={item.isUpdated ? "bellAlert" : item.type === "direct" ? "link" : "rule"} size={17} /></span>
+          <span className={`type-icon type-icon--${item.type}`} title={item.type === "direct" ? "Direct subscription" : "Rule subscription"}><Icon name={item.type === "direct" ? "link" : "rule"} size={17} /></span>
           <span>
             {item.type === "rule" ? <PhraseDisplay phrases={item.requiredTerms} /> : <strong>{item.label}</strong>}
             <small>{item.type === "rule" ? item.ignoredTerms.length ? `Excludes ${item.ignoredTerms.join(", ")}` : "Matches every required phrase" : item.directUrl}</small>
           </span>
-          {item.isUpdated && <span className="updated-marker" title="Updated" />}
+          {item.isUnread && <span className="unread-marker" role="img" aria-label="Unread" title="Unread" />}
         </span>
         <span className="tracker-stack">{item.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span>
         <span className="time-cell">{item.lastCheckedAt ? relativeTime(item.lastCheckedAt) : "Pending"}</span>
-        <span className="row-status">{item.lastError ? <span className="state state--error">Needs attention</span> : !item.enabled ? <span className="state">Paused</span> : item.isUpdated ? <span className="state state--updated">Updated</span> : !item.initialized ? <span className="state state--pending">Learning</span> : <span className="state state--good">Watching</span>}</span>
-      </button>
-      <button
-        type="button"
-        className={`read-toggle ${item.isUnread ? "read-toggle--unread" : ""}`}
-        aria-label={item.isUnread ? "Unread. Mark read" : "Read. Mark unread"}
-        title={item.isUnread ? "Unread — click to mark read" : "Read — click to mark unread"}
-        onClick={markRead}
-      >
-        <Icon name={item.isUnread ? "unread" : "check"} size={18} />
+        <span className="row-status">{item.lastError ? <span className="state state--error">Needs attention</span> : !item.enabled ? <span className="state">Paused</span> : !item.initialized ? <span className="state state--pending">Learning</span> : <span className="state state--good">Watching</span>}</span>
       </button>
     </div>
   );
@@ -549,15 +531,19 @@ function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: 
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const load = useCallback(async () => {
-    const result = await api<{ subscription: Subscription; events: SubscriptionEvent[]; matches: RuleMatch[] }>(`/api/subscriptions/${id}`);
+  const load = useCallback(async (opening = false) => {
+    const result = await api<{ subscription: Subscription; events: SubscriptionEvent[]; matches: RuleMatch[] }>(
+      `/api/subscriptions/${id}${opening ? "/open" : ""}`,
+      opening ? { method: "POST" } : undefined,
+    );
     setItem(result.subscription); setEvents(result.events); setMatches(result.matches);
   }, [id]);
 
+  const onOpened = useEffectEvent(() => onChanged());
+  const onOpenError = useEffectEvent((error: unknown) => notify(errorMessage(error), "bad"));
   useEffect(() => {
-    void load().catch((error) => notify(errorMessage(error), "bad"));
-    void api(`/api/subscriptions/${id}/viewed`, { method: "POST" }).then(onChanged).catch(() => undefined);
-  }, [id, load, notify, onChanged]);
+    void load(true).then(() => onOpened()).catch((error) => onOpenError(error));
+  }, [load]);
   useEffect(() => {
     const interval = window.setInterval(() => void load().catch(() => undefined), 30_000);
     return () => window.clearInterval(interval);
@@ -577,8 +563,9 @@ function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: 
 
   async function markRead() {
     if (!item) return;
+    setBusy(true);
     try { await api(`/api/subscriptions/${id}/read`, { method: "POST", ...jsonBody({ read: item.isUnread }) }); await Promise.all([load(), onChanged()]); }
-    catch (error) { notify(errorMessage(error), "bad"); }
+    catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
 
   async function remove() {
@@ -619,7 +606,7 @@ function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: 
 
         <section className="detail-section"><div className="section-heading"><h3>Change history</h3><span>{events.length}</span></div>{events.length ? <div className="timeline">{events.map((event) => <div className="timeline-item" key={event.id}><span className={!event.readAt ? "timeline-dot timeline-dot--new" : "timeline-dot"} /><div><strong>{event.summary}</strong><small>{relativeTime(event.createdAt)}</small></div></div>)}</div> : <EmptyCompact text="Changes will appear here after the baseline." />}</section>
 
-        <section className="detail-section detail-section--actions"><button className="button button--quiet" onClick={markRead}>{item.isUnread ? "Mark read" : "Mark unread"}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, item.enabled ? "Subscription paused" : "Subscription resumed")}>{item.enabled ? "Pause" : "Resume"}</button><button className="button button--danger" onClick={() => void remove()}><Icon name="trash" />Delete</button></section>
+        <section className="detail-section detail-section--actions"><button className="button button--quiet" disabled={busy} onClick={markRead}>{item.isUnread ? "Mark read" : "Mark unread"}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, item.enabled ? "Subscription paused" : "Subscription resumed")}>{item.enabled ? "Pause" : "Resume"}</button><button className="button button--danger" onClick={() => void remove()}><Icon name="trash" />Delete</button></section>
       </div>}
     </Drawer>
   );
@@ -1300,7 +1287,7 @@ function BrandMark({ size = 32 }: { size?: number }) {
   return <img className="brand-mark" src="/brand/torrentinel-mark.svg" width={size} height={size} alt="" aria-hidden="true" />;
 }
 
-type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert" | "check" | "unread";
+type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close";
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const symbols: Record<IconName, string> = {
     monitor: "monitor-eye",
@@ -1322,9 +1309,6 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     download: "download",
     send: "bell",
     close: "add",
-    bellAlert: "bell-alert",
-    check: "check",
-    unread: "unread",
   };
   return <svg className={`icon icon--${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><use href={`${ICON_SPRITE_URL}#ti-${symbols[name]}`} /></svg>;
 }
@@ -1419,7 +1403,7 @@ function detailFragment(value: unknown, label: string): string | undefined {
 
 function diagnosticStateClass(outcome: string): string {
   if (["error", "failed", "missing", "blocked", "auth", "parse", "network", "unsupported", "coverage-gap"].includes(outcome)) return "state--error";
-  if (["changed", "new-matches"].includes(outcome)) return "state--updated";
+  if (["changed", "new-matches"].includes(outcome)) return "state--changed";
   if (["skipped", "temporarily-unavailable", "challenge"].includes(outcome)) return "state--pending";
   return "state--good";
 }

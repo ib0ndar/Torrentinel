@@ -14,6 +14,7 @@ Torrentinel complements download clients and media automation. It does not downl
 - Phrase-based release discovery with required and ignored terms
 - Telegram notifications with artwork and release links
 - Multi-user collections and administration
+- One unread activity indicator; opening details marks activity read, with manual unread reminders available
 - Encrypted tracker credentials and Telegram tokens
 - Feed-overlap diagnostics and authenticated RuTracker gap recovery
 - Source-built Linux container support for `amd64` and `arm64`

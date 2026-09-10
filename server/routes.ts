@@ -204,7 +204,6 @@ export function registerRoutes(
     const rows = db.prepare(`
       SELECT c.id, c.name, c.created_at, c.updated_at,
              COUNT(s.id) AS subscription_count,
-             COALESCE(SUM(CASE WHEN s.is_updated = 1 THEN 1 ELSE 0 END), 0) AS updated_count,
              COALESCE(SUM(CASE WHEN s.manual_unread = 1 OR EXISTS (
                SELECT 1 FROM subscription_events e WHERE e.subscription_id = s.id AND e.read_at IS NULL
              ) THEN 1 ELSE 0 END), 0) AS unread_count
@@ -230,7 +229,7 @@ export function registerRoutes(
       if (isUniqueError(error)) return reply.code(409).send({ error: "A collection with this name already exists" });
       throw error;
     }
-    return reply.code(201).send({ collection: { id, name: input.name, subscriptionCount: 0, unreadCount: 0, updatedCount: 0 } });
+    return reply.code(201).send({ collection: { id, name: input.name, subscriptionCount: 0, unreadCount: 0 } });
   });
 
   app.patch("/api/collections/:id", { preHandler: requireReadyUser }, async (request, reply) => {
@@ -340,19 +339,23 @@ export function registerRoutes(
   app.get("/api/subscriptions/:id", { preHandler: requireReadyUser }, async (request, reply) => {
     const params = parse(idParams, request.params, reply);
     if (!params || !request.user) return;
-    const row = db.prepare(`${subscriptionSelect()} WHERE s.id = ? AND s.user_id = ?`)
-      .get(params.id, request.user.id) as SubscriptionDbRow | undefined;
-    if (!row) return reply.code(404).send({ error: "Subscription not found" });
-    const events = db.prepare(`
-      SELECT id, kind, summary, payload, created_at, read_at
-      FROM subscription_events WHERE subscription_id = ? AND user_id = ?
-      ORDER BY created_at DESC LIMIT 100
-    `).all(params.id, request.user.id).map((event) => serializeEvent(event as EventRow));
-    const matches = row.type === "rule" ? db.prepare(`
-      SELECT id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at
-      FROM rule_matches WHERE subscription_id = ? ORDER BY discovered_at DESC LIMIT 200
-    `).all(params.id).map((match) => serializeMatch(match as MatchRow)) : [];
-    return { subscription: serializeSubscription(row), events, matches };
+    const details = subscriptionDetails(db, params.id, request.user.id);
+    if (!details) return reply.code(404).send({ error: "Subscription not found" });
+    return details;
+  });
+
+  app.post("/api/subscriptions/:id/open", { preHandler: requireReadyUser }, async (request, reply) => {
+    const params = parse(idParams, request.params, reply);
+    if (!params || !request.user) return;
+    const userId = request.user.id;
+    // Acknowledge and return the same snapshot; later events remain unread.
+    const details = db.transaction(() => {
+      if (!ownsSubscription(db, params.id, userId)) return;
+      markSubscriptionRead(db, params.id, userId);
+      return subscriptionDetails(db, params.id, userId);
+    })();
+    if (!details) return reply.code(404).send({ error: "Subscription not found" });
+    return details;
   });
 
   app.patch("/api/subscriptions/:id", { preHandler: requireReadyUser }, async (request, reply) => {
@@ -457,26 +460,13 @@ export function registerRoutes(
     const input = parse(z.object({ read: z.boolean() }), request.body, reply);
     if (!params || !input || !request.user) return;
     if (!ownsSubscription(db, params.id, request.user.id)) return reply.code(404).send({ error: "Subscription not found" });
-    const timestamp = nowIso();
     db.transaction(() => {
       if (input.read) {
-        db.prepare("UPDATE subscription_events SET read_at = COALESCE(read_at, ?) WHERE subscription_id = ? AND user_id = ?")
-          .run(timestamp, params.id, request.user!.id);
-        db.prepare("UPDATE subscriptions SET manual_unread = 0 WHERE id = ?").run(params.id);
+        markSubscriptionRead(db, params.id, request.user!.id);
       } else {
         db.prepare("UPDATE subscriptions SET manual_unread = 1 WHERE id = ?").run(params.id);
       }
     })();
-    return { ok: true };
-  });
-
-  app.post("/api/subscriptions/:id/viewed", { preHandler: requireReadyUser }, async (request, reply) => {
-    const params = parse(idParams, request.params, reply);
-    if (!params || !request.user) return;
-    const result = db.prepare(`
-      UPDATE subscriptions SET is_updated = 0, last_viewed_at = ? WHERE id = ? AND user_id = ?
-    `).run(nowIso(), params.id, request.user.id);
-    if (!result.changes) return reply.code(404).send({ error: "Subscription not found" });
     return { ok: true };
   });
 
@@ -722,6 +712,28 @@ function subscriptionSelect(): string {
   `;
 }
 
+function markSubscriptionRead(db: SqliteDatabase, id: string, userId: string): void {
+  db.prepare("UPDATE subscription_events SET read_at = ? WHERE subscription_id = ? AND user_id = ? AND read_at IS NULL")
+    .run(nowIso(), id, userId);
+  db.prepare("UPDATE subscriptions SET manual_unread = 0 WHERE id = ? AND user_id = ?").run(id, userId);
+}
+
+function subscriptionDetails(db: SqliteDatabase, id: string, userId: string) {
+  const row = db.prepare(`${subscriptionSelect()} WHERE s.id = ? AND s.user_id = ?`)
+    .get(id, userId) as SubscriptionDbRow | undefined;
+  if (!row) return;
+  const events = db.prepare(`
+    SELECT id, kind, summary, payload, created_at, read_at
+    FROM subscription_events WHERE subscription_id = ? AND user_id = ?
+    ORDER BY created_at DESC LIMIT 100
+  `).all(id, userId).map((event) => serializeEvent(event as EventRow));
+  const matches = row.type === "rule" ? db.prepare(`
+    SELECT id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at
+    FROM rule_matches WHERE subscription_id = ? ORDER BY discovered_at DESC LIMIT 200
+  `).all(id).map((match) => serializeMatch(match as MatchRow)) : [];
+  return { subscription: serializeSubscription(row), events, matches };
+}
+
 function parse<T>(schema: z.ZodType<T>, value: unknown, reply: { code: (status: number) => { send: (payload: unknown) => unknown } }): T | undefined {
   const result = schema.safeParse(value);
   if (result.success) return result.data;
@@ -799,7 +811,6 @@ function serializeCollection(value: unknown) {
     name: row.name,
     subscriptionCount: Number(row.subscription_count),
     unreadCount: Number(row.unread_count),
-    updatedCount: Number(row.updated_count),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -829,7 +840,6 @@ function serializeSubscription(row: SubscriptionDbRow) {
     lastChangedAt: row.last_changed_at,
     lastError: row.last_error,
     currentSnapshot,
-    isUpdated: Boolean(row.is_updated),
     isUnread: Boolean(row.manual_unread) || Number(row.unread_count) > 0,
     unreadCount: Number(row.unread_count),
     eventCount: Number(row.event_count),
@@ -937,7 +947,7 @@ interface SubscriptionDbRow {
   id: string; collection_id: string; collection_name: string; type: "direct" | "rule"; name: string;
   direct_url: string | null; required_terms: string; ignored_terms: string; tracker_keys: string | null;
   enabled: number; initialized: number; last_checked_at: string | null; last_changed_at: string | null;
-  last_error: string | null; current_snapshot: string | null; is_updated: number; manual_unread: number;
+  last_error: string | null; current_snapshot: string | null; manual_unread: number;
   unread_count: number; event_count: number; match_count: number; created_at: string; updated_at: string;
 }
 interface EventRow { id: string; kind: string; summary: string; payload: string; created_at: string; read_at: string | null }

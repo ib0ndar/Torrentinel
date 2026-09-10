@@ -2,6 +2,19 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.3] - 2026-09-10
+
+### Changed
+
+- Subscription activity now uses one unread state, with a dot and stronger title text. Subscription type icons remain stable, and monitoring badges report only operational status.
+- Opening subscription details marks activity read; the details retain a Mark unread action for reminders. Collection counts and the Unread filter use the same state.
+- Removed the separate Updated filter, update indicators, and permanent read/unread row toggle.
+
+### Fixed
+
+- Opening details acknowledges and returns activity atomically so later events remain unread. Background refreshes preserve manually unread reminders.
+- Existing pending update flags migrate to unread reminders without losing change history or previously unread events.
+
 ## [0.5.2] - 2026-09-09
 
 ### Added
@@ -272,6 +285,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.5.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.3
 [0.5.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.2
 [0.5.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.1
 [0.5.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.0

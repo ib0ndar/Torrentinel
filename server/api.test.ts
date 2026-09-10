@@ -170,7 +170,7 @@ describe("authenticated API", () => {
       expect(newerRule.json().subscription.id).toMatch(/^\d+$/);
 
       db.prepare(`
-        UPDATE subscriptions SET created_at = ?, last_changed_at = ?, is_updated = 1 WHERE id = ?
+        UPDATE subscriptions SET created_at = ?, last_changed_at = ? WHERE id = ?
       `).run("2026-01-01T00:00:00.000Z", "2026-12-31T00:00:00.000Z", olderRule.json().subscription.id);
       db.prepare("UPDATE subscriptions SET created_at = ? WHERE id = ?")
         .run("2026-01-02T00:00:00.000Z", newerRule.json().subscription.id);

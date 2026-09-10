@@ -88,11 +88,9 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
       initialized INTEGER NOT NULL DEFAULT 0,
       last_checked_at TEXT,
       last_changed_at TEXT,
-      last_viewed_at TEXT,
       last_error TEXT,
       current_fingerprint TEXT,
       current_snapshot TEXT,
-      is_updated INTEGER NOT NULL DEFAULT 0,
       manual_unread INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -284,6 +282,21 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
 }
 
 function migrate(db: SqliteDatabase): void {
+  const subscriptionColumns = db.prepare("PRAGMA table_info(subscriptions)")
+    .all() as Array<{ name: string }>;
+  db.transaction(() => {
+    if (subscriptionColumns.some((column) => column.name === "is_updated")) {
+      // Preserve pending activity from either legacy state as unread.
+      db.exec(`
+        UPDATE subscriptions SET manual_unread = 1 WHERE is_updated = 1;
+        ALTER TABLE subscriptions DROP COLUMN is_updated;
+      `);
+    }
+    if (subscriptionColumns.some((column) => column.name === "last_viewed_at")) {
+      db.exec("ALTER TABLE subscriptions DROP COLUMN last_viewed_at");
+    }
+  })();
+
   const userColumns = db.prepare("PRAGMA table_info(users)")
     .all() as Array<{ name: string }>;
   if (!userColumns.some((column) => column.name === "tracker_marker_style")) {

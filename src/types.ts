@@ -15,7 +15,6 @@ export interface Collection {
   name: string;
   subscriptionCount: number;
   unreadCount: number;
-  updatedCount: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -42,7 +41,6 @@ export interface Subscription {
     magnet?: string;
     torrentUrl?: string;
   } | null;
-  isUpdated: boolean;
   isUnread: boolean;
   unreadCount: number;
   eventCount: number;

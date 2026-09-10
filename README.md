@@ -77,7 +77,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 
 - Direct-link monitoring for title, cover, magnet, torrent-file, and metadata changes
 - Case-insensitive rule subscriptions with required and ignored phrases
-- Per-user collections, history, and read/unread state
+- Per-user collections, history, and unread activity: opening details marks a subscription read; mark it unread in the details to keep a reminder
 - Telegram notifications with artwork and release links
 - Persistent cover fallback when an image host is temporarily unavailable
 - Tracker credentials, mirrors, and Telegram bots configured from the web interface
