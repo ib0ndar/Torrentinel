@@ -4,7 +4,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Container]
-Image=docker.io/bah0/torrentinel:v0.5.3
+Image=docker.io/bah0/torrentinel:v0.5.4
 ContainerName=torrentinel
 UserNS=keep-id
 PublishPort=8999:8080/tcp

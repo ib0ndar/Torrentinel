@@ -454,12 +454,16 @@ function SubscriptionRow({ item, index, onOpen }: { item: Subscription; index: n
     <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""}`} style={{ "--row-index": index } as CSSProperties}>
       <button type="button" className="subscription-open" onClick={onOpen}>
         <span className="subscription-main">
-          <span className={`type-icon type-icon--${item.type}`} title={item.type === "direct" ? "Direct subscription" : "Rule subscription"}><Icon name={item.type === "direct" ? "link" : "rule"} size={17} /></span>
+          <span
+            className={`type-icon type-icon--${item.type} ${item.isUnread ? "type-icon--unread" : ""}`}
+            role="img"
+            aria-label={`${item.isUnread ? "Unread" : "Read"} ${item.type === "direct" ? "direct" : "rule"} subscription`}
+            title={item.isUnread ? "Unread — open to mark read" : "Read"}
+          ><Icon name={item.isUnread ? "bellAlert" : item.type === "direct" ? "link" : "rule"} size={17} /></span>
           <span>
             {item.type === "rule" ? <PhraseDisplay phrases={item.requiredTerms} /> : <strong>{item.label}</strong>}
             <small>{item.type === "rule" ? item.ignoredTerms.length ? `Excludes ${item.ignoredTerms.join(", ")}` : "Matches every required phrase" : item.directUrl}</small>
           </span>
-          {item.isUnread && <span className="unread-marker" role="img" aria-label="Unread" title="Unread" />}
         </span>
         <span className="tracker-stack">{item.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span>
         <span className="time-cell">{item.lastCheckedAt ? relativeTime(item.lastCheckedAt) : "Pending"}</span>
@@ -1287,7 +1291,7 @@ function BrandMark({ size = 32 }: { size?: number }) {
   return <img className="brand-mark" src="/brand/torrentinel-mark.svg" width={size} height={size} alt="" aria-hidden="true" />;
 }
 
-type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close";
+type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert";
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const symbols: Record<IconName, string> = {
     monitor: "monitor-eye",
@@ -1309,6 +1313,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     download: "download",
     send: "bell",
     close: "add",
+    bellAlert: "bell-alert",
   };
   return <svg className={`icon icon--${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><use href={`${ICON_SPRITE_URL}#ti-${symbols[name]}`} /></svg>;
 }

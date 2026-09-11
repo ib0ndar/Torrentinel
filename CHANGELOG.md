@@ -2,6 +2,12 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.4] - 2026-09-11
+
+### Changed
+
+- Unread activity now uses the original yellow bell icon to the left of the subscription name, together with bold text. Read subscriptions return to their normal link or rule icon; the separate unread dot is removed.
+
 ## [0.5.3] - 2026-09-10
 
 ### Changed
@@ -285,6 +291,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.5.4]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.4
 [0.5.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.3
 [0.5.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.2
 [0.5.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.1
