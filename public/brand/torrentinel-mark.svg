@@ -5,16 +5,25 @@
       <stop offset="0.55" stop-color="#4F7DF3"/>
       <stop offset="1" stop-color="#7C3AED"/>
     </linearGradient>
+    <radialGradient id="t-glow">
+      <stop offset="0" stop-color="#FBBF24" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#FBBF24" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="t-visor">
+      <rect x="55" y="95" width="146" height="38" rx="19"/>
+    </clipPath>
   </defs>
 
-  <!-- Aperture: six blades, gaps centred on the vertices -->
-  <path d="M128 34 L209.4 81 L209.4 175 L128 222 L46.6 175 L46.6 81 Z"
-        fill="none" stroke="url(#t-grad)" stroke-width="22"
-        stroke-dasharray="66 28" stroke-dashoffset="80" stroke-linecap="butt"/>
+  <!-- Sentinel head: solid hexagon with rounded corners -->
+  <path d="M123.5 20.21 A9 9 0 0 1 132.5 20.21 L219.1 70.21 A9 9 0 0 1 223.6 78 V178 A9 9 0 0 1 219.1 185.79 L132.5 235.79 A9 9 0 0 1 123.5 235.79 L36.9 185.79 A9 9 0 0 1 32.4 178 V78 A9 9 0 0 1 36.9 70.21 Z"
+        fill="url(#t-grad)"/>
 
-  <!-- Detection ping, seated in the top gap -->
-  <circle cx="128" cy="34" r="12" fill="#FBBF24"/>
+  <!-- Visor slot -->
+  <rect x="55" y="95" width="146" height="38" rx="19" fill="#0B1020"/>
 
-  <!-- Torrent download arrow -->
-  <path d="M110 64 H146 V114 H176 L128 184 L80 114 H110 Z" fill="url(#t-grad)"/>
+  <!-- Watch light; the web app sweeps it along the visor while a check runs -->
+  <g clip-path="url(#t-visor)">
+    <ellipse cx="128" cy="114" rx="64" ry="22" fill="url(#t-glow)"/>
+    <rect x="109" y="107" width="38" height="14" rx="7" fill="#FBBF24"/>
+  </g>
 </svg>

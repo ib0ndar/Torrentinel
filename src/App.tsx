@@ -65,6 +65,9 @@ type DialogApi = {
 const DialogContext = createContext<DialogApi | null>(null);
 const TrackerMarkerStyleContext = createContext<TrackerMarkerStyle>("icons");
 
+type TrackCheck = <T>(work: Promise<T>) => Promise<T>;
+const CheckActivityContext = createContext<TrackCheck>((work) => work);
+
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
 const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_VERSION}`;
@@ -85,6 +88,8 @@ const POLL_INTERVAL_OPTIONS = [
 ] as const;
 
 const POLL_INTERVAL_MARKERS = [5, 60, 180, 360] as const;
+const ACTIVE_STATUS_REFRESH_MS = 2_500;
+const MAX_SCHEDULED_REFRESH_DELAY_MS = 6 * 60 * 60_000;
 
 export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -238,6 +243,9 @@ function ChangePassword({ user, onChanged, notify }: { user: User; onChanged: (u
 function AppShell({ user, setUser, notify, path, navigate, renderPage }: { user: User; setUser: (value: User | null) => void; notify: Notify; path: string; navigate: (path: string) => void; renderPage: (intervalMinutes: number | null) => ReactNode }) {
   const [status, setStatus] = useState<SchedulerStatus | null>(null);
   const [intervalMinutes, setIntervalMinutes] = useState<number | null>(null);
+  const [pendingChecks, setPendingChecks] = useState(0);
+  const checking = Boolean(status?.running) || pendingChecks > 0;
+  const upcomingRunAt = status?.running ? undefined : status?.nextRunAt;
 
   const loadStatus = useCallback(() => {
     api<{ scheduler: SchedulerStatus; intervalMinutes: number }>("/api/system/status")
@@ -254,6 +262,28 @@ function AppShell({ user, setUser, notify, path, navigate, renderPage }: { user:
     return () => window.clearInterval(interval);
   }, [loadStatus, path]);
 
+  useEffect(() => {
+    if (!checking) return;
+    const interval = window.setInterval(loadStatus, ACTIVE_STATUS_REFRESH_MS);
+    return () => window.clearInterval(interval);
+  }, [checking, loadStatus]);
+
+  useEffect(() => {
+    if (!upcomingRunAt) return;
+    const delay = Date.parse(upcomingRunAt) - Date.now() + 1_500;
+    if (!(delay > 0 && delay <= MAX_SCHEDULED_REFRESH_DELAY_MS)) return;
+    const timer = window.setTimeout(loadStatus, delay);
+    return () => window.clearTimeout(timer);
+  }, [upcomingRunAt, loadStatus]);
+
+  const trackCheck = useCallback<TrackCheck>((work) => {
+    setPendingChecks((count) => count + 1);
+    return work.finally(() => {
+      setPendingChecks((count) => count - 1);
+      loadStatus();
+    });
+  }, [loadStatus]);
+
   async function logout() {
     try {
       await api("/api/auth/logout", { method: "POST" });
@@ -266,7 +296,7 @@ function AppShell({ user, setUser, notify, path, navigate, renderPage }: { user:
   return (
     <div className="app-shell">
       <aside className="app-nav">
-        <div className="brand-lockup"><BrandMark size={28} /><strong>Torrentinel</strong></div>
+        <div className="brand-lockup"><BrandMark size={28} scanning={checking} /><strong>Torrentinel</strong></div>
         <nav>
           <NavItem to="/" icon="monitor" label="Monitor" active={path === "/"} navigate={navigate} />
           <NavItem to="/settings" icon="sliders" label="Settings" active={path === "/settings"} navigate={navigate} />
@@ -295,7 +325,7 @@ function AppShell({ user, setUser, notify, path, navigate, renderPage }: { user:
           v{APP_VERSION}
         </a>
       </aside>
-      <div className="app-stage">{renderPage(intervalMinutes)}</div>
+      <div className="app-stage"><CheckActivityContext.Provider value={trackCheck}>{renderPage(intervalMinutes)}</CheckActivityContext.Provider></div>
     </div>
   );
 }
@@ -529,6 +559,7 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
 
 function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: { id: string; collections: Collection[]; onClose: () => void; onChanged: () => Promise<void>; notify: Notify }) {
   const dialog = useDialog();
+  const trackCheck = useContext(CheckActivityContext);
   const [item, setItem] = useState<Subscription | null>(null);
   const [events, setEvents] = useState<SubscriptionEvent[]>([]);
   const [matches, setMatches] = useState<RuleMatch[]>([]);
@@ -561,7 +592,7 @@ function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: 
 
   async function checkNow() {
     setBusy(true);
-    try { await api(`/api/subscriptions/${id}/check`, { method: "POST" }); await Promise.all([load(), onChanged()]); notify("Tracker check completed"); }
+    try { await trackCheck(api(`/api/subscriptions/${id}/check`, { method: "POST" })); await Promise.all([load(), onChanged()]); notify("Tracker check completed"); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
 
@@ -801,6 +832,7 @@ function Settings({ user, onUserChange, notify }: { user: User; onUserChange: (u
 
 function Admin({ notify }: { notify: Notify }) {
   const dialog = useDialog();
+  const trackCheck = useContext(CheckActivityContext);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [mirrors, setMirrors] = useState<AdminMirror[]>([]);
   const [status, setStatus] = useState<SchedulerStatus | null>(null);
@@ -831,7 +863,7 @@ function Admin({ notify }: { notify: Notify }) {
 
   async function poll() {
     setPolling(true);
-    try { await api<{ scheduler: SchedulerStatus }>("/api/system/poll", { method: "POST" }); await load(); notify("Tracker poll completed"); }
+    try { await trackCheck(api<{ scheduler: SchedulerStatus }>("/api/system/poll", { method: "POST" })); await load(); notify("Tracker poll completed"); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setPolling(false); }
   }
   async function toggleUser(user: AdminUser) {
@@ -1287,8 +1319,34 @@ function TrackerTag({ tracker, variant: forcedVariant, decorative = false }: { t
   return <span className={`tracker-tag tracker-tag--${variant} tracker-tag--${tracker}`} title={decorative ? undefined : name} role={decorative ? undefined : "img"} aria-label={decorative ? undefined : name}>{marker}</span>;
 }
 
-function BrandMark({ size = 32 }: { size?: number }) {
-  return <img className="brand-mark" src="/brand/torrentinel-mark.svg" width={size} height={size} alt="" aria-hidden="true" />;
+const BRAND_HEAD_PATH = "M123.5 20.21A9 9 0 0 1 132.5 20.21L219.1 70.21A9 9 0 0 1 223.6 78V178A9 9 0 0 1 219.1 185.79L132.5 235.79A9 9 0 0 1 123.5 235.79L36.9 185.79A9 9 0 0 1 32.4 178V78A9 9 0 0 1 36.9 70.21Z";
+
+function BrandMark({ size = 32, scanning = false }: { size?: number; scanning?: boolean }) {
+  const id = `brand-${useId().replace(/[^\w-]/g, "")}`;
+  return (
+    <svg className={scanning ? "brand-mark brand-mark--scanning" : "brand-mark"} width={size} height={size} viewBox="0 0 256 256" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id={`${id}-head`} x1="0.08" y1="0" x2="0.92" y2="1">
+          <stop offset="0" stopColor="#22D3EE" />
+          <stop offset="0.55" stopColor="#4F7DF3" />
+          <stop offset="1" stopColor="#7C3AED" />
+        </linearGradient>
+        <radialGradient id={`${id}-glow`}>
+          <stop offset="0" stopColor="#FBBF24" stopOpacity="0.7" />
+          <stop offset="1" stopColor="#FBBF24" stopOpacity="0" />
+        </radialGradient>
+        <clipPath id={`${id}-visor`}><rect x="55" y="95" width="146" height="38" rx="19" /></clipPath>
+      </defs>
+      <path d={BRAND_HEAD_PATH} fill={`url(#${id}-head)`} />
+      <rect x="55" y="95" width="146" height="38" rx="19" fill="#0B1020" />
+      <g clipPath={`url(#${id}-visor)`}>
+        <g className="brand-mark__light">
+          <ellipse className="brand-mark__glow" cx="128" cy="114" rx="64" ry="22" fill={`url(#${id}-glow)`} />
+          <rect x="109" y="107" width="38" height="14" rx="7" fill="#FBBF24" />
+        </g>
+      </g>
+    </svg>
+  );
 }
 
 type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert";

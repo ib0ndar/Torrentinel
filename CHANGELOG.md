@@ -2,6 +2,18 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.5] - 2026-09-29
+
+### Added
+
+- The sidebar brand mark's amber watch light sweeps across its visor while a tracker poll, an administrator Run now, or a subscription Check now is in progress. With reduced motion enabled, the visor shows a steady glow instead.
+- A full-bleed maskable app icon for Android home screens. The Apple touch icon is also full-bleed, so iOS applies its own corner mask.
+
+### Changed
+
+- The Sentinel visor mark replaces the download-arrow icon across the web app, favicon, installable app icons, lockups, screenshots, and social preview.
+- The favicon has its own navy plate, keeping it legible on light and dark browser tabs. Icon URLs are versioned so browsers and installed apps pick up the new artwork.
+
 ## [0.5.4] - 2026-09-11
 
 ### Changed
@@ -291,6 +303,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.5.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.5
 [0.5.4]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.4
 [0.5.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.3
 [0.5.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.2
