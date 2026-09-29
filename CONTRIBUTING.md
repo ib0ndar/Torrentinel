@@ -32,6 +32,8 @@ npm run build
 docker compose --env-file .env.example config --quiet
 ```
 
+The test suite includes backend/database regressions and React request, timer, and dialog lifecycle tests. Container builds run release validation, tests, and typechecked production builds on the target Linux architecture. Use `npm run benchmark:refactoring` for reproducible, synthetic rule-matching and administration-query measurements; these are not end-to-end tracker timings.
+
 ## Tracker adapters
 
 Each tracker integration declares its capabilities and implements the applicable direct, rule, authentication, parsing, and transport modules. Register new adapters in `server/trackers/index.ts` and add contract tests for every supported operation.

@@ -345,10 +345,11 @@ function notificationDatabase(): { db: SqliteDatabase; vault: SecretVault; userI
 function telegramFetcher(calls: TelegramCall[], failingMethod?: string): typeof fetch {
   return async (input, init) => {
     const method = new URL(String(input)).pathname.split("/").at(-1) || "";
-    const multipart = init?.body instanceof FormData;
+    const requestBody = init?.body;
+    const multipart = requestBody instanceof FormData;
     const body = multipart
-      ? formBody(init.body)
-      : JSON.parse(String(init?.body)) as Record<string, any>;
+      ? formBody(requestBody)
+      : JSON.parse(String(requestBody)) as Record<string, any>;
     calls.push({ method, body, multipart });
     if (method === failingMethod && !multipart) {
       return new Response(JSON.stringify({ ok: false, description: "failed to fetch photo" }), {

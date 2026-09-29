@@ -206,3 +206,5 @@ export interface DiagnosticsResponse {
   runs: DiagnosticRun[];
   telegramDeliveries: TelegramDelivery[];
 }
+export type Notify = (message: string, tone?: "good" | "bad") => void;
+export type SubscriptionSummary = Omit<Subscription, "currentSnapshot">;

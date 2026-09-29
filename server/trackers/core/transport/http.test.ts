@@ -7,7 +7,7 @@ describe("tracker HTTP transport", () => {
   it("classifies verification-style HTTP failures", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("Forbidden", { status: 403 })));
     const request = new CookieSession().get("https://tracker.test/protected");
-    await expect(request).rejects.toMatchObject<Partial<TrackerHttpError>>({ code: "challenge", status: 403, retryable: true });
+    await expect(request).rejects.toMatchObject({ code: "challenge", status: 403, retryable: true } satisfies Partial<TrackerHttpError>);
   });
 
   it("retains cookies and clears authentication state on reset", async () => {

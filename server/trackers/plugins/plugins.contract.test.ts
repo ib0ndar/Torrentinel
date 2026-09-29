@@ -79,7 +79,7 @@ describe("Kinozal plugin", () => {
       { baseUrl: "https://kinozal.tv" },
       { requiredTerms: ["film", "2160p"] },
     ))
-      .rejects.toMatchObject<Partial<TrackerError>>({ code: "authentication" });
+      .rejects.toMatchObject({ code: "authentication" } satisfies Partial<TrackerError>);
 
     const context = {
       userId: "fixture-user-id",
@@ -130,14 +130,14 @@ describe("Kinozal plugin", () => {
     };
 
     await expect(plugin.direct!.fetchSnapshot("https://kinozal.tv/details.php?id=71", context))
-      .rejects.toMatchObject<Partial<TrackerError>>({ code: "challenge" });
+      .rejects.toMatchObject({ code: "challenge" } satisfies Partial<TrackerError>);
     await expect(plugin.rules!.discover(context, { requiredTerms: ["Film"] }))
-      .rejects.toMatchObject<Partial<TrackerError>>({ code: "rate-limit" });
+      .rejects.toMatchObject({ code: "rate-limit" } satisfies Partial<TrackerError>);
     expect(submitForm).toHaveBeenCalledTimes(1);
 
     now += 60_001;
     await expect(plugin.rules!.discover(context, { requiredTerms: ["Film"] }))
-      .rejects.toMatchObject<Partial<TrackerError>>({ code: "challenge" });
+      .rejects.toMatchObject({ code: "challenge" } satisfies Partial<TrackerError>);
     expect(submitForm).toHaveBeenCalledTimes(2);
   });
 
@@ -146,7 +146,7 @@ describe("Kinozal plugin", () => {
     await expect(plugin.rules!.discover(
       { baseUrl: "https://kinozal.tv", username: "fixture-user", password: "fixture-password" },
       { requiredTerms: [] },
-    )).rejects.toMatchObject<Partial<TrackerError>>({ code: "unsupported" });
+    )).rejects.toMatchObject({ code: "unsupported" } satisfies Partial<TrackerError>);
   });
 
   it("treats an empty search as a successful result and ignores unrelated topic links", () => {

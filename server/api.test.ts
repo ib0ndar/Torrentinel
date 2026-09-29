@@ -216,6 +216,17 @@ describe("authenticated API", () => {
       expect(listWithCurrentDirectTitle.json().subscriptions.find(
         (subscription: { id: string }) => subscription.id === directSubscriptionId,
       )).toMatchObject({ label: currentDirectSnapshot.title });
+      const summaryList = await app.inject({
+        method: "GET", url: `/api/subscriptions?collectionId=${privateCollectionId}&view=summary`,
+        headers: { cookie: adminCookie },
+      });
+      expect(summaryList.statusCode).toBe(200);
+      expect(summaryList.json().subscriptions).toEqual(listWithCurrentDirectTitle.json().subscriptions.map(
+        ({ currentSnapshot: _snapshot, ...summary }: Record<string, unknown>) => summary,
+      ));
+      expect(summaryList.json().subscriptions.every((item: Record<string, unknown>) => !("currentSnapshot" in item))).toBe(true);
+      const invalidListView = await app.inject({ method: "GET", url: "/api/subscriptions?view=unknown", headers: { cookie: adminCookie } });
+      expect(invalidListView.statusCode).toBe(400);
       const directDetails = await app.inject({
         method: "GET",
         url: `/api/subscriptions/${directSubscriptionId}`,
@@ -230,6 +241,21 @@ describe("authenticated API", () => {
         payload: { username: "member", password: "Member-Test-2026!", isAdmin: false },
       });
       expect(createdUser.statusCode).toBe(201);
+
+      const adminUsers = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: adminCookie } });
+      expect(adminUsers.statusCode).toBe(200);
+      expect(adminUsers.json().users).toEqual(expect.arrayContaining([
+        expect.objectContaining({ username: "admin", collectionCount: 2, subscriptionCount: 3 }),
+        expect.objectContaining({ username: "member", collectionCount: 1, subscriptionCount: 0 }),
+      ]));
+      db.prepare(`
+        INSERT INTO users (id, username, password_hash, created_at, updated_at)
+        SELECT 'empty-user', 'empty', password_hash, created_at, updated_at FROM users WHERE username = 'admin'
+      `).run();
+      const usersWithEmptyAccount = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: adminCookie } });
+      expect(usersWithEmptyAccount.json().users).toContainEqual(
+        expect.objectContaining({ username: "empty", collectionCount: 0, subscriptionCount: 0 }),
+      );
 
       const memberLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "member", password: "Member-Test-2026!" } });
       const memberCookie = sessionCookie(memberLogin.headers["set-cookie"]!);

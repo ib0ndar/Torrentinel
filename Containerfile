@@ -12,7 +12,11 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY . .
-RUN npm run build && npm prune --omit=dev --no-audit --no-fund
+# Keep password-hashing/database tests reliable on small hosts and emulated CPUs.
+RUN npm run check:release \
+  && npm test -- --maxWorkers=2 --testTimeout=60000 \
+  && npm run build \
+  && npm prune --omit=dev --no-audit --no-fund
 
 FROM docker.io/library/node:22-bookworm-slim AS runtime
 

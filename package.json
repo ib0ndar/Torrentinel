@@ -1,6 +1,6 @@
 {
   "name": "torrentinel",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -12,9 +12,10 @@
     "dev:web": "vite",
     "build": "npm run typecheck && tsc -p tsconfig.server.json && vite build",
     "check:release": "node scripts/check-release-version.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "start": "node dist/server/index.js",
     "test": "vitest run",
+    "benchmark:refactoring": "node --import tsx scripts/benchmark-refactoring.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -36,9 +37,10 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.5",
+    "jsdom": "26.1.0",
     "tsx": "4.23.10",
     "typescript": "7.0.2",
     "vite": "8.2.1",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }

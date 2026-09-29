@@ -263,7 +263,7 @@ export function registerRoutes(
   });
 
   app.get("/api/subscriptions", { preHandler: requireReadyUser }, async (request, reply) => {
-    const query = parse(z.object({ collectionId: z.string().optional() }), request.query, reply);
+    const query = parse(z.object({ collectionId: z.string().optional(), view: z.enum(["summary", "detail"]).default("detail") }), request.query, reply);
     if (!query || !request.user) return;
     const args: unknown[] = [request.user.id];
     let collectionFilter = "";
@@ -271,10 +271,10 @@ export function registerRoutes(
       collectionFilter = "AND s.collection_id = ?";
       args.push(query.collectionId);
     }
-    const rows = db.prepare(`${subscriptionSelect()} WHERE s.user_id = ? ${collectionFilter}
+    const rows = db.prepare(`${subscriptionSelect(query.view === "summary")} WHERE s.user_id = ? ${collectionFilter}
       ORDER BY COALESCE(s.last_changed_at, s.created_at) DESC, s.created_at DESC, s.rowid DESC`)
       .all(...args) as SubscriptionDbRow[];
-    return { subscriptions: rows.map(serializeSubscription) };
+    return { subscriptions: rows.map(query.view === "summary" ? serializeSubscriptionSummary : serializeSubscription) };
   });
 
   app.post("/api/subscriptions", { preHandler: requireReadyUser }, async (request, reply) => {
@@ -324,7 +324,7 @@ export function registerRoutes(
       }
     })();
 
-    setTimeout(() => void scheduler.checkSubscription(id, request.user!.id), 50);
+    scheduler.queueSubscriptionCheck(id, request.user.id);
     return reply.code(201).send({
       subscription: {
         id,
@@ -438,7 +438,7 @@ export function registerRoutes(
       }
     })();
     if (resetBaseline && current.type === "direct") await coverCache.remove(params.id);
-    if (resetBaseline) setTimeout(() => void scheduler.checkSubscription(params.id, request.user!.id), 50);
+    if (resetBaseline) scheduler.queueSubscriptionCheck(params.id, request.user.id);
     return { ok: true };
   });
 
@@ -592,12 +592,10 @@ function registerAdminRoutes(app: FastifyInstance, db: SqliteDatabase): void {
   app.get("/api/admin/users", { preHandler: requireAdmin }, async () => {
     const users = db.prepare(`
       SELECT u.id, u.username, u.is_admin, u.disabled, u.must_change_password, u.created_at,
-             COUNT(DISTINCT c.id) AS collection_count,
-             COUNT(DISTINCT s.id) AS subscription_count
+             (SELECT COUNT(*) FROM collections c WHERE c.user_id = u.id) AS collection_count,
+             (SELECT COUNT(*) FROM subscriptions s WHERE s.user_id = u.id) AS subscription_count
       FROM users u
-      LEFT JOIN collections c ON c.user_id = u.id
-      LEFT JOIN subscriptions s ON s.user_id = u.id
-      GROUP BY u.id ORDER BY u.created_at
+      ORDER BY u.created_at
     `).all();
     return { users: users.map((row) => serializeAdminUser(row as AdminUserRow)) };
   });
@@ -701,9 +699,15 @@ const subscriptionUpdateSchema = z.object({
   ignoredTerms: z.array(z.string()).max(30).optional(),
 });
 
-function subscriptionSelect(): string {
+function subscriptionSelect(summary = false): string {
+  const fields = summary ? `
+    s.id, s.collection_id, s.type, s.name, s.direct_url, s.required_terms, s.ignored_terms,
+    s.enabled, s.initialized, s.last_checked_at, s.last_changed_at, s.last_error,
+    s.manual_unread, s.created_at, s.updated_at, NULL AS current_snapshot,
+    CASE WHEN json_valid(s.current_snapshot) THEN json_extract(s.current_snapshot, '$.title') END AS current_title
+  ` : "s.*";
   return `
-    SELECT s.*, c.name AS collection_name,
+    SELECT ${fields}, c.name AS collection_name,
       (SELECT GROUP_CONCAT(st.tracker_key) FROM subscription_trackers st WHERE st.subscription_id = s.id) AS tracker_keys,
       (SELECT COUNT(*) FROM subscription_events e WHERE e.subscription_id = s.id AND e.read_at IS NULL) AS unread_count,
       (SELECT COUNT(*) FROM subscription_events e WHERE e.subscription_id = s.id) AS event_count,
@@ -818,8 +822,9 @@ function serializeCollection(value: unknown) {
 
 function serializeSubscription(row: SubscriptionDbRow) {
   const currentSnapshot = jsonObject(row.current_snapshot);
-  const currentTitle = typeof currentSnapshot?.title === "string" && currentSnapshot.title.trim()
-    ? currentSnapshot.title
+  const title = row.current_title ?? currentSnapshot?.title;
+  const currentTitle = typeof title === "string" && title.trim()
+    ? title
     : undefined;
   const requiredTerms = jsonArray(row.required_terms);
   return {
@@ -851,6 +856,11 @@ function serializeSubscription(row: SubscriptionDbRow) {
 
 function serializeEvent(row: EventRow) {
   return { id: row.id, kind: row.kind, summary: row.summary, payload: jsonObject(row.payload), createdAt: row.created_at, readAt: row.read_at };
+}
+
+function serializeSubscriptionSummary(row: SubscriptionDbRow) {
+  const { currentSnapshot: _snapshot, ...summary } = serializeSubscription(row);
+  return summary;
 }
 
 function serializeMatch(row: MatchRow) {
@@ -948,6 +958,7 @@ interface SubscriptionDbRow {
   direct_url: string | null; required_terms: string; ignored_terms: string; tracker_keys: string | null;
   enabled: number; initialized: number; last_checked_at: string | null; last_changed_at: string | null;
   last_error: string | null; current_snapshot: string | null; manual_unread: number;
+  current_title?: unknown;
   unread_count: number; event_count: number; match_count: number; created_at: string; updated_at: string;
 }
 interface EventRow { id: string; kind: string; summary: string; payload: string; created_at: string; read_at: string | null }

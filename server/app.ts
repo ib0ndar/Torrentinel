@@ -88,7 +88,7 @@ export async function createApplication(options: ApplicationOptions = {}) {
   });
 
   app.addHook("onClose", async () => {
-    scheduler.stop();
+    await scheduler.stop();
     await telegram.stop();
     await closeTrackerAdapters();
     db.close();

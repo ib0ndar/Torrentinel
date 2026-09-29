@@ -102,6 +102,108 @@ describe("Kinozal search discovery migration", () => {
   });
 });
 
+describe("rule enrichment reuse", () => {
+  it.each([
+    { name: "overlapping rules", separateUsers: false, failFirst: false, expectedFetches: 1 },
+    { name: "different users", separateUsers: true, failFirst: false, expectedFetches: 2 },
+    { name: "failed detail fetches", separateUsers: false, failFirst: true, expectedFetches: 2 },
+  ])("reuses only successful, user-scoped details for $name", async ({ separateUsers, failFirst, expectedFetches }) => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    if (separateUsers) {
+      db.prepare(`
+        INSERT INTO users (id, username, password_hash, created_at, updated_at)
+        SELECT 'other-user', 'other', password_hash, created_at, updated_at FROM users WHERE id = ?
+      `).run(user.id);
+      db.prepare(`
+        INSERT INTO collections (id, user_id, name, created_at, updated_at)
+        VALUES ('other-collection', 'other-user', 'Inbox', ?, ?)
+      `).run(timestamp, timestamp);
+    }
+    for (let index = 0; index < 2; index += 1) {
+      const otherUser = separateUsers && index === 1;
+      db.prepare(`
+        INSERT INTO subscriptions (id, user_id, collection_id, type, name, required_terms, created_at, updated_at)
+        VALUES (?, ?, ?, 'rule', '', ?, ?, ?)
+      `).run(`rule-${index}`, otherUser ? "other-user" : user.id,
+        otherUser ? "other-collection" : collection.id, JSON.stringify([index ? "release" : "needle"]), timestamp, timestamp);
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'kinozal')")
+        .run(`rule-${index}`);
+    }
+    const plugin = trackerRegistry.get("kinozal");
+    if (!plugin?.rules || !plugin.direct) throw new Error("Kinozal monitor is unavailable");
+    const discover = vi.spyOn(plugin.rules, "discover")
+      .mockResolvedValue({ releases: [], coverage: { source: "search", complete: false } });
+    const snapshot: DirectSnapshot = {
+      trackerKey: "kinozal", externalId: "42", title: "Needle release", fingerprint: "details",
+      url: "https://kinozal.tv/details.php?id=42", magnet: "magnet:?xt=urn:btih:test",
+    };
+    const fetchSnapshot = vi.spyOn(plugin.direct, "fetchSnapshot").mockResolvedValue(snapshot);
+    if (failFirst) fetchSnapshot.mockRejectedValueOnce(new Error("temporary detail failure"));
+    const notifyRelease = vi.fn<TelegramService["notifyRelease"]>(async () => undefined);
+    const telegram = { canNotify: () => true, notifyRelease } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 7)));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      expect((await scheduler.run("test")).changed).toBe(0);
+      expect(fetchSnapshot).not.toHaveBeenCalled();
+      discover.mockResolvedValue({
+        releases: [{ ...snapshot, magnet: undefined }], coverage: { source: "search", complete: false },
+      });
+      expect((await scheduler.run("test")).changed).toBe(2);
+      expect(fetchSnapshot).toHaveBeenCalledTimes(expectedFetches);
+      expect(notifyRelease).toHaveBeenCalledTimes(2);
+      expect(db.prepare("SELECT COUNT(*) AS count FROM rule_matches").get()).toEqual({ count: 2 });
+      const observations = db.prepare(`
+        SELECT outcome, details FROM tracker_observations WHERE operation = 'rule-enrichment' ORDER BY rowid
+      `).all() as Array<{ outcome: string; details: string }>;
+      expect(observations).toHaveLength(2);
+      if (!separateUsers && !failFirst) {
+        expect(observations.map((row) => JSON.parse(row.details).cacheHit)).toEqual([false, true]);
+        expect(notifyRelease.mock.calls).toEqual([
+          [user.id, expect.objectContaining({ subscriptionId: "rule-0", release: snapshot })],
+          [user.id, expect.objectContaining({ subscriptionId: "rule-1", release: snapshot })],
+        ]);
+      }
+      if (separateUsers) {
+        expect(new Set(fetchSnapshot.mock.calls.map(([, context]) => context.userId))).toEqual(new Set([user.id, "other-user"]));
+        expect(observations.every((row) => JSON.parse(row.details).cacheHit === false)).toBe(true);
+      }
+      if (failFirst) expect(observations.map((row) => row.outcome)).toEqual(["error", "enriched"]);
+      expect((await scheduler.run("test")).changed).toBe(0);
+      expect(fetchSnapshot).toHaveBeenCalledTimes(expectedFetches);
+      expect(notifyRelease).toHaveBeenCalledTimes(2);
+
+      // An existing rule with an empty baseline sees this release in a later run.
+      // Its enrichment must not reuse the previous run's cached snapshot.
+      db.prepare(`
+        INSERT INTO subscriptions (id, user_id, collection_id, type, name, required_terms, created_at, updated_at)
+        VALUES ('later-rule', ?, ?, 'rule', '', '["needle"]', ?, ?)
+      `).run(user.id, collection.id, timestamp, timestamp);
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES ('later-rule', 'kinozal')").run();
+      discover.mockResolvedValue({ releases: [], coverage: { source: "search", complete: false } });
+      await scheduler.run("test");
+      const freshSnapshot = { ...snapshot, title: "Needle release with fresh details" };
+      discover.mockResolvedValue({
+        releases: [{ ...snapshot, magnet: undefined }], coverage: { source: "search", complete: false },
+      });
+      fetchSnapshot.mockResolvedValue(freshSnapshot);
+      expect((await scheduler.run("test")).changed).toBe(1);
+      expect(fetchSnapshot).toHaveBeenCalledTimes(expectedFetches + 1);
+      expect(notifyRelease).toHaveBeenLastCalledWith(user.id, expect.objectContaining({
+        subscriptionId: "later-rule", release: freshSnapshot,
+      }));
+    } finally {
+      discover.mockRestore();
+      fetchSnapshot.mockRestore();
+      warning.mockRestore();
+      db.close();
+    }
+  });
+});
+
 describe("RuTracker feed continuity", () => {
   it("records one feed poll and distinct rule evaluations when a batch is shared", async () => {
     const db = createDatabase(":memory:");

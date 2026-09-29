@@ -2,6 +2,27 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.5.6] - 2026-09-29
+
+### Changed
+
+- Extracted rule matching, direct-snapshot baseline decisions, workspace loading, status polling, dialogs, and icons into focused modules.
+- Rule matching normalizes titles and phrases once per evaluation, reuses SQL statements, and avoids repeated array copying and rule lookups.
+- Overlapping rules reuse successful detail requests within the same user, mirror, tracker, and polling run while retaining separate notifications and diagnostic observations.
+- Administration counts collections and subscriptions independently using existing indexes rather than multiplying rows in a join.
+- Workspace refreshes request lightweight subscription summaries; the existing full list and detail responses remain available.
+- Manual rule checks evaluate only the selected subscription. Tracker-wide feed gaps remain unresolved until a full poll completes recovery for all active rules.
+- Container builds now verify release metadata and run the complete backend/frontend test suite before producing the production image.
+
+### Fixed
+
+- Concurrent manual and scheduled direct checks share in-flight work, preventing duplicate events and notifications. Responses superseded by subscription edits are ignored.
+- Shutdown cancels queued checks and waits for active scheduler work before closing the database.
+- Collection changes cancel superseded requests and clear old rows; late responses and obsolete errors cannot overwrite the current workspace.
+- Status refreshes use one adaptive interval and coalesce overlapping requests.
+- Concurrent dialogs are queued, reset their input values, and settle pending requests on unmount.
+- Updated the compatible Undici dependency and Vitest patch release to address dependency audit findings.
+
 ## [0.5.5] - 2026-09-29
 
 ### Added
@@ -303,6 +324,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.5.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.6
 [0.5.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.5
 [0.5.4]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.4
 [0.5.3]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.3

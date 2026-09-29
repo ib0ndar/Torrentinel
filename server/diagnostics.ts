@@ -179,6 +179,7 @@ function safeObservationDetails(details: Record<string, DiagnosticDetail> | unde
     "baselineCount",
     "requiredTerms",
     "discoveryRevision",
+    "cacheHit",
     "coverCacheStatus",
     "coverCacheBytes",
     "coverCachedAt",

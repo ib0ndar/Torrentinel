@@ -13,6 +13,8 @@ Torrentinel exposes `GET /api/health` without authentication so container and se
 
 The response contains no passwords, tokens, cookies, encryption keys, or tracker URLs. It does reveal limited operational state. If that information should not be public, block `/api/health` at the reverse proxy and probe it only through the host or private container network.
 
+Subscription **Check now** checks that subscription only. Direct checks share any in-flight check for the same subscription; rule checks wait for an active scheduler run before evaluating the selected rule. Administration **Run now** performs a full poll. A targeted RuTracker recovery does not clear a tracker-wide feed gap: the next full poll must cover all active rules first. Shutdown cancels deferred checks and waits for active requests, so allow the configured tracker/browser timeouts when stopping the service.
+
 Use the port belonging to the selected deployment:
 
 ```sh

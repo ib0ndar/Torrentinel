@@ -2,7 +2,6 @@ import {
   createContext,
   type CSSProperties,
   type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useCallback,
   useContext,
@@ -15,15 +14,21 @@ import {
 } from "react";
 import packageManifest from "../package.json";
 import { api, ApiError, jsonBody } from "./api";
+import { useSchedulerStatus, type TrackCheck } from "./hooks/useSchedulerStatus";
+import { useWorkspaceData } from "./hooks/useWorkspaceData";
+import { DialogProvider, useDialog } from "./components/Dialogs";
+import { Icon, type IconName } from "./components/Icon";
 import type {
   AdminMirror,
   AdminUser,
   Collection,
   DiscoveryHealth,
   DiagnosticsResponse,
+  Notify,
   RuleMatch,
   SchedulerStatus,
   Subscription,
+  SubscriptionSummary,
   SubscriptionEvent,
   TelegramStatus,
   Tracker,
@@ -34,44 +39,13 @@ import type {
 
 type Toast = { id: number; message: string; tone: "good" | "bad" };
 
-type DialogTone = "default" | "danger";
-type DialogBaseOptions = {
-  eyebrow: string;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  tone?: DialogTone;
-};
-type DialogPromptOptions = DialogBaseOptions & {
-  inputLabel: string;
-  initialValue?: string;
-  inputType?: "text" | "password";
-  autoComplete?: string;
-  minLength?: number;
-  maxLength?: number;
-};
-type DialogRequest = (DialogBaseOptions & {
-  kind: "confirm";
-  resolve: (value: boolean | string | null) => void;
-}) | (DialogPromptOptions & {
-  kind: "prompt";
-  resolve: (value: boolean | string | null) => void;
-});
-type DialogApi = {
-  confirm: (options: DialogBaseOptions) => Promise<boolean>;
-  prompt: (options: DialogPromptOptions) => Promise<string | null>;
-};
-
-const DialogContext = createContext<DialogApi | null>(null);
 const TrackerMarkerStyleContext = createContext<TrackerMarkerStyle>("icons");
 
-type TrackCheck = <T>(work: Promise<T>) => Promise<T>;
 const CheckActivityContext = createContext<TrackCheck>((work) => work);
 
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
 const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_VERSION}`;
-const ICON_SPRITE_URL = `/brand/ui/sprite.svg?v=${encodeURIComponent(APP_VERSION)}`;
 
 const DEFAULT_IGNORED_PHRASES = [
   "Trailer",
@@ -88,8 +62,6 @@ const POLL_INTERVAL_OPTIONS = [
 ] as const;
 
 const POLL_INTERVAL_MARKERS = [5, 60, 180, 360] as const;
-const ACTIVE_STATUS_REFRESH_MS = 2_500;
-const MAX_SCHEDULED_REFRESH_DELAY_MS = 6 * 60 * 60_000;
 
 export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -241,48 +213,7 @@ function ChangePassword({ user, onChanged, notify }: { user: User; onChanged: (u
 }
 
 function AppShell({ user, setUser, notify, path, navigate, renderPage }: { user: User; setUser: (value: User | null) => void; notify: Notify; path: string; navigate: (path: string) => void; renderPage: (intervalMinutes: number | null) => ReactNode }) {
-  const [status, setStatus] = useState<SchedulerStatus | null>(null);
-  const [intervalMinutes, setIntervalMinutes] = useState<number | null>(null);
-  const [pendingChecks, setPendingChecks] = useState(0);
-  const checking = Boolean(status?.running) || pendingChecks > 0;
-  const upcomingRunAt = status?.running ? undefined : status?.nextRunAt;
-
-  const loadStatus = useCallback(() => {
-    api<{ scheduler: SchedulerStatus; intervalMinutes: number }>("/api/system/status")
-      .then((result) => {
-        setStatus(result.scheduler);
-        setIntervalMinutes(result.intervalMinutes);
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    loadStatus();
-    const interval = window.setInterval(loadStatus, 30_000);
-    return () => window.clearInterval(interval);
-  }, [loadStatus, path]);
-
-  useEffect(() => {
-    if (!checking) return;
-    const interval = window.setInterval(loadStatus, ACTIVE_STATUS_REFRESH_MS);
-    return () => window.clearInterval(interval);
-  }, [checking, loadStatus]);
-
-  useEffect(() => {
-    if (!upcomingRunAt) return;
-    const delay = Date.parse(upcomingRunAt) - Date.now() + 1_500;
-    if (!(delay > 0 && delay <= MAX_SCHEDULED_REFRESH_DELAY_MS)) return;
-    const timer = window.setTimeout(loadStatus, delay);
-    return () => window.clearTimeout(timer);
-  }, [upcomingRunAt, loadStatus]);
-
-  const trackCheck = useCallback<TrackCheck>((work) => {
-    setPendingChecks((count) => count + 1);
-    return work.finally(() => {
-      setPendingChecks((count) => count - 1);
-      loadStatus();
-    });
-  }, [loadStatus]);
+  const { status, intervalMinutes, checking, trackCheck } = useSchedulerStatus(path);
 
   async function logout() {
     try {
@@ -336,50 +267,12 @@ function NavItem({ to, icon, label, active, navigate }: { to: string; icon: Icon
 
 function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinutes: number | null }) {
   const dialog = useDialog();
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { collections, selectedId, setSelectedId, subscriptions, loading, loadCollections, refresh } = useWorkspaceData(notify);
   const [filter, setFilter] = useState<"all" | "unread" | "errors">("all");
   const [search, setSearch] = useState("");
   const [newCollection, setNewCollection] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedSubscription, setSelectedSubscription] = useState<string | null>(null);
-
-  const loadCollections = useCallback(async () => {
-    const result = await api<{ collections: Collection[] }>("/api/collections");
-    setCollections(result.collections);
-    setSelectedId((current) => current && result.collections.some((item) => item.id === current) ? current : result.collections[0]?.id || null);
-  }, []);
-
-  const loadSubscriptions = useCallback(async () => {
-    if (!selectedId) {
-      setSubscriptions([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      const result = await api<{ subscriptions: Subscription[] }>(`/api/subscriptions?collectionId=${encodeURIComponent(selectedId)}`);
-      setSubscriptions(result.subscriptions);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedId]);
-
-  const refresh = useCallback(async () => {
-    try {
-      await Promise.all([loadCollections(), loadSubscriptions()]);
-    } catch (error) {
-      notify(errorMessage(error), "bad");
-    }
-  }, [loadCollections, loadSubscriptions, notify]);
-
-  useEffect(() => { void loadCollections().catch((error) => notify(errorMessage(error), "bad")); }, [loadCollections, notify]);
-  useEffect(() => { void loadSubscriptions().catch((error) => notify(errorMessage(error), "bad")); }, [loadSubscriptions, notify]);
-  useEffect(() => {
-    const interval = window.setInterval(() => void refresh(), 30_000);
-    return () => window.clearInterval(interval);
-  }, [refresh]);
 
   const selected = collections.find((collection) => collection.id === selectedId);
   const visible = useMemo(() => subscriptions.filter((item) => {
@@ -474,12 +367,12 @@ function Workspace({ notify, intervalMinutes }: { notify: Notify; intervalMinute
 
       {newCollection && <NewCollection onClose={() => setNewCollection(false)} onCreated={async (id) => { setNewCollection(false); await loadCollections(); setSelectedId(id); }} notify={notify} />}
       {createOpen && selected && <CreateSubscription collection={selected} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); await refresh(); }} notify={notify} />}
-      {selectedSubscription && <SubscriptionInspector id={selectedSubscription} collections={collections} onClose={() => setSelectedSubscription(null)} onChanged={refresh} notify={notify} />}
+      {selectedSubscription && <SubscriptionInspector key={selectedSubscription} id={selectedSubscription} collections={collections} onClose={() => setSelectedSubscription(null)} onChanged={refresh} notify={notify} />}
     </div>
   );
 }
 
-function SubscriptionRow({ item, index, onOpen }: { item: Subscription; index: number; onOpen: () => void }) {
+function SubscriptionRow({ item, index, onOpen }: { item: SubscriptionSummary; index: number; onOpen: () => void }) {
   return (
     <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""}`} style={{ "--row-index": index } as CSSProperties}>
       <button type="button" className="subscription-open" onClick={onOpen}>
@@ -1079,136 +972,6 @@ function Page({ title, eyebrow, description, actions, children }: { title: strin
   return <main className="page"><header className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{actions}</header><div className="page-body">{children}</div></main>;
 }
 
-function DialogProvider({ children }: { children: ReactNode }) {
-  const [request, setRequest] = useState<DialogRequest | null>(null);
-
-  const confirm = useCallback((options: DialogBaseOptions) => new Promise<boolean>((resolve) => {
-    setRequest({ ...options, kind: "confirm", resolve: (value) => resolve(value === true) });
-  }), []);
-
-  const prompt = useCallback((options: DialogPromptOptions) => new Promise<string | null>((resolve) => {
-    setRequest({ ...options, kind: "prompt", resolve: (value) => resolve(typeof value === "string" ? value : null) });
-  }), []);
-
-  const settle = useCallback((current: DialogRequest, value: boolean | string | null) => {
-    current.resolve(value);
-    setRequest((active) => active === current ? null : active);
-  }, []);
-
-  const api = useMemo(() => ({ confirm, prompt }), [confirm, prompt]);
-
-  return (
-    <DialogContext.Provider value={api}>
-      {children}
-      {request && <AppDialog request={request} onCancel={() => settle(request, request.kind === "confirm" ? false : null)} onAccept={(value) => settle(request, value)} />}
-    </DialogContext.Provider>
-  );
-}
-
-function useDialog() {
-  const dialog = useContext(DialogContext);
-  if (!dialog) throw new Error("useDialog must be used inside DialogProvider");
-  return dialog;
-}
-
-function AppDialog({ request, onCancel, onAccept }: { request: DialogRequest; onCancel: () => void; onAccept: (value: boolean | string) => void }) {
-  const [value, setValue] = useState(request.kind === "prompt" ? request.initialValue || "" : "");
-  const titleId = useId();
-  const descriptionId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  const tone = request.tone || "default";
-
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const frame = window.requestAnimationFrame(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.select();
-      } else {
-        confirmRef.current?.focus();
-      }
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
-    };
-  }, []);
-
-  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onCancel();
-      return;
-    }
-    if (event.key !== "Tab" || !dialogRef.current) return;
-    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")]
-      .filter((element) => element.getClientRects().length > 0);
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    onAccept(request.kind === "confirm" ? true : value);
-  }
-
-  return (
-    <div className="dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <div
-        ref={dialogRef}
-        className={`app-dialog app-dialog--${tone}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        onKeyDown={handleKeyDown}
-      >
-        <form onSubmit={submit}>
-          <button type="button" className="app-dialog__close" onClick={onCancel} aria-label="Close dialog"><Icon name="close" size={17} /></button>
-          <div className="app-dialog__body">
-            <p className="app-dialog__eyebrow"><span />{request.eyebrow}</p>
-            <h2 id={titleId}>{request.title}</h2>
-            <p id={descriptionId} className="app-dialog__description">{request.description}</p>
-            {request.kind === "prompt" && (
-              <label className="app-dialog__field">
-                <span>{request.inputLabel}</span>
-                <input
-                  ref={inputRef}
-                  type={request.inputType || "text"}
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                  autoComplete={request.autoComplete}
-                  minLength={request.minLength}
-                  maxLength={request.maxLength}
-                  required
-                />
-                {request.minLength && <small>At least {request.minLength} characters</small>}
-              </label>
-            )}
-          </div>
-          <div className="app-dialog__actions">
-            <button type="button" className="button button--quiet" onClick={onCancel}>Cancel</button>
-            <button ref={confirmRef} className={`button ${tone === "danger" ? "button--danger-filled" : "button--primary"}`}>{request.confirmLabel}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 function Drawer({ title, subtitle, onClose, wide = false, extraWide = false, headerMedia, children }: { title: string; subtitle: string; onClose: () => void; wide?: boolean; extraWide?: boolean; headerMedia?: ReactNode; children: ReactNode }) {
   useEffect(() => { const key = (event: KeyboardEvent) => event.key === "Escape" && onClose(); window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key); }, [onClose]);
   return <div className="drawer-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside className={`drawer ${wide ? "drawer--wide" : ""} ${extraWide ? "drawer--details" : ""}`} role="dialog" aria-modal="true" aria-label={title}><header><div className={`drawer-heading ${headerMedia ? "drawer-heading--with-media" : ""}`}>{headerMedia}<div className="drawer-heading__copy"><p className="eyebrow">{subtitle}</p><h2>{title}</h2></div></div><button className="icon-button" onClick={onClose} aria-label="Close"><Icon name="close" /></button></header><div className="drawer-body">{children}</div></aside></div>;
@@ -1349,34 +1112,6 @@ function BrandMark({ size = 32, scanning = false }: { size?: number; scanning?: 
   );
 }
 
-type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert";
-function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
-  const symbols: Record<IconName, string> = {
-    monitor: "monitor-eye",
-    sliders: "settings",
-    users: "shield",
-    arrow: "resume",
-    plus: "add",
-    clock: "clock",
-    edit: "settings",
-    trash: "trash",
-    search: "search",
-    link: "link",
-    rule: "keyword",
-    folder: "hexagon",
-    refresh: "sync",
-    alert: "alert",
-    external: "tracker",
-    magnet: "magnet",
-    download: "download",
-    send: "bell",
-    close: "add",
-    bellAlert: "bell-alert",
-  };
-  return <svg className={`icon icon--${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><use href={`${ICON_SPRITE_URL}#ti-${symbols[name]}`} /></svg>;
-}
-
-type Notify = (message: string, tone?: Toast["tone"]) => void;
 function useSimpleRouter(): [string, (path: string) => void] {
   const currentPath = () => ["/", "/settings", "/admin"].includes(window.location.pathname)
     ? window.location.pathname

@@ -18,6 +18,8 @@ import {
 } from "./diagnostics.js";
 import type { CoverCacheStore } from "./cover-cache.js";
 import { coverErrorMessage } from "./cover-fetch.js";
+import { compileTitleMatcher, normalizeTitle, parseTerms } from "./rule-matching.js";
+import { directBaselineOutcome, directSnapshotIsTemporarilyUnavailable } from "./direct-snapshot.js";
 import {
   bufferReleases,
   bufferedReleases,
@@ -27,6 +29,9 @@ import {
   type FeedHealth,
   type RollingFeedResult,
 } from "./release-buffer.js";
+
+export { titleMatches } from "./rule-matching.js";
+export { directSnapshotIsTemporarilyUnavailable, directSnapshotRequiresSilentSchemaUpgrade, previousDirectSnapshotLacksCoverObservation, previousDirectSnapshotWasTemporaryUnavailable } from "./direct-snapshot.js";
 
 interface DirectRow {
   id: string;
@@ -73,12 +78,21 @@ interface FeedRecoveryRunState {
   failed: number;
 }
 
+interface RuleScope {
+  subscriptionId: string;
+  userId: string;
+}
+
 export const MIN_POLL_INTERVAL_MINUTES = 5;
 export const MAX_POLL_INTERVAL_MINUTES = 6 * 60;
 const POLL_INTERVAL_STATE_KEY = "poll_interval_minutes";
 
 export class Scheduler {
   private running = false;
+  private currentRun?: Promise<SchedulerStatus>;
+  private readonly directChecks = new Map<string, Promise<string>>();
+  private readonly subscriptionTimers = new Set<NodeJS.Timeout>();
+  private stopping = false;
   private started = false;
   private interval?: NodeJS.Timeout;
   private startupTimer?: NodeJS.Timeout;
@@ -95,6 +109,7 @@ export class Scheduler {
   start(): void {
     if (this.started) return;
     this.started = true;
+    this.stopping = false;
     this.pruneDiagnostics();
     this.diagnosticsCleanupTimer = setInterval(() => this.pruneDiagnostics(), DIAGNOSTIC_CLEANUP_INTERVAL_MS);
     this.diagnosticsCleanupTimer.unref();
@@ -102,7 +117,8 @@ export class Scheduler {
     this.scheduleInterval();
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
+    this.stopping = true;
     this.started = false;
     if (this.interval) clearInterval(this.interval);
     if (this.startupTimer) clearTimeout(this.startupTimer);
@@ -111,6 +127,21 @@ export class Scheduler {
     this.startupTimer = undefined;
     this.diagnosticsCleanupTimer = undefined;
     this.nextScheduledAt = undefined;
+    for (const timer of this.subscriptionTimers) clearTimeout(timer);
+    this.subscriptionTimers.clear();
+    await Promise.allSettled([...(this.currentRun ? [this.currentRun] : []), ...this.directChecks.values()]);
+  }
+
+  queueSubscriptionCheck(subscriptionId: string, userId: string): void {
+    if (this.stopping) return;
+    const timer = setTimeout(() => {
+      this.subscriptionTimers.delete(timer);
+      void this.checkSubscription(subscriptionId, userId).catch((error) => {
+        console.error("Could not check queued subscription:", errorMessage(error));
+      });
+    }, 50);
+    this.subscriptionTimers.add(timer);
+    timer.unref();
   }
 
   pollIntervalMinutes(): number {
@@ -152,9 +183,29 @@ export class Scheduler {
     return feedHealth(this.db, this.pollIntervalMinutes());
   }
 
-  async run(trigger = "manual"): Promise<SchedulerStatus> {
-    if (this.running) return this.status();
+  run(trigger = "manual"): Promise<SchedulerStatus> {
+    return this.runWithScope(trigger);
+  }
+
+  private async runWithScope(trigger: string, scope?: RuleScope): Promise<SchedulerStatus> {
+    if (this.stopping) return this.status();
+    // A targeted check must still run if it was added/edited after an active
+    // poll selected its rows. Full-poll callers can share the active run.
+    while (this.currentRun) {
+      if (!scope) return this.currentRun;
+      await this.currentRun;
+    }
+    if (this.stopping) return this.status();
     this.running = true;
+    const work = Promise.resolve().then(() => this.executeRun(trigger, scope)).finally(() => {
+      this.running = false;
+      this.currentRun = undefined;
+    });
+    this.currentRun = work;
+    return work;
+  }
+
+  private async executeRun(trigger: string, scope?: RuleScope): Promise<SchedulerStatus> {
     const startedMs = Date.now();
     const startedAt = nowIso();
     const runId = startSchedulerRun(this.db, trigger, startedAt);
@@ -170,8 +221,8 @@ export class Scheduler {
     this.writeStatus(status);
 
     try {
-      await this.pollDirect(status, runId);
-      await this.pollRules(status, runId);
+      if (!scope) await this.pollDirect(status, runId);
+      await this.pollRules(status, runId, scope);
     } finally {
       this.running = false;
       status.running = false;
@@ -185,8 +236,17 @@ export class Scheduler {
   }
 
   async checkSubscription(subscriptionId: string, userId: string): Promise<void> {
+    if (this.stopping) return;
     const direct = this.directRows("AND s.id = ? AND s.user_id = ?").get(subscriptionId, userId) as DirectRow | undefined;
     if (direct) {
+      const active = this.directChecks.get(subscriptionId);
+      if (active) {
+        const outcome = await active;
+        // A queued check for an edited topic must not disappear behind the
+        // superseded request it joined. Normal overlapping checks still share.
+        if (outcome === "superseded") await this.checkSubscription(subscriptionId, userId);
+        return;
+      }
       const startedMs = Date.now();
       const startedAt = nowIso();
       const runId = startSchedulerRun(this.db, "subscription", startedAt);
@@ -200,7 +260,7 @@ export class Scheduler {
     }
     const type = this.db.prepare("SELECT type FROM subscriptions WHERE id = ? AND user_id = ?")
       .get(subscriptionId, userId) as { type: string } | undefined;
-    if (type?.type === "rule") await this.run("subscription");
+    if (type?.type === "rule") await this.runWithScope("subscription", { subscriptionId, userId });
   }
 
   private async pollDirect(status: SchedulerStatus, runId: string): Promise<void> {
@@ -208,7 +268,22 @@ export class Scheduler {
     for (const row of rows) await this.checkDirect(row, status, runId);
   }
 
-  private async checkDirect(row: DirectRow, status: SchedulerStatus, runId: string): Promise<void> {
+  private checkDirect(row: DirectRow, status: SchedulerStatus, runId: string): Promise<string> {
+    const active = this.directChecks.get(row.id);
+    if (active) return active;
+    const work = Promise.resolve().then(async () => {
+      // Rows selected before earlier network requests may have been edited or
+      // removed. Never compare a fresh snapshot against a stale baseline.
+      const current = this.directRows("AND s.id = ? AND s.user_id = ?").get(row.id, row.user_id) as DirectRow | undefined;
+      return current ? this.checkDirectOnce(current, status, runId) : "removed";
+    }).finally(() => {
+      this.directChecks.delete(row.id);
+    });
+    this.directChecks.set(row.id, work);
+    return work;
+  }
+
+  private async checkDirectOnce(row: DirectRow, status: SchedulerStatus, runId: string): Promise<string> {
     const startedMs = Date.now();
     const plugin = trackerRegistry.get(row.tracker_key);
     let snapshot: DirectSnapshot | undefined;
@@ -234,12 +309,16 @@ export class Scheduler {
         durationMs: Date.now() - startedMs,
         error,
       });
-      return;
+      return "unsupported";
     }
     const checkedAt = nowIso();
     try {
       snapshot = await plugin.direct.fetchSnapshot(row.direct_url, this.context(row.user_id, row.tracker_key, row.base_url));
       status.checked += 1;
+      if (!this.directRowStillCurrent(row)) {
+        outcome = "superseded";
+        return outcome;
+      }
       if (!directSnapshotIsTemporarilyUnavailable(snapshot) && this.coverCache) {
         const isBaseline = !row.initialized || !row.current_fingerprint;
         const snapshotChanged = snapshot.fingerprint !== row.current_fingerprint;
@@ -267,59 +346,31 @@ export class Scheduler {
           coverDetails = { coverCacheStatus: "current" };
         }
       }
-      if (!row.initialized || !row.current_fingerprint) {
-        outcome = "baseline";
-        this.db.prepare(`
-          UPDATE subscriptions
-          SET name = ?, initialized = 1, current_fingerprint = ?, current_snapshot = ?,
-              last_checked_at = ?, last_error = NULL, updated_at = ?
-          WHERE id = ?
-        `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
-        return;
+      // Cover retrieval also awaits network work; edits during that request
+      // must not allow this old snapshot (or its newly cached artwork) back in.
+      if (this.coverCache && !this.directRowStillCurrent(row)) {
+        outcome = "superseded";
+        if (coverDetails?.coverCacheStatus === "cached" || coverDetails?.coverCacheStatus === "refreshed") {
+          await this.coverCache.remove(row.id);
+        }
+        return outcome;
       }
-
-      if (directSnapshotIsTemporarilyUnavailable(snapshot)) {
-        outcome = "temporarily-unavailable";
-        this.db.prepare(`
-          UPDATE subscriptions SET last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
-        `).run(checkedAt, checkedAt, row.id);
-        return;
-      }
-
-      if (previousDirectSnapshotWasTemporaryUnavailable(row.current_snapshot)) {
-        outcome = "rebaseline";
-        this.db.prepare(`
-          UPDATE subscriptions
-          SET name = ?, initialized = 1, current_fingerprint = ?, current_snapshot = ?,
-              last_checked_at = ?, last_error = NULL, updated_at = ?
-          WHERE id = ?
-        `).run(
-          snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot),
-          checkedAt, checkedAt, row.id,
-        );
-        return;
-      }
-
-      if (previousDirectSnapshotLacksCoverObservation(row.current_snapshot)) {
-        outcome = "cover-backfill";
-        this.db.prepare(`
-          UPDATE subscriptions
-          SET name = ?, current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
-              last_error = NULL, updated_at = ?
-          WHERE id = ?
-        `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
-        return;
-      }
-
-      if (directSnapshotRequiresSilentSchemaUpgrade(row.current_snapshot, snapshot)) {
-        outcome = "schema-upgrade";
-        this.db.prepare(`
-          UPDATE subscriptions
-          SET name = ?, current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
-              last_error = NULL, updated_at = ?
-          WHERE id = ?
-        `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
-        return;
+      const baselineOutcome = directBaselineOutcome(row.initialized, row.current_fingerprint, row.current_snapshot, snapshot);
+      if (baselineOutcome) {
+        outcome = baselineOutcome;
+        if (baselineOutcome === "temporarily-unavailable") {
+          this.db.prepare(`
+            UPDATE subscriptions SET last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
+          `).run(checkedAt, checkedAt, row.id);
+        } else {
+          this.db.prepare(`
+            UPDATE subscriptions
+            SET name = ?, initialized = 1, current_fingerprint = ?, current_snapshot = ?,
+                last_checked_at = ?, last_error = NULL, updated_at = ?
+            WHERE id = ?
+          `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
+        }
+        return outcome;
       }
 
       if (snapshot.fingerprint !== row.current_fingerprint) {
@@ -357,6 +408,10 @@ export class Scheduler {
       }
     } catch (error) {
       observationError = error;
+      if (!this.directRowStillCurrent(row)) {
+        outcome = "superseded";
+        return outcome;
+      }
       outcome = diagnosticOutcome(error);
       status.errors += 1;
       this.db.prepare(`
@@ -377,9 +432,10 @@ export class Scheduler {
         details: coverDetails,
       });
     }
+    return outcome;
   }
 
-  private async pollRules(status: SchedulerStatus, runId: string): Promise<void> {
+  private async pollRules(status: SchedulerStatus, runId: string, scope?: RuleScope): Promise<void> {
     const rows = this.db.prepare(`
       SELECT s.id, s.user_id, s.name, st.tracker_key, s.required_terms, s.ignored_terms,
              COALESCE(utm.base_url, tm.base_url) AS base_url,
@@ -392,16 +448,22 @@ export class Scheduler {
       LEFT JOIN subscription_tracker_state sts
         ON sts.subscription_id = s.id AND sts.tracker_key = st.tracker_key
       WHERE s.type = 'rule' AND s.enabled = 1
+      ${scope ? "AND s.id = ? AND s.user_id = ?" : ""}
       ORDER BY s.user_id, st.tracker_key
-    `).all() as RuleRow[];
+    `).all(...(scope ? [scope.subscriptionId, scope.userId] : [])) as RuleRow[];
 
     const groups = new Map<string, RuleRow[]>();
     for (const row of rows) {
       const key = `${row.user_id}:${row.tracker_key}:${row.base_url}`;
-      groups.set(key, [...(groups.get(key) || []), row]);
+      const group = groups.get(key);
+      if (group) group.push(row);
+      else groups.set(key, [row]);
     }
 
+    const rulesById = new Map(rows.map((row) => [row.id, row]));
     const newByRule = new Map<string, Release[]>();
+    // Keep authenticated detail responses scoped to this run, user, and mirror.
+    const enrichedReleases = new Map<string, DirectSnapshot>();
     const feedDiscoveryBatches = new Map<TrackerKey, DiscoveryBatch>();
     const rollingFeeds = new Map<TrackerKey, RollingFeedResult>();
     const recoveryRuns = new Map<TrackerKey, FeedRecoveryRunState>();
@@ -522,6 +584,7 @@ export class Scheduler {
             plugin,
             runId,
             newByRule,
+            enrichedReleases,
           );
           if (recoveryError) {
             const message = errorMessage(recoveryError);
@@ -587,10 +650,11 @@ export class Scheduler {
     }
 
     for (const [trackerKey, recovery] of recoveryRuns) {
-      if (recovery.attempted > 0) markFeedRecovery(this.db, trackerKey, recovery.failed === 0);
+      // Only a full poll can attest that every active rule covered the gap.
+      if (recovery.attempted > 0) markFeedRecovery(this.db, trackerKey, !scope && recovery.failed === 0);
     }
 
-    for (const subscriptionId of new Set(rows.map((row) => row.id))) {
+    for (const subscriptionId of rulesById.keys()) {
       const trackerStates = this.db.prepare(`
         SELECT tracker_key, last_error, last_checked_at
         FROM subscription_tracker_state WHERE subscription_id = ?
@@ -605,7 +669,7 @@ export class Scheduler {
     }
 
     for (const [subscriptionId, releases] of newByRule) {
-      const rule = rows.find((row) => row.id === subscriptionId);
+      const rule = rulesById.get(subscriptionId);
       if (!rule) continue;
       const timestamp = nowIso();
       const summary = releases.length === 1 ? `New match: ${releases[0].title}` : `${releases.length} new matches`;
@@ -621,13 +685,14 @@ export class Scheduler {
         `).run(timestamp, timestamp, subscriptionId);
       })();
       status.changed += 1;
+      const ruleTerms = parseTerms(rule.required_terms);
       for (const release of releases) {
         const trackerName = trackerRegistry.get(release.trackerKey)?.manifest.displayName || release.trackerKey;
         await this.telegram.notifyRelease(rule.user_id, {
           subscriptionId: rule.id,
           release,
           trackerName,
-          ruleTerms: parseTerms(rule.required_terms),
+          ruleTerms,
         });
       }
     }
@@ -639,14 +704,26 @@ export class Scheduler {
     plugin: TrackerPlugin,
     runId: string,
     newByRule: Map<string, Release[]>,
+    enrichedReleases: Map<string, DirectSnapshot>,
   ): Promise<{ matchedCount: number; newMatchCount: number; baselineCount: number }> {
     let matchedCount = 0;
     let newMatchCount = 0;
     let baselineCount = 0;
+    const normalizedTitles = releases.map((release) => normalizeTitle(release.title));
+    const insertMatch = this.db.prepare(`
+      INSERT OR IGNORE INTO rule_matches
+        (id, subscription_id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const updateMatch = this.db.prepare(`
+      UPDATE rule_matches SET title = ?, url = ?, magnet = ?, torrent_url = ? WHERE id = ?
+    `);
+    const updateSubscription = this.db.prepare(`
+      UPDATE subscriptions SET initialized = 1, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
+    `);
     for (const row of rows) {
-      const required = parseTerms(row.required_terms);
-      const ignored = parseTerms(row.ignored_terms);
-      const matches = releases.filter((release) => titleMatches(release.title, required, ignored));
+      const matchesTitle = compileTitleMatcher(parseTerms(row.required_terms), parseTerms(row.ignored_terms));
+      const matches = releases.filter((_, index) => matchesTitle(normalizedTitles[index]));
       matchedCount += matches.length;
       const discoveryRevision = plugin.manifest.ruleDiscoveryRevision;
       const isBaseline = !row.tracker_initialized
@@ -654,27 +731,21 @@ export class Scheduler {
       if (isBaseline) baselineCount += 1;
       for (const release of matches) {
         const matchId = nanoid();
-        const result = this.db.prepare(`
-          INSERT OR IGNORE INTO rule_matches
-            (id, subscription_id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
+        const result = insertMatch.run(
           matchId, row.id, release.trackerKey, release.externalId, release.title, release.url,
           release.magnet || null, release.torrentUrl || null, nowIso(),
         );
         if (!isBaseline && result.changes > 0) {
           newMatchCount += 1;
-          const enriched = await this.enrichRuleMatch(release, row, plugin, runId);
-          this.db.prepare(`
-            UPDATE rule_matches SET title = ?, url = ?, magnet = ?, torrent_url = ? WHERE id = ?
-          `).run(enriched.title, enriched.url, enriched.magnet || null, enriched.torrentUrl || null, matchId);
-          newByRule.set(row.id, [...(newByRule.get(row.id) || []), enriched]);
+          const enriched = await this.enrichRuleMatch(release, row, plugin, runId, enrichedReleases);
+          updateMatch.run(enriched.title, enriched.url, enriched.magnet || null, enriched.torrentUrl || null, matchId);
+          const newMatches = newByRule.get(row.id);
+          if (newMatches) newMatches.push(enriched);
+          else newByRule.set(row.id, [enriched]);
         }
       }
       this.updateTrackerState(row.id, row.tracker_key, true, null, discoveryRevision);
-      this.db.prepare(`
-        UPDATE subscriptions SET initialized = 1, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
-      `).run(nowIso(), nowIso(), row.id);
+      updateSubscription.run(nowIso(), nowIso(), row.id);
     }
     return { matchedCount, newMatchCount, baselineCount };
   }
@@ -684,11 +755,16 @@ export class Scheduler {
     row: RuleRow,
     plugin: NonNullable<ReturnType<typeof trackerRegistry.get>>,
     runId: string,
+    enrichedReleases: Map<string, DirectSnapshot>,
   ): Promise<Release> {
     if (!plugin.direct || !this.telegram.canNotify(row.user_id)) return release;
     const startedMs = Date.now();
     try {
-      const snapshot = await plugin.direct.fetchSnapshot(release.url, this.context(row.user_id, row.tracker_key, row.base_url));
+      const cacheKey = JSON.stringify([row.user_id, row.tracker_key, row.base_url, release.externalId, release.url]);
+      const cached = enrichedReleases.get(cacheKey);
+      const snapshot = cached
+        || await plugin.direct.fetchSnapshot(release.url, this.context(row.user_id, row.tracker_key, row.base_url));
+      if (!directSnapshotIsTemporarilyUnavailable(snapshot)) enrichedReleases.set(cacheKey, snapshot);
       this.recordObservation({
         runId,
         subscriptionId: row.id,
@@ -699,6 +775,7 @@ export class Scheduler {
         requestedUrl: release.url,
         snapshot,
         durationMs: Date.now() - startedMs,
+        details: { cacheHit: Boolean(cached) },
       });
       return snapshot;
     } catch (error) {
@@ -717,6 +794,13 @@ export class Scheduler {
       console.warn(`Could not enrich ${row.tracker_key} rule match ${release.externalId}:`, errorMessage(error));
       return release;
     }
+  }
+
+  private directRowStillCurrent(row: DirectRow): boolean {
+    const latest = this.directRows("AND s.id = ? AND s.user_id = ?").get(row.id, row.user_id) as DirectRow | undefined;
+    return Boolean(latest && latest.direct_url === row.direct_url && latest.base_url === row.base_url
+      && latest.tracker_key === row.tracker_key && latest.current_fingerprint === row.current_fingerprint
+      && latest.initialized === row.initialized);
   }
 
   private directRows(extraWhere = "") {
@@ -793,27 +877,6 @@ export class Scheduler {
   }
 }
 
-export function directSnapshotIsTemporarilyUnavailable(snapshot: DirectSnapshot): boolean {
-  return snapshot.metadata?.feedSeen === false;
-}
-
-export function previousDirectSnapshotWasTemporaryUnavailable(value: string | null): boolean {
-  const previous = safeJson(value);
-  return isRecord(previous.metadata) && previous.metadata.feedSeen === false;
-}
-
-export function previousDirectSnapshotLacksCoverObservation(value: string | null): boolean {
-  const previous = safeJson(value);
-  return !isRecord(previous.metadata) || previous.metadata.coverObserved !== true;
-}
-
-export function directSnapshotRequiresSilentSchemaUpgrade(value: string | null, current: DirectSnapshot): boolean {
-  const previous = safeJson(value);
-  const previousVersion = isRecord(previous.metadata) ? previous.metadata.snapshotVersion : undefined;
-  const currentVersion = current.metadata?.snapshotVersion;
-  return typeof currentVersion === "number" && previousVersion !== currentVersion;
-}
-
 function ruleDiscoveryGroups(plugin: TrackerPlugin, rows: RuleRow[]): RuleDiscoveryGroup[] {
   if (plugin.manifest.capabilities.ruleDiscovery !== "search" && !plugin.rules?.recover) return [{ rows }];
   const groups = new Map<string, RuleDiscoveryGroup>();
@@ -844,25 +907,11 @@ function discoveryBatchForBaseUrl(batch: DiscoveryBatch, plugin: TrackerPlugin, 
   return { ...batch, releases: releasesForBaseUrl(batch.releases, plugin, baseUrl) };
 }
 
-function parseTerms(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function titleMatches(title: string, required: string[], ignored: string[]): boolean {
-  const normalized = title.toLocaleLowerCase("ru-RU");
-  return required.every((term) => normalized.includes(term.toLocaleLowerCase("ru-RU")))
-    && !ignored.some((term) => normalized.includes(term.toLocaleLowerCase("ru-RU")));
-}
-
 function safeJson(value: string | null): Record<string, unknown> {
   if (!value) return {};
   try {
-    return JSON.parse(value) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }
