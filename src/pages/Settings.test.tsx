@@ -21,6 +21,11 @@ it("shows and saves the default page-size dropdown even with pagination disabled
     await act(async () => root.render(<DialogProvider><Settings user={user} onUserChange={onUserChange} notify={notify} /></DialogProvider>));
     const label = [...container.querySelectorAll("label")].find((element) => element.textContent?.includes("Default entries per page"))!;
     const select = label.querySelector("select")!;
+    expect(label.closest(".settings-control--pagination.settings-control--preferences")).not.toBeNull();
+    const preferenceControls = container.querySelectorAll(".settings-control--preferences");
+    expect(preferenceControls).toHaveLength(2);
+    expect([...preferenceControls].map((control) => control.querySelectorAll("select").length)).toEqual([1, 1]);
+    expect(container.querySelector(".telegram-setup")?.closest(".settings-control--preferences")).toBeNull();
     expect([...select.options].map((option) => Number(option.value))).toEqual([...PAGE_SIZE_OPTIONS]);
     expect(select.value).toBe("50"); expect(select.disabled).toBe(false);
     await act(async () => { select.value = "20"; select.dispatchEvent(new Event("change", { bubbles: true })); });

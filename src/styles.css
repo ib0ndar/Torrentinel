@@ -333,6 +333,17 @@ input::placeholder, textarea::placeholder { color: #52607c; }
 .settings-field { min-width: 0; display: grid; gap: 7px; }
 .settings-field > span { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .settings-field input { min-height: 42px; font-size: 13px; }
+.settings-control--preferences { width: min(520px, 100%); }
+.settings-control--preferences .settings-field { grid-template-columns: minmax(0, 1fr) 200px; align-items: center; gap: 24px; }
+.settings-control--preferences .settings-field > span { color: var(--ink); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.settings-control--preferences select { width: 200px; max-width: 100%; padding-right: 32px; font-size: 14px; }
+.settings-control--pagination .check-line { min-height: 43px; align-items: center; }
+.settings-control--pagination .check-line input { margin-top: 0; }
+.settings-control--pagination .settings-field { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+@media (max-width: 580px) {
+  .settings-control--preferences .settings-field { grid-template-columns: 1fr; gap: 10px; }
+  .settings-control--preferences select { width: min(200px, 100%); }
+}
 .integration-actions { min-height: 39px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
 .integration-actions > small { margin-right: auto; color: var(--dim); font-size: 11px; line-height: 1.45; }
 .text-button--danger { color: var(--danger); }

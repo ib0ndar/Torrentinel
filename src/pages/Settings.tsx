@@ -77,10 +77,10 @@ export function Settings({ user, onUserChange, notify }: { user: User; onUserCha
     catch (error) { notify(errorMessage(error), "bad"); } finally { setMarkerBusy(false); }
   }
   return <Page title={t("Settings")} eyebrow={t("Preferences & access")} description={t("Personalize source markers and configure private tracker access and Telegram delivery.")}>
-    <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Language")}</h2><p>{t("Choose English or Russian. English is the default.")}</p></div><div className="settings-control"><label className="settings-field"><span>{t("Interface language")}</span><select disabled={preferenceBusy} value={user.language} onChange={(event) => void savePreference({ language: event.target.value as User["language"] })}><option value="en">English</option><option value="ru">Русский</option></select></label></div></section>
+    <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Language")}</h2><p>{t("Choose English or Russian. English is the default.")}</p></div><div className="settings-control settings-control--preferences"><label className="settings-field"><span>{t("Interface language")}</span><select disabled={preferenceBusy} value={user.language} onChange={(event) => void savePreference({ language: event.target.value as User["language"] })}><option value="en">English</option><option value="ru">Русский</option></select></label></div></section>
     <section className="settings-section settings-section--top">
       <div className="settings-copy"><h2>{t("Pagination")}</h2><p>{t("Show collections in pages. Turn off to load all entries. Search and status filters always run on the server.")}</p></div>
-      <div className="settings-control">
+      <div className="settings-control settings-control--preferences settings-control--pagination">
         <label className="check-line"><input type="checkbox" checked={user.paginationEnabled} disabled={preferenceBusy} onChange={(event) => void savePreference({ paginationEnabled: event.target.checked })} /><span><strong>{t("Enable pagination")}</strong></span></label>
         <label className="settings-field"><span>{t("Default entries per page")}</span><select disabled={preferenceBusy} value={user.pageSize} onChange={(event) => void savePreference({ pageSize: Number(event.target.value) })}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
       </div>
