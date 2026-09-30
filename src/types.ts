@@ -8,6 +8,9 @@ export interface User {
   isAdmin: boolean;
   mustChangePassword: boolean;
   trackerMarkerStyle: TrackerMarkerStyle;
+  language: "en" | "ru";
+  paginationEnabled: boolean;
+  pageSize: number;
 }
 
 export interface Collection {
@@ -205,6 +208,7 @@ export interface DiagnosticsResponse {
   observations: TrackerObservation[];
   runs: DiagnosticRun[];
   telegramDeliveries: TelegramDelivery[];
+  notificationQueue?: Array<{ id: string; username: string; subscriptionId: string; attempts: number; nextAttemptAt: string; lastError?: string | null; status: string }>;
 }
 export type Notify = (message: string, tone?: "good" | "bad") => void;
 export type SubscriptionSummary = Omit<Subscription, "currentSnapshot">;

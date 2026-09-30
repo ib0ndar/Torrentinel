@@ -9,6 +9,9 @@ export interface AuthUser {
   isAdmin: boolean;
   mustChangePassword: boolean;
   trackerMarkerStyle: TrackerMarkerStyle;
+  language: "en" | "ru";
+  paginationEnabled: boolean;
+  pageSize: number;
 }
 
 export interface Release {

@@ -20,6 +20,9 @@ interface UserRow {
   disabled: number;
   must_change_password: number;
   tracker_marker_style: TrackerMarkerStyle;
+  language: AuthUser["language"];
+  pagination_enabled: number;
+  page_size: number;
 }
 
 function tokenHash(token: string): string {
@@ -33,6 +36,9 @@ function toAuthUser(row: UserRow): AuthUser {
     isAdmin: Boolean(row.is_admin),
     mustChangePassword: Boolean(row.must_change_password),
     trackerMarkerStyle: row.tracker_marker_style,
+    language: row.language,
+    paginationEnabled: Boolean(row.pagination_enabled),
+    pageSize: row.page_size,
   };
 }
 
@@ -44,7 +50,7 @@ export function registerAuth(app: FastifyInstance, db: SqliteDatabase): void {
     if (!token) return;
 
     const row = db.prepare(`
-      SELECT u.id, u.username, u.is_admin, u.disabled, u.must_change_password, u.tracker_marker_style
+      SELECT u.id, u.username, u.is_admin, u.disabled, u.must_change_password, u.tracker_marker_style, u.language, u.pagination_enabled, u.page_size
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ? AND s.expires_at > ?

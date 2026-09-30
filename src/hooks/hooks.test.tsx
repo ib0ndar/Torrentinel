@@ -25,6 +25,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 function WorkspaceHarness() { workspace = useWorkspaceData(notify); return <span>{workspace.subscriptions.map((item) => item.label).join(",")}</span>; }
+function PagedWorkspaceHarness({ enabled = true, size = 25 }: { enabled?: boolean; size?: number }) { workspace = useWorkspaceData(notify, enabled, size); return <span>{workspace.subscriptions.map((item) => item.label).join(",")}</span>; }
 function SchedulerHarness({ path = "/" }: { path?: string }) { scheduler = useSchedulerStatus(path); return <span>{scheduler.checking ? "checking" : "idle"}</span>; }
 
 beforeEach(() => {
@@ -43,6 +44,29 @@ afterEach(async () => {
 });
 
 describe("workspace request lifecycle", () => {
+  it("requests server pages and resets search, status and collection changes to page one", async () => {
+    request.mockImplementation(async (path) => path === "/api/collections" ? { collections } : {
+      subscriptions: [subscription("entry")], total: 100, page: Number(new URL(path, "http://test").searchParams.get("page") || "1"), pageCount: 4,
+    });
+    await act(async () => root.render(<PagedWorkspaceHarness />));
+    expect(request.mock.calls.at(-1)![0]).toContain("page=1&pageSize=25");
+    await act(async () => workspace.setPage(4)); expect(workspace.page).toBe(4);
+    await act(async () => workspace.setSearch("Сериал")); expect(workspace.page).toBe(1); expect(request.mock.calls.at(-1)![0]).toContain("search=%D0%A1");
+    await act(async () => workspace.setPage(3));
+    await act(async () => workspace.setFilter("unread")); expect(workspace.page).toBe(1); expect(request.mock.calls.at(-1)![0]).toContain("filter=unread");
+    await act(async () => workspace.setPage(2));
+    await act(async () => workspace.setSelectedId("two")); expect(workspace.page).toBe(1);
+    await act(async () => root.render(<PagedWorkspaceHarness enabled={false} />));
+    expect(request.mock.calls.at(-1)![0]).not.toContain("page=");
+  });
+  it("ignores a late page response after a filter change", async () => {
+    const old = deferred<{ subscriptions: SubscriptionSummary[] }>();
+    request.mockImplementation(async (path) => path === "/api/collections" ? { collections } : path.includes("filter=unread") ? { subscriptions: [subscription("unread")] } : old.promise);
+    await act(async () => root.render(<PagedWorkspaceHarness />));
+    await act(async () => workspace.setFilter("unread"));
+    await act(async () => old.resolve({ subscriptions: [subscription("old-page")] }));
+    expect(container.textContent).toBe("unread");
+  });
   it("ignores late responses after switching collections, even when fetch ignores abort", async () => {
     const one = deferred<{ subscriptions: SubscriptionSummary[] }>();
     const two = deferred<{ subscriptions: SubscriptionSummary[] }>();

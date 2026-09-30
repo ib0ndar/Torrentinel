@@ -37,6 +37,20 @@ systemctl --user status torrentinel.service --no-pager
 
 ## Logs
 
+### Notification delivery
+
+Release changes and rule matches are committed in the same SQLite transaction as their notification outbox entry. A separate worker checks for due work every five seconds, with a maximum of 100 deliveries per pass. Failures retry after 30 seconds, then exponentially up to six hours; Telegram `retry_after` takes precedence when longer. In-flight work has a ten-minute lease, so a process crash cannot permanently strand a notification. Shutdown waits for the active send before closing SQLite.
+
+Pending notifications never expire and are included in database backups. A missing bot or chat remains pending until configured; disabled accounts are not sent notifications. Deleting a subscription or collection removes its pending notifications. Successful outbox entries and dedupe keys are retained for seven days; recorded rule matches prevent rediscovery even after those receipts expire. The Administration **Notification queue** section shows attempts, next retries, and sanitized failures; **Telegram deliveries** shows individual send attempts.
+
+Delivery is at least once. Telegram does not support idempotent send keys: a crash after Telegram accepts a message but before the local acknowledgement can cause a duplicate. The queue prevents silent loss, not duplicates in that narrow window. Releases recorded before 0.6.0 without a successful notification cannot be reconstructed automatically.
+
+### Collection and language preferences
+
+Settings stores **English** (default) or **Russian**, and the pagination switch per account. When pagination is enabled, the collection page offers 25, 50 (default), 100, or 200 entries and first/previous/next/last navigation. Turning pagination off loads the complete filtered collection. Search and unread/error filters always run on the server, covering off-page entries. Changing the search, status filter, collection, or page size resets to page one; deletions clamp an empty last page to the remaining last page.
+
+The subscription API accepts `page`, `pageSize` (1–200), `search`, and `filter=all|unread|errors`; responses include `total`, `page`, `pageSize`, and `pageCount`. Omitting `page` retains the full-list response contract for existing integrations. User-defined titles, collection names, phrases, and tracker error text are not automatically translated.
+
 Follow the application and integrated-browser logs for the selected deployment:
 
 ```sh

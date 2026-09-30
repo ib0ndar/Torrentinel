@@ -11,6 +11,8 @@ app-data
 *.pfx
 secrets
 .playwright-cli
+.playwright-mcp
+artifacts
 coverage
 output
 .DS_Store

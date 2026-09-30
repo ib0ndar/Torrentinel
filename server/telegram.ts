@@ -9,7 +9,8 @@ import type { CoverCacheStore } from "./cover-cache.js";
 import { NetworkCoverRetriever } from "./cover-fetch.js";
 import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
-import { recordTelegramDelivery, type TelegramDeliveryInput } from "./diagnostics.js";
+import { recordTelegramDelivery, safeDiagnosticText, type TelegramDeliveryInput } from "./diagnostics.js";
+import { notificationText, type NotificationLanguage } from "./notification-language.js";
 import { telegramTokenAad, type SecretVault } from "./secrets.js";
 import type { Release } from "./types.js";
 
@@ -28,6 +29,17 @@ interface TelegramResponse<T> {
   ok: boolean;
   result: T;
   description?: string;
+  parameters?: { retry_after?: number };
+}
+
+class TelegramError extends Error {
+  constructor(message: string, readonly retryAfterSeconds?: number) { super(message); }
+}
+
+export interface DeliveryResult {
+  delivered: boolean;
+  error?: string;
+  retryAfterSeconds?: number;
 }
 
 interface TelegramMessage {
@@ -243,7 +255,7 @@ export class TelegramService {
     }
   }
 
-  async notifyRelease(userId: string, notification: ReleaseNotification): Promise<void> {
+  async notifyRelease(userId: string, notification: ReleaseNotification): Promise<DeliveryResult> {
     const startedMs = Date.now();
     const destination = this.notificationDestination(userId);
     if (!destination) {
@@ -253,11 +265,12 @@ export class TelegramService {
         durationMs: Date.now() - startedMs,
         error: new Error("Telegram bot or account link is not configured"),
       });
-      return;
+      return { delivered: false, error: "Telegram bot or account link is not configured" };
     }
 
-    const caption = releaseCaption(notification);
-    const replyMarkup = releaseKeyboard(notification.release, this.publicUrl);
+    const language = this.languageForUser(userId);
+    const caption = releaseCaption(notification, language);
+    const replyMarkup = releaseKeyboard(notification.release, this.publicUrl, language);
     let artworkError: string | undefined;
     try {
       const token = this.vault.decrypt(destination.tokenEncrypted, telegramTokenAad(userId));
@@ -281,12 +294,14 @@ export class TelegramService {
                 durationMs: Date.now() - startedMs,
                 artworkError,
               });
-              return;
+              return { delivered: true };
             } catch (cachedPhotoError) {
+              if (cachedPhotoError instanceof TelegramError && cachedPhotoError.retryAfterSeconds) throw cachedPhotoError;
               artworkError = combineErrors(artworkError, `cached cover upload: ${safeError(cachedPhotoError)}`);
             }
           }
         } catch (cacheReadError) {
+          if (cacheReadError instanceof TelegramError && cacheReadError.retryAfterSeconds) throw cacheReadError;
           artworkError = combineErrors(artworkError, `cached cover read: ${safeError(cacheReadError)}`);
         }
       }
@@ -306,8 +321,9 @@ export class TelegramService {
             durationMs: Date.now() - startedMs,
             artworkError,
           });
-          return;
+          return { delivered: true };
         } catch (remotePhotoError) {
+          if (remotePhotoError instanceof TelegramError && remotePhotoError.retryAfterSeconds) throw remotePhotoError;
           try {
             const uploaded = await this.sendUploadedPhoto(
               token,
@@ -325,8 +341,9 @@ export class TelegramService {
               durationMs: Date.now() - startedMs,
               artworkError,
             });
-            return;
+            return { delivered: true };
           } catch (uploadedPhotoError) {
+            if (uploadedPhotoError instanceof TelegramError && uploadedPhotoError.retryAfterSeconds) throw uploadedPhotoError;
             artworkError = combineErrors(artworkError, remotePhotoError, uploadedPhotoError);
             console.warn(
               `Telegram artwork delivery failed for user ${userId}; sending a text notification:`,
@@ -350,6 +367,7 @@ export class TelegramService {
         durationMs: Date.now() - startedMs,
         artworkError,
       });
+      return { delivered: true };
     } catch (error) {
       this.recordReleaseDelivery(userId, notification, {
         deliveryMethod: "text",
@@ -359,6 +377,7 @@ export class TelegramService {
         artworkError,
       });
       console.error(`Telegram release notification failed for user ${userId}:`, safeError(error));
+      return { delivered: false, error: safeError(error), retryAfterSeconds: error instanceof TelegramError ? error.retryAfterSeconds : undefined };
     }
   }
 
@@ -392,6 +411,10 @@ export class TelegramService {
       WHERE b.user_id = ?
     `).get(userId) as { token_encrypted: string; chat_id: string } | undefined;
     return row ? { tokenEncrypted: row.token_encrypted, chatId: row.chat_id } : undefined;
+  }
+
+  private languageForUser(userId: string): NotificationLanguage {
+    return (this.db.prepare("SELECT language FROM users WHERE id = ?").get(userId) as { language: NotificationLanguage } | undefined)?.language || "en";
   }
 
   private async sendUploadedPhoto(
@@ -484,7 +507,7 @@ export class TelegramService {
     if (!link) {
       await this.call(token, "sendMessage", {
         chat_id: message.chat.id,
-        text: "This link code is invalid or has expired. Generate a new code in Torrentinel.",
+        text: notificationText(this.languageForUser(userId), "This link code is invalid or has expired. Generate a new code in Torrentinel."),
       });
       return;
     }
@@ -502,7 +525,7 @@ export class TelegramService {
 
     await this.call(token, "sendMessage", {
       chat_id: message.chat.id,
-      text: "Torrentinel is linked. Subscription changes will be delivered to this chat.",
+      text: notificationText(this.languageForUser(userId), "Torrentinel is linked. Subscription changes will be delivered to this chat."),
     });
   }
 
@@ -522,7 +545,7 @@ export class TelegramService {
     });
     const result = await response.json() as TelegramResponse<T>;
     if (!response.ok || !result.ok) {
-      throw new Error(result.description || `Telegram ${method} failed with HTTP ${response.status}`);
+      throw new TelegramError(result.description || `Telegram ${method} failed with HTTP ${response.status}`, result.parameters?.retry_after);
     }
     return result.result;
   }
@@ -535,7 +558,7 @@ export class TelegramService {
     });
     const result = await response.json() as TelegramResponse<T>;
     if (!response.ok || !result.ok) {
-      throw new Error(result.description || `Telegram ${method} failed with HTTP ${response.status}`);
+      throw new TelegramError(result.description || `Telegram ${method} failed with HTTP ${response.status}`, result.parameters?.retry_after);
     }
     return result.result;
   }
@@ -553,7 +576,7 @@ function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void
 }
 
 function safeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return safeDiagnosticText(error instanceof Error ? error.message : String(error));
 }
 
 function combineErrors(...errors: unknown[]): string | undefined {
@@ -567,37 +590,37 @@ export function escapeTelegram(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function releaseCaption(notification: ReleaseNotification): string {
+function releaseCaption(notification: ReleaseNotification, language: NotificationLanguage = "en"): string {
   const { release } = notification;
   const lines = [
     `⚡ ${escapeTelegram(truncate(release.title, 700))}`,
     "",
-    `Tracker: ${escapeTelegram(truncate(notification.trackerName, 80))}`,
+    `${notificationText(language, "Tracker")}: ${escapeTelegram(truncate(notification.trackerName, 80))}`,
   ];
   if (notification.ruleTerms) {
-    lines.push(`Rule: ${escapeTelegram(truncate(notification.ruleTerms.join(" + ") || "All releases", 180))}`);
+    lines.push(`${notificationText(language, "Rule")}: ${escapeTelegram(truncate(notification.ruleTerms.join(" + ") || notificationText(language, "All releases"), 180))}`);
   } else if (notification.changes?.length) {
-    lines.push(`Changed: ${escapeTelegram(truncate(notification.changes.join(", "), 180))}`);
+    lines.push(`${notificationText(language, "Changed")}: ${escapeTelegram(truncate(notification.changes.map((change) => notificationText(language, change)).join(", "), 180))}`);
   }
 
   const size = metadataText(release, "size");
   const category = metadataText(release, "category");
-  if (size) lines.push(`Size: ${escapeTelegram(truncate(size, 80))}`);
-  if (category) lines.push(`Category: ${escapeTelegram(truncate(category, 120))}`);
+  if (size) lines.push(`${notificationText(language, "Size")}: ${escapeTelegram(truncate(size, 80))}`);
+  if (category) lines.push(`${notificationText(language, "Category")}: ${escapeTelegram(truncate(category, 120))}`);
   return lines.join("\n");
 }
 
-function releaseKeyboard(release: Release, publicUrl: string | undefined) {
+function releaseKeyboard(release: Release, publicUrl: string | undefined, language: NotificationLanguage = "en") {
   const buttons: Array<{ text: string; url: string }> = [];
   const trackerUrl = httpUrl(release.url);
-  if (trackerUrl) buttons.push({ text: "Tracker page", url: trackerUrl });
+  if (trackerUrl) buttons.push({ text: notificationText(language, "Tracker page"), url: trackerUrl });
 
   const infoHash = magnetInfoHash(release.magnet);
   if (infoHash && publicUrl) {
     buttons.push({ text: "Magnet", url: `${publicUrl}/magnet/${encodeURIComponent(infoHash)}` });
   } else {
     const torrentUrl = httpUrl(release.torrentUrl);
-    if (torrentUrl) buttons.push({ text: "Torrent file", url: torrentUrl });
+    if (torrentUrl) buttons.push({ text: notificationText(language, "Torrent file"), url: torrentUrl });
   }
   return { inline_keyboard: [buttons.slice(0, 2)] };
 }

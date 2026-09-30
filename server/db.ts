@@ -17,6 +17,8 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");
+  db.function("contains_text", { deterministic: true }, (value, query) =>
+    String(value ?? "").toLocaleLowerCase("ru-RU").includes(String(query ?? "").toLocaleLowerCase("ru-RU")) ? 1 : 0);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -97,6 +99,8 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     );
     CREATE INDEX IF NOT EXISTS idx_subscriptions_user_collection ON subscriptions(user_id, collection_id);
     CREATE INDEX IF NOT EXISTS idx_subscriptions_type_enabled ON subscriptions(type, enabled);
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_collection_activity
+      ON subscriptions(user_id, collection_id, COALESCE(last_changed_at, created_at) DESC, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS subscription_cover_cache (
       subscription_id TEXT PRIMARY KEY REFERENCES subscriptions(id) ON DELETE CASCADE,
@@ -226,6 +230,23 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     CREATE INDEX IF NOT EXISTS idx_tracker_observations_subscription ON tracker_observations(subscription_id, observed_at DESC);
     CREATE INDEX IF NOT EXISTS idx_tracker_observations_outcome ON tracker_observations(outcome, observed_at DESC);
 
+    CREATE TABLE IF NOT EXISTS notification_queue (
+      id TEXT PRIMARY KEY,
+      dedupe_key TEXT NOT NULL UNIQUE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      payload TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT NOT NULL,
+      lease_until TEXT,
+      lease_token TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      delivered_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_notification_queue_due
+      ON notification_queue(next_attempt_at) WHERE delivered_at IS NULL;
+
     CREATE TABLE IF NOT EXISTS telegram_deliveries (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -301,6 +322,15 @@ function migrate(db: SqliteDatabase): void {
     .all() as Array<{ name: string }>;
   if (!userColumns.some((column) => column.name === "tracker_marker_style")) {
     db.exec("ALTER TABLE users ADD COLUMN tracker_marker_style TEXT NOT NULL DEFAULT 'icons'");
+  }
+  if (!userColumns.some((column) => column.name === "language")) {
+    db.exec("ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'en' CHECK(language IN ('en', 'ru'))");
+  }
+  if (!userColumns.some((column) => column.name === "pagination_enabled")) {
+    db.exec("ALTER TABLE users ADD COLUMN pagination_enabled INTEGER NOT NULL DEFAULT 1 CHECK(pagination_enabled IN (0, 1))");
+  }
+  if (!userColumns.some((column) => column.name === "page_size")) {
+    db.exec("ALTER TABLE users ADD COLUMN page_size INTEGER NOT NULL DEFAULT 50 CHECK(page_size IN (25, 50, 100, 200))");
   }
 
   const trackerStateColumns = db.prepare("PRAGMA table_info(subscription_tracker_state)")

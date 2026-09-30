@@ -203,8 +203,9 @@ function safeObservationDetails(details: Record<string, DiagnosticDetail> | unde
   return safe;
 }
 
-function safeDiagnosticText(value: string): string {
+export function safeDiagnosticText(value: string): string {
   const sanitized = value
+    .replace(/(api\.telegram\.org\/bot)[^/\s]+/giu, "$1[redacted]")
     .replace(/https?:\/\/[^\s"'<>]+/giu, (url) => safeDiagnosticUrl(url) || "[redacted URL]")
     .replace(/\b(token|api[_-]?key|password|secret|authorization)(\s*[=:]\s*)[^\s,;]+/giu, "$1$2[redacted]");
   return truncate(sanitized, 500);

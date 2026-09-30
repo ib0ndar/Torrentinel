@@ -20,7 +20,7 @@ function fixture() {
   const db = createDatabase(":memory:");
   const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
   const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
-  const notifyRelease = vi.fn<TelegramService["notifyRelease"]>(async () => undefined);
+  const notifyRelease = vi.fn<TelegramService["notifyRelease"]>(async () => ({ delivered: true }));
   const telegram = { canNotify: () => false, notifyRelease } as unknown as TelegramService;
   const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 4)));
   return { db, user, collection, scheduler, notifyRelease };

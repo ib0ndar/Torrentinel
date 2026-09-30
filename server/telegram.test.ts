@@ -16,6 +16,32 @@ afterEach(() => {
 });
 
 describe("rich Telegram release notifications", () => {
+  it("uses the account's Russian language without translating the release title", async () => {
+    const calls: TelegramCall[] = [];
+    const { db, vault, userId } = notificationDatabase();
+    db.prepare("UPDATE users SET language = 'ru' WHERE id = ?").run(userId);
+    const result = await new TelegramService(db, vault, telegramFetcher(calls)).notifyRelease(userId, {
+      trackerName: "Rutor", changes: ["title changed", "metadata changed"],
+      release: { trackerKey: "rutor", externalId: "42", title: "Original English title", url: "https://rutor.is/torrent/42", metadata: { size: "2 GB" } },
+    });
+    expect(result).toEqual({ delivered: true });
+    expect(calls[0].body.text).toContain("Original English title");
+    expect(calls[0].body.text).toContain("Трекер: Rutor");
+    expect(calls[0].body.text).toContain("Изменения: изменено название, изменены метаданные");
+    expect(JSON.stringify(calls[0].body.reply_markup)).toContain("Страница трекера");
+  });
+
+  it("returns rate-limit timing without trying artwork fallback or text delivery", async () => {
+    const { db, vault, userId } = notificationDatabase();
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: false, description: "Too Many Requests", parameters: { retry_after: 120 } }), { status: 429 }));
+    const media = vi.fn<typeof fetch>();
+    const result = await new TelegramService(db, vault, fetcher, undefined, media).notifyRelease(userId, {
+      trackerName: "Rutor", release: { trackerKey: "rutor", externalId: "42", title: "Test", url: "https://rutor.is/torrent/42", coverUrl: "https://example.com/cover.jpg" },
+    });
+    expect(result).toEqual({ delivered: false, error: "Too Many Requests", retryAfterSeconds: 120 });
+    expect(fetcher).toHaveBeenCalledTimes(1); expect(media).not.toHaveBeenCalled();
+  });
+
   it("uploads the retained cached cover when the latest refresh fails", async () => {
     const calls: TelegramCall[] = [];
     const { db, vault, userId } = notificationDatabase();

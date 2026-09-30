@@ -64,7 +64,7 @@ describe("Kinozal search discovery migration", () => {
     const discover = vi.spyOn(plugin.rules, "discover")
       .mockResolvedValueOnce({ releases: [existing], coverage: { source: "search", complete: false } })
       .mockResolvedValueOnce({ releases: [existing, later], coverage: { source: "search", complete: false } });
-    const notifyRelease = vi.fn(async () => undefined);
+    const notifyRelease = vi.fn(async () => ({ delivered: true }));
     const telegram = {
       canNotify: vi.fn(() => false),
       notifyRelease,
@@ -142,7 +142,7 @@ describe("rule enrichment reuse", () => {
     };
     const fetchSnapshot = vi.spyOn(plugin.direct, "fetchSnapshot").mockResolvedValue(snapshot);
     if (failFirst) fetchSnapshot.mockRejectedValueOnce(new Error("temporary detail failure"));
-    const notifyRelease = vi.fn<TelegramService["notifyRelease"]>(async () => undefined);
+    const notifyRelease = vi.fn<TelegramService["notifyRelease"]>(async () => ({ delivered: true }));
     const telegram = { canNotify: () => true, notifyRelease } as unknown as TelegramService;
     const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 7)));
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -229,7 +229,7 @@ describe("RuTracker feed continuity", () => {
       .mockResolvedValue(feedBatch([release("1"), release("2")], "2026-08-31T10:00:00Z"));
     const telegram = {
       canNotify: vi.fn(() => false),
-      notifyRelease: vi.fn(async () => undefined),
+      notifyRelease: vi.fn(async () => ({ delivered: true })),
     } as unknown as TelegramService;
     const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 6)));
 
@@ -286,7 +286,7 @@ describe("RuTracker feed continuity", () => {
       cursor: "2026-08-31T10:30:00Z",
       sourceUrl: "https://rutracker.org/forum/tracker.php?nm=needle&o=1&s=2",
     });
-    const notifyRelease = vi.fn(async () => undefined);
+    const notifyRelease = vi.fn(async () => ({ delivered: true }));
     const telegram = {
       canNotify: vi.fn(() => false),
       notifyRelease,
@@ -443,7 +443,7 @@ describe("direct subscription title synchronization", () => {
       read: vi.fn(),
       remove: vi.fn(),
     };
-    const notifyRelease = vi.fn(async () => undefined);
+    const notifyRelease = vi.fn(async () => ({ delivered: true }));
     const telegram = { notifyRelease } as unknown as TelegramService;
     const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 5)), coverCache);
 
@@ -458,7 +458,6 @@ describe("direct subscription title synchronization", () => {
       expect((await scheduler.run("test")).changed).toBe(1);
       expect(notifyRelease).toHaveBeenNthCalledWith(2, user.id, expect.objectContaining({
         release: secondUpdate,
-        coverRefreshError: undefined,
       }));
       expect(refresh).toHaveBeenCalledTimes(3);
       expect(refresh.mock.calls.map((call) => call[1].coverUrl)).toEqual([
@@ -505,7 +504,7 @@ describe("direct subscription title synchronization", () => {
     const plugin = trackerRegistry.get("rutor");
     if (!plugin?.direct) throw new Error("Rutor direct monitor is unavailable");
     const fetchSnapshot = vi.spyOn(plugin.direct, "fetchSnapshot").mockResolvedValue(current);
-    const notifyRelease = vi.fn(async () => undefined);
+    const notifyRelease = vi.fn(async () => ({ delivered: true }));
     const telegram = { notifyRelease } as unknown as TelegramService;
     const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 7)));
 

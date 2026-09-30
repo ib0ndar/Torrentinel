@@ -2,6 +2,34 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.6.0] - 2026-09-30
+
+### Added
+
+- Persistent SQLite notification outbox with transactional release/event recording, leased delivery work, restart recovery, exponential retries, and Telegram rate-limit handling. Pending work does not expire; successful queue receipts are retained for seven days.
+- Administration view of pending notifications, attempts, next retry time, and sanitized failure details.
+- Server-side collection pagination, Unicode-aware search, unread/error filtering, total counts, and deterministic ordering. Pagination is enabled by default and can be disabled per account in Settings.
+- Fast collection-page controls for 25, 50, 100, or 200 entries, saved per account, with first/previous/next/last navigation.
+- English (default) and Russian interface languages, saved per account, including localized dates, dialogs, change history, and Telegram release messages. Release titles, phrases, and other user content remain unchanged.
+
+### Changed
+
+- Workspace, Subscription Inspector, Settings, Administration, authentication screens, and shared UI/formatting are separate modules; `src/App.tsx` now only coordinates authentication, routing, and the application shell.
+- Backend route handlers are separated into authentication, collections, subscriptions, settings, administration, and system modules.
+- Rule matches, history, and queued notifications are committed together after enrichment, eliminating the crash window between recording a release and delivering it.
+- Collection activity ordering has a dedicated SQLite index. Search/filtering operates on the full collection even with pagination disabled.
+- Updated transitive brace-expansion and fast-uri dependencies to resolve current dependency audit advisories.
+
+### Delivery and upgrade notes
+
+- Delivery is at least once, not exactly once: Telegram does not expose idempotent send keys. A crash after Telegram accepts a message but before SQLite records the receipt may cause a duplicate on retry.
+- Notifications remain pending when a bot/chat is unavailable and resume after configuration is restored. Deleted subscriptions cancel their pending notifications; disabled users are not sent notifications.
+- Back up the database and application-data directory together before updating. Startup adds the outbox table, activity index, and per-user language/pagination/page-size columns. Existing accounts default to English and 50 entries per page. Previously lost notifications cannot be reconstructed automatically.
+
+### Fixed
+
+- Mobile administration headers wrap translated labels correctly; drawers render outside the animated page so navigation cannot cover their actions. Toasts do not intercept clicks.
+
 ## [0.5.6] - 2026-09-29
 
 ### Changed
@@ -324,6 +352,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.6.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.0
 [0.5.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.6
 [0.5.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.5
 [0.5.4]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.4

@@ -1,5 +1,6 @@
 import { createContext, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { useI18n } from "../i18n";
 
 type DialogBaseOptions = {
   eyebrow: string; title: string; description: string; confirmLabel: string; tone?: "default" | "danger";
@@ -55,6 +56,7 @@ export function useDialog() {
 }
 
 function AppDialog({ request, onCancel, onAccept }: { request: DialogRequest; onCancel: () => void; onAccept: (value: boolean | string) => void }) {
+  const { t } = useI18n();
   const [value, setValue] = useState(request.kind === "prompt" ? request.initialValue || "" : "");
   const titleId = useId();
   const descriptionId = useId();
@@ -94,7 +96,7 @@ function AppDialog({ request, onCancel, onAccept }: { request: DialogRequest; on
   return <div className="dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
     <div ref={dialogRef} className={`app-dialog app-dialog--${tone}`} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} onKeyDown={handleKeyDown}>
       <form onSubmit={submit}>
-        <button type="button" className="app-dialog__close" onClick={onCancel} aria-label="Close dialog"><Icon name="close" size={17} /></button>
+        <button type="button" className="app-dialog__close" onClick={onCancel} aria-label={t("Close dialog")}><Icon name="close" size={17} /></button>
         <div className="app-dialog__body">
           <p className="app-dialog__eyebrow"><span />{request.eyebrow}</p>
           <h2 id={titleId}>{request.title}</h2>
@@ -102,11 +104,11 @@ function AppDialog({ request, onCancel, onAccept }: { request: DialogRequest; on
           {request.kind === "prompt" && <label className="app-dialog__field">
             <span>{request.inputLabel}</span>
             <input ref={inputRef} type={request.inputType || "text"} value={value} onChange={(event) => setValue(event.target.value)} autoComplete={request.autoComplete} minLength={request.minLength} maxLength={request.maxLength} required />
-            {request.minLength && <small>At least {request.minLength} characters</small>}
+            {request.minLength && <small>{t("At least {count} characters", { count: request.minLength })}</small>}
           </label>}
         </div>
         <div className="app-dialog__actions">
-          <button type="button" className="button button--quiet" onClick={onCancel}>Cancel</button>
+          <button type="button" className="button button--quiet" onClick={onCancel}>{t("Cancel")}</button>
           <button ref={confirmRef} className={`button ${tone === "danger" ? "button--danger-filled" : "button--primary"}`}>{request.confirmLabel}</button>
         </div>
       </form>

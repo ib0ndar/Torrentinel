@@ -20,6 +20,7 @@ import type { CoverCacheStore } from "./cover-cache.js";
 import { coverErrorMessage } from "./cover-fetch.js";
 import { compileTitleMatcher, normalizeTitle, parseTerms } from "./rule-matching.js";
 import { directBaselineOutcome, directSnapshotIsTemporarilyUnavailable } from "./direct-snapshot.js";
+import { enqueueNotification, NotificationQueue } from "./notification-queue.js";
 import {
   bufferReleases,
   bufferedReleases,
@@ -98,18 +99,20 @@ export class Scheduler {
   private startupTimer?: NodeJS.Timeout;
   private diagnosticsCleanupTimer?: NodeJS.Timeout;
   private nextScheduledAt?: string;
+  readonly notifications: NotificationQueue;
 
   constructor(
     private readonly db: SqliteDatabase,
     private readonly telegram: TelegramService,
     private readonly vault: SecretVault,
     private readonly coverCache?: CoverCacheStore,
-  ) {}
+  ) { this.notifications = new NotificationQueue(db, telegram); }
 
   start(): void {
     if (this.started) return;
     this.started = true;
     this.stopping = false;
+    this.notifications.start();
     this.pruneDiagnostics();
     this.diagnosticsCleanupTimer = setInterval(() => this.pruneDiagnostics(), DIAGNOSTIC_CLEANUP_INTERVAL_MS);
     this.diagnosticsCleanupTimer.unref();
@@ -130,6 +133,7 @@ export class Scheduler {
     for (const timer of this.subscriptionTimers) clearTimeout(timer);
     this.subscriptionTimers.clear();
     await Promise.allSettled([...(this.currentRun ? [this.currentRun] : []), ...this.directChecks.values()]);
+    await this.notifications.stop();
   }
 
   queueSubscriptionCheck(subscriptionId: string, userId: string): void {
@@ -223,6 +227,7 @@ export class Scheduler {
     try {
       if (!scope) await this.pollDirect(status, runId);
       await this.pollRules(status, runId, scope);
+      await this.notifications.drain();
     } finally {
       this.running = false;
       status.running = false;
@@ -253,6 +258,7 @@ export class Scheduler {
       const status: SchedulerStatus = { running: true, checked: 0, changed: 0, errors: 0, trigger: "subscription" };
       try {
         await this.checkDirect(direct, status, runId);
+        await this.notifications.drain();
       } finally {
         finishSchedulerRun(this.db, runId, nowIso(), status, Date.now() - startedMs);
       }
@@ -391,15 +397,12 @@ export class Scheduler {
               (id, subscription_id, user_id, kind, summary, payload, created_at)
             VALUES (?, ?, ?, 'direct-change', ?, ?, ?)
           `).run(eventId, row.id, row.user_id, changes.join(", "), JSON.stringify({ previous, current: currentSnapshot, changes }), checkedAt);
+          enqueueNotification(this.db, row.user_id, `direct:${eventId}`, {
+            subscriptionId: row.id, release: currentSnapshot,
+            trackerName: plugin.manifest.displayName, changes, coverRefreshError,
+          });
         })();
         status.changed += 1;
-        await this.telegram.notifyRelease(row.user_id, {
-          subscriptionId: row.id,
-          release: currentSnapshot,
-          trackerName: plugin.manifest.displayName,
-          changes,
-          coverRefreshError,
-        });
       } else {
         outcome = "unchanged";
         this.db.prepare(`
@@ -671,30 +674,7 @@ export class Scheduler {
     for (const [subscriptionId, releases] of newByRule) {
       const rule = rulesById.get(subscriptionId);
       if (!rule) continue;
-      const timestamp = nowIso();
-      const summary = releases.length === 1 ? `New match: ${releases[0].title}` : `${releases.length} new matches`;
-      this.db.transaction(() => {
-        this.db.prepare(`
-          INSERT INTO subscription_events
-            (id, subscription_id, user_id, kind, summary, payload, created_at)
-          VALUES (?, ?, ?, 'rule-match', ?, ?, ?)
-        `).run(nanoid(), subscriptionId, rule.user_id, summary, JSON.stringify({ releases }), timestamp);
-        this.db.prepare(`
-          UPDATE subscriptions
-          SET last_changed_at = ?, updated_at = ? WHERE id = ?
-        `).run(timestamp, timestamp, subscriptionId);
-      })();
       status.changed += 1;
-      const ruleTerms = parseTerms(rule.required_terms);
-      for (const release of releases) {
-        const trackerName = trackerRegistry.get(release.trackerKey)?.manifest.displayName || release.trackerKey;
-        await this.telegram.notifyRelease(rule.user_id, {
-          subscriptionId: rule.id,
-          release,
-          trackerName,
-          ruleTerms,
-        });
-      }
     }
   }
 
@@ -715,9 +695,6 @@ export class Scheduler {
         (id, subscription_id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const updateMatch = this.db.prepare(`
-      UPDATE rule_matches SET title = ?, url = ?, magnet = ?, torrent_url = ? WHERE id = ?
-    `);
     const updateSubscription = this.db.prepare(`
       UPDATE subscriptions SET initialized = 1, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
     `);
@@ -730,15 +707,36 @@ export class Scheduler {
         || Boolean(discoveryRevision && row.discovery_revision !== discoveryRevision);
       if (isBaseline) baselineCount += 1;
       for (const release of matches) {
+        if (this.db.prepare("SELECT 1 FROM rule_matches WHERE subscription_id = ? AND tracker_key = ? AND external_id = ?")
+          .get(row.id, release.trackerKey, release.externalId)) continue;
+        // Enrich before persistence: a crash during network work must leave the
+        // release discoverable, not a recorded match without an outbox entry.
+        const enriched = isBaseline ? release : await this.enrichRuleMatch(release, row, plugin, runId, enrichedReleases);
+        const current = this.db.prepare(`SELECT 1 FROM subscriptions s JOIN subscription_trackers st ON st.subscription_id = s.id
+          WHERE s.id = ? AND s.user_id = ? AND s.enabled = 1 AND s.required_terms = ? AND s.ignored_terms = ? AND st.tracker_key = ?`)
+          .get(row.id, row.user_id, row.required_terms, row.ignored_terms, row.tracker_key);
+        if (!current) continue;
         const matchId = nanoid();
-        const result = insertMatch.run(
-          matchId, row.id, release.trackerKey, release.externalId, release.title, release.url,
-          release.magnet || null, release.torrentUrl || null, nowIso(),
-        );
+        const result = this.db.transaction(() => {
+          const result = insertMatch.run(
+            matchId, row.id, release.trackerKey, release.externalId, enriched.title, enriched.url,
+            enriched.magnet || null, enriched.torrentUrl || null, nowIso(),
+          );
+          if (!isBaseline && result.changes > 0) {
+            const timestamp = nowIso();
+            this.db.prepare(`INSERT INTO subscription_events (id, subscription_id, user_id, kind, summary, payload, created_at)
+              VALUES (?, ?, ?, 'rule-match', ?, ?, ?)`)
+              .run(nanoid(), row.id, row.user_id, `New match: ${enriched.title}`, JSON.stringify({ releases: [enriched] }), timestamp);
+            this.db.prepare("UPDATE subscriptions SET last_changed_at = ?, updated_at = ? WHERE id = ?").run(timestamp, timestamp, row.id);
+            enqueueNotification(this.db, row.user_id, `rule:${matchId}`, {
+              subscriptionId: row.id, release: enriched,
+              trackerName: plugin.manifest.displayName, ruleTerms: parseTerms(row.required_terms),
+            });
+          }
+          return result;
+        })();
         if (!isBaseline && result.changes > 0) {
           newMatchCount += 1;
-          const enriched = await this.enrichRuleMatch(release, row, plugin, runId, enrichedReleases);
-          updateMatch.run(enriched.title, enriched.url, enriched.magnet || null, enriched.torrentUrl || null, matchId);
           const newMatches = newByRule.get(row.id);
           if (newMatches) newMatches.push(enriched);
           else newByRule.set(row.id, [enriched]);
