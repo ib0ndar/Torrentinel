@@ -30,6 +30,7 @@ All notable changes to Torrentinel are documented in this file.
 ### Fixed
 
 - Language and pagination preferences use compact, aligned 200 px dropdowns and distinct rows, with a divider separating the pagination toggle from the default page size. Labels and dropdowns stack on small screens.
+- Removed redundant explanatory text from the Settings language section.
 - Mobile administration headers wrap translated labels correctly; drawers render outside the animated page so navigation cannot cover their actions. Toasts do not intercept clicks.
 
 ## [0.5.6] - 2026-09-29

@@ -24,6 +24,7 @@ it("shows and saves the default page-size dropdown even with pagination disabled
     expect(label.closest(".settings-control--pagination.settings-control--preferences")).not.toBeNull();
     const preferenceControls = container.querySelectorAll(".settings-control--preferences");
     expect(preferenceControls).toHaveLength(2);
+    expect(preferenceControls[0].closest(".settings-section")?.querySelector(".settings-copy p")).toBeNull();
     expect([...preferenceControls].map((control) => control.querySelectorAll("select").length)).toEqual([1, 1]);
     expect(container.querySelector(".telegram-setup")?.closest(".settings-control--preferences")).toBeNull();
     expect([...select.options].map((option) => Number(option.value))).toEqual([...PAGE_SIZE_OPTIONS]);
@@ -32,5 +33,6 @@ it("shows and saves the default page-size dropdown even with pagination disabled
     expect(api).toHaveBeenCalledWith("/api/settings/preferences", expect.objectContaining({ method: "PUT", body: JSON.stringify({ pageSize: 20 }) }));
     expect(onUserChange).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 20, paginationEnabled: false }));
     await act(async () => setLanguage("ru")); expect(container.textContent).toContain("Записей на странице по умолчанию");
+    expect(container.textContent).not.toContain("Выберите английский или русский.");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

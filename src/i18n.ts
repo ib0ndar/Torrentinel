@@ -29,7 +29,7 @@ export const russian: Record<string, string> = {
   "Save new password": "Сохранить новый пароль", "New passwords do not match": "Новые пароли не совпадают", "Password changed": "Пароль изменён",
   "Monitor": "Монитор", "Settings": "Настройки", "Administration": "Администрирование", "Polling trackers": "Проверка трекеров",
   "Monitor ready": "Монитор готов", "Loading schedule": "Загрузка расписания", "Sign out": "Выйти", "Next {time}": "Следующая проверка {time}",
-  "Language": "Язык", "Interface language": "Язык интерфейса", "Choose English or Russian. English is the default.": "Выберите английский или русский. По умолчанию используется английский.",
+  "Language": "Язык", "Interface language": "Язык интерфейса",
   "Pagination": "Разбиение на страницы", "Enable pagination": "Разбивать коллекции на страницы",
   "Show collections in pages. Turn off to load all entries. Search and status filters always run on the server.": "Показывать коллекции постранично. Выключите, чтобы загружать все записи. Поиск и фильтры всегда работают на сервере.",
   "Preference saved": "Настройка сохранена", "Entries per page": "Записей на странице", "First page": "Первая страница", "Previous page": "Предыдущая страница",
