@@ -9,6 +9,7 @@ import { useI18n } from "../i18n";
 import { SubscriptionInspector } from "./SubscriptionInspector";
 import type { Collection, Notify, SubscriptionSummary, Tracker, TrackerKey, User } from "../types";
 import { PAGE_SIZE_OPTIONS } from "../types";
+import { PageNavigation } from "../components/Pagination";
 
 const DEFAULT_IGNORED_PHRASES = ["Trailer", "Трейлер", "Teaser", "Тизер", "Soundtrack", "Саундтрек"];
 export function Workspace({ user, onUserChange, notify, intervalMinutes }: { user: User; onUserChange: (user: User) => void; notify: Notify; intervalMinutes: number | null }) {
@@ -59,14 +60,16 @@ export function Workspace({ user, onUserChange, notify, intervalMinutes }: { use
       <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions"><button className="icon-button" title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger" title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button></div></header>
       <div className="list-toolbar"><div className="filter-tabs">{(["all", "unread", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{t(capitalize(name))}</button>)}</div><label className="search-box"><Icon name="search" size={16} /><input aria-label={t("Filter this collection")} placeholder={t("Filter this collection")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
       {user.paginationEnabled && <nav className="pagination" aria-label={t("Pagination")}>
-        <label>{t("Entries per page")} <select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
-        <span role="status">{t("Page {page} of {pages} · {total} entries", { page, pages: pageCount, total })}</span>
-        <div className="pagination-actions"><button className="button button--quiet" aria-label={t("First page")} disabled={loading || page === 1} onClick={() => setPage(1)}>«</button><button className="button button--quiet" aria-label={t("Previous page")} disabled={loading || page === 1} onClick={() => setPage(page - 1)}>‹</button><button className="button button--quiet" aria-label={t("Next page")} disabled={loading || page >= pageCount} onClick={() => setPage(page + 1)}>›</button><button className="button button--quiet" aria-label={t("Last page")} disabled={loading || page >= pageCount} onClick={() => setPage(pageCount)}>»</button></div>
+        <label className="pagination-size-picker"><span>{t("Entries per page")}</span><select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+        <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} />
       </nav>}
       <div className="subscription-head"><span>{t("Subscription")}</span><span>{t("Source")}</span><span>{t("Last check")}</span><span>{t("Status")}</span></div>
       <div className="subscription-list">{loading ? <ListSkeleton /> : subscriptions.map((item, index) => <SubscriptionRow key={item.id} item={item} index={index} onOpen={() => setSelectedSubscription(item.id)} />)}
         {!loading && subscriptions.length === 0 && <EmptyState icon="monitor" title={t(selected.subscriptionCount ? "Nothing matches this view" : "No subscriptions yet")} text={t(selected.subscriptionCount ? "Try a different status filter or search." : "Add a direct tracker link or a rule to begin monitoring.")} action={!selected.subscriptionCount ? <button className="button button--primary" onClick={() => setCreateOpen(true)}>{t("Add subscription")}</button> : undefined} />}
       </div>
+      {user.paginationEnabled && <nav className="pagination pagination--bottom" aria-label={t("Bottom pagination")}>
+        <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} announce={false} />
+      </nav>}
     </> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={() => setNewCollection(true)}>{t("New collection")}</button>} />}</section>
     {newCollection && <NewCollection onClose={() => setNewCollection(false)} onCreated={async (id) => { setNewCollection(false); await loadCollections(); setSelectedId(id); }} notify={notify} />}
     {createOpen && selected && <CreateSubscription collection={selected} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); setPage(1); await refresh(); }} notify={notify} />}

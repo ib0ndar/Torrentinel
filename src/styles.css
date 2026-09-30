@@ -466,6 +466,10 @@ input::placeholder, textarea::placeholder { color: #52607c; }
   100% { transform: translateX(0); }
 }
 
+@media (min-width: 1051px) and (max-width: 1240px) {
+  .subscription-head, .subscription-open { grid-template-columns: minmax(0, 1fr) 84px 90px 122px; gap: 12px; }
+}
+
 @media (max-width: 1050px) {
   .app-shell { grid-template-columns: 76px minmax(0, 1fr); }
   .app-nav { align-items: center; padding-inline: 10px; }
@@ -565,14 +569,21 @@ input::placeholder, textarea::placeholder { color: #52607c; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
   .brand-mark--scanning .brand-mark__glow { transform: scaleX(2.3); }
 }
-.pagination { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 24px; border-bottom: 1px solid var(--line); font-size: 12px; }
-.pagination label { display: flex; align-items: center; gap: 8px; }
-.pagination select { width: auto; min-width: 70px; }
-.pagination > span { margin-left: auto; }
+.pagination { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.pagination-size-picker { display: grid; gap: 6px; margin-left: 14px; }
+.pagination-size-picker > span { color: var(--muted); font-size: 12px; }
+.pagination select { width: 80px; min-width: 70px; }
+.pagination-navigation { display: flex; align-items: center; gap: 16px; margin-left: auto; }
 .pagination-actions { display: flex; gap: 4px; }
 .pagination-actions .button { min-width: 36px; padding: 6px 10px; font-size: 18px; }
+.pagination--bottom { margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 0; }
 .queue-table { display: grid; gap: 8px; }
 .queue-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .queue-row small { flex-basis: 100%; overflow-wrap: anywhere; }
 .queue-row .state { display: inline-flex; }
-@media (max-width: 700px) { .pagination { padding: 12px 16px; gap: 10px; } .pagination > span { margin-left: 0; flex-basis: 100%; } }
+@media (max-width: 780px) { .pagination-size-picker { margin-left: 10px; } }
+@media (max-width: 700px) {
+  .pagination { gap: 10px; }
+  .pagination-navigation { width: 100%; margin-left: 0; flex-wrap: wrap; gap: 10px; }
+  .pagination-navigation > span { flex-basis: 100%; }
+}

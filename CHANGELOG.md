@@ -10,6 +10,7 @@ All notable changes to Torrentinel are documented in this file.
 - Administration view of pending notifications, attempts, next retry time, and sanitized failure details.
 - Server-side collection pagination, Unicode-aware search, unread/error filtering, total counts, and deterministic ordering. Pagination is enabled by default and can be disabled per account in Settings.
 - Settings dropdown for the default entries per page, plus fast collection-page controls for 10, 20, 50, or 100 entries, saved per account, with first/previous/next/last navigation.
+- Mirrored page count and first/previous/next/last controls below the subscription list, synchronized with the top navigation and hidden when pagination is disabled.
 - English (default) and Russian interface languages, saved per account, including localized dates, dialogs, change history, and Telegram release messages. Release titles, phrases, and other user content remain unchanged.
 
 ### Changed
@@ -29,6 +30,8 @@ All notable changes to Torrentinel are documented in this file.
 
 ### Fixed
 
+- Collection page-size controls use a label above the dropdown, aligned with the status-tab text. Page counts and arrow controls align as a group, mirrored above and below the subscriptions.
+- Compact subscription columns prevent horizontal overflow at narrower desktop widths.
 - Language and pagination preferences use compact, aligned 200 px dropdowns and distinct rows, with a divider separating the pagination toggle from the default page size. Labels and dropdowns stack on small screens.
 - Removed redundant explanatory text from the Settings language section.
 - Mobile administration headers wrap translated labels correctly; drawers render outside the animated page so navigation cannot cover their actions. Toasts do not intercept clicks.
