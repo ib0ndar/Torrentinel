@@ -76,7 +76,12 @@ describe("server-side collection paging and filtering", () => {
     const updated = await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload: { language: "ru", paginationEnabled: false, pageSize: 100 } }); expect(updated.json().user).toMatchObject({ language: "ru", paginationEnabled: false, pageSize: 100 });
     expect((await app.inject({ url: "/api/auth/me", headers: { cookie } })).json().user).toMatchObject({ language: "ru", paginationEnabled: false, pageSize: 100 });
     expect((await get("page=1")).json().subscriptions).toHaveLength(100);
-    for (const payload of [{ language: "de" }, { pageSize: 26 }, { paginationEnabled: "false" }]) expect((await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload })).statusCode).toBe(400);
+    for (const pageSize of [10, 20, 50, 100]) {
+      const response = await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload: { pageSize } });
+      expect(response.statusCode).toBe(200); expect(response.json().user.pageSize).toBe(pageSize);
+      expect((await get("page=1")).json().subscriptions).toHaveLength(pageSize);
+    }
+    for (const payload of [{ language: "de" }, { pageSize: 25 }, { pageSize: 200 }, { pageSize: 26 }, { paginationEnabled: "false" }]) expect((await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload })).statusCode).toBe(400);
     expect((await app.inject({ method: "PUT", url: "/api/settings/preferences", payload: { language: "ru" } })).statusCode).toBe(401);
   });
 });

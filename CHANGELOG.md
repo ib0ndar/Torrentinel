@@ -9,7 +9,7 @@ All notable changes to Torrentinel are documented in this file.
 - Persistent SQLite notification outbox with transactional release/event recording, leased delivery work, restart recovery, exponential retries, and Telegram rate-limit handling. Pending work does not expire; successful queue receipts are retained for seven days.
 - Administration view of pending notifications, attempts, next retry time, and sanitized failure details.
 - Server-side collection pagination, Unicode-aware search, unread/error filtering, total counts, and deterministic ordering. Pagination is enabled by default and can be disabled per account in Settings.
-- Fast collection-page controls for 25, 50, 100, or 200 entries, saved per account, with first/previous/next/last navigation.
+- Settings dropdown for the default entries per page, plus fast collection-page controls for 10, 20, 50, or 100 entries, saved per account, with first/previous/next/last navigation.
 - English (default) and Russian interface languages, saved per account, including localized dates, dialogs, change history, and Telegram release messages. Release titles, phrases, and other user content remain unchanged.
 
 ### Changed
@@ -25,6 +25,7 @@ All notable changes to Torrentinel are documented in this file.
 - Delivery is at least once, not exactly once: Telegram does not expose idempotent send keys. A crash after Telegram accepts a message but before SQLite records the receipt may cause a duplicate on retry.
 - Notifications remain pending when a bot/chat is unavailable and resume after configuration is restored. Deleted subscriptions cancel their pending notifications; disabled users are not sent notifications.
 - Back up the database and application-data directory together before updating. Startup adds the outbox table, activity index, and per-user language/pagination/page-size columns. Existing accounts default to English and 50 entries per page. Previously lost notifications cannot be reconstructed automatically.
+- The corrected 0.6.0 release replaces the initial 25/50/100/200 page-size options with 10/20/50/100 and adds the default-size dropdown in Settings. Existing saved 25/200 preferences migrate to 20/100; 50 and 100 remain unchanged.
 
 ### Fixed
 

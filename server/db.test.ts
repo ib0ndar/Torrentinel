@@ -12,6 +12,35 @@ afterEach(() => {
 });
 
 describe("database migrations", () => {
+  it("migrates the original 0.6.0 page-size constraint without losing users or related data", () => {
+    const directory = mkdtempSync(join(tmpdir(), "torrentinel-page-size-migration-")); cleanup.push(directory);
+    const path = join(directory, "old-v060.db");
+    const legacy = createDatabase(path);
+    legacy.exec(`ALTER TABLE users DROP COLUMN page_size;
+      ALTER TABLE users ADD COLUMN page_size INTEGER NOT NULL DEFAULT 50 CHECK(page_size IN (25, 50, 100, 200));`);
+    const admin = legacy.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    legacy.prepare("UPDATE users SET page_size = 25, language = 'ru', pagination_enabled = 0 WHERE id = ?").run(admin.id);
+    for (const size of [50, 100, 200]) legacy.prepare(`INSERT INTO users (id, username, password_hash, page_size, created_at, updated_at)
+      VALUES (?, ?, 'existing-hash', ?, '2026-09-30', '2026-09-30')`).run(`user-${size}`, `user-${size}`, size);
+    const before = legacy.prepare("SELECT * FROM users ORDER BY id").all() as Array<Record<string, unknown>>;
+    const collections = legacy.prepare("SELECT * FROM collections").all();
+    legacy.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES ('existing-session', ?, '2030-01-01', '2026-09-30')").run(admin.id);
+    legacy.close();
+    for (let pass = 0; pass < 2; pass += 1) {
+      const db = createDatabase(path);
+      try {
+        expect(db.prepare("SELECT * FROM users ORDER BY id").all()).toEqual(before.map((row) => ({ ...row, page_size: row.page_size === 25 ? 20 : row.page_size === 200 ? 100 : row.page_size })));
+        expect(db.prepare("SELECT * FROM collections").all()).toEqual(collections);
+        expect(db.prepare("SELECT user_id FROM sessions WHERE token_hash = 'existing-session'").get()).toEqual({ user_id: admin.id });
+        expect(db.pragma("foreign_key_check")).toEqual([]);
+        expect(db.pragma("quick_check", { simple: true })).toBe("ok");
+        expect((db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>).map((row) => row.name)).not.toContain("page_size_legacy");
+        for (const size of [10, 20, 50, 100]) expect(() => db.prepare("UPDATE users SET page_size = ? WHERE id = ?").run(size, admin.id)).not.toThrow();
+        for (const size of [25, 200, 0]) expect(() => db.prepare("UPDATE users SET page_size = ? WHERE id = ?").run(size, admin.id)).toThrow(/CHECK/);
+        db.prepare("UPDATE users SET page_size = 20 WHERE id = ?").run(admin.id);
+      } finally { db.close(); }
+    }
+  });
   it("merges legacy updated flags into unread activity without losing reminders or history", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "torrentinel-db-test-"));
     cleanup.push(dataDir);

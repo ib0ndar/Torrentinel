@@ -330,7 +330,21 @@ function migrate(db: SqliteDatabase): void {
     db.exec("ALTER TABLE users ADD COLUMN pagination_enabled INTEGER NOT NULL DEFAULT 1 CHECK(pagination_enabled IN (0, 1))");
   }
   if (!userColumns.some((column) => column.name === "page_size")) {
-    db.exec("ALTER TABLE users ADD COLUMN page_size INTEGER NOT NULL DEFAULT 50 CHECK(page_size IN (25, 50, 100, 200))");
+    db.exec("ALTER TABLE users ADD COLUMN page_size INTEGER NOT NULL DEFAULT 50 CHECK(page_size IN (10, 20, 50, 100))");
+  } else {
+    const usersSchema = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get() as { sql: string }).sql;
+    if (/page_size\s+IN\s*\(\s*25\s*,\s*50\s*,\s*100\s*,\s*200\s*\)/i.test(usersSchema)) {
+      // Replace only the original 0.6.0 column constraint, without rebuilding
+      // users or disturbing the foreign keys of its dependent tables.
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE users RENAME COLUMN page_size TO page_size_legacy;
+          ALTER TABLE users ADD COLUMN page_size INTEGER NOT NULL DEFAULT 50 CHECK(page_size IN (10, 20, 50, 100));
+          UPDATE users SET page_size = CASE page_size_legacy WHEN 25 THEN 20 WHEN 200 THEN 100 ELSE page_size_legacy END;
+          ALTER TABLE users DROP COLUMN page_size_legacy;
+        `);
+      })();
+    }
   }
 
   const trackerStateColumns = db.prepare("PRAGMA table_info(subscription_tracker_state)")

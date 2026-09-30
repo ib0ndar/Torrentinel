@@ -6,6 +6,7 @@ import { ListSkeleton, Page, TrackerTag } from "../components/UI";
 import { errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
 import type { Notify, TelegramStatus, Tracker, TrackerKey, TrackerMarkerStyle, User } from "../types";
+import { PAGE_SIZE_OPTIONS } from "../types";
 
 type TrackerSettingsDraft = { mirror: string; username: string; password: string; saving: boolean };
 export function Settings({ user, onUserChange, notify }: { user: User; onUserChange: (user: User) => void; notify: Notify }) {
@@ -27,7 +28,7 @@ export function Settings({ user, onUserChange, notify }: { user: User; onUserCha
     }, 5_000);
     return () => window.clearInterval(interval);
   }, [telegram?.configured, telegram?.linked]);
-  async function savePreference(input: Partial<Pick<User, "language" | "paginationEnabled">>) {
+  async function savePreference(input: Partial<Pick<User, "language" | "paginationEnabled" | "pageSize">>) {
     setPreferenceBusy(true);
     try { const result = await api<{ user: User }>("/api/settings/preferences", { method: "PUT", ...jsonBody(input) }); onUserChange(result.user); notify(t("Preference saved")); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setPreferenceBusy(false); }
@@ -77,7 +78,13 @@ export function Settings({ user, onUserChange, notify }: { user: User; onUserCha
   }
   return <Page title={t("Settings")} eyebrow={t("Preferences & access")} description={t("Personalize source markers and configure private tracker access and Telegram delivery.")}>
     <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Language")}</h2><p>{t("Choose English or Russian. English is the default.")}</p></div><div className="settings-control"><label className="settings-field"><span>{t("Interface language")}</span><select disabled={preferenceBusy} value={user.language} onChange={(event) => void savePreference({ language: event.target.value as User["language"] })}><option value="en">English</option><option value="ru">Русский</option></select></label></div></section>
-    <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Pagination")}</h2><p>{t("Show collections in pages. Turn off to load all entries. Search and status filters always run on the server.")}</p></div><div className="settings-control"><label className="check-line"><input type="checkbox" checked={user.paginationEnabled} disabled={preferenceBusy} onChange={(event) => void savePreference({ paginationEnabled: event.target.checked })} /><span><strong>{t("Enable pagination")}</strong></span></label></div></section>
+    <section className="settings-section settings-section--top">
+      <div className="settings-copy"><h2>{t("Pagination")}</h2><p>{t("Show collections in pages. Turn off to load all entries. Search and status filters always run on the server.")}</p></div>
+      <div className="settings-control">
+        <label className="check-line"><input type="checkbox" checked={user.paginationEnabled} disabled={preferenceBusy} onChange={(event) => void savePreference({ paginationEnabled: event.target.checked })} /><span><strong>{t("Enable pagination")}</strong></span></label>
+        <label className="settings-field"><span>{t("Default entries per page")}</span><select disabled={preferenceBusy} value={user.pageSize} onChange={(event) => void savePreference({ pageSize: Number(event.target.value) })}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+      </div>
+    </section>
     <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Source markers")}</h2><p>{t("Choose how trackers are identified throughout the monitor, details, settings, and diagnostics views.")}</p></div><fieldset className="marker-options" disabled={markerBusy}><legend className="marker-options__legend">{t("Source marker style")}</legend>{(["icons", "abbreviations"] as const).map((style) => <label key={style} className={user.trackerMarkerStyle === style ? "marker-option marker-option--active" : "marker-option"}><input type="radio" name="tracker-marker-style" value={style} checked={user.trackerMarkerStyle === style} onChange={() => void setMarkerStyle(style)} /><span className="marker-option__copy"><strong>{t(style === "icons" ? "Website icons" : "Abbreviation badges")}</strong><small>{t(style === "icons" ? "Use each tracker’s published favicon" : "Use the RT, RU, and KZ letter markers")}</small></span><span className="marker-preview" aria-hidden="true">{(["kinozal", "rutor", "rutracker"] as TrackerKey[]).map((tracker) => <TrackerTag key={tracker} tracker={tracker} variant={style} decorative />)}</span></label>)}</fieldset></section>
     <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Telegram bot")}</h2><p>{t("Create a bot with BotFather, store its token securely, then link the private chat that should receive changes.")}</p></div><div className="settings-control">{!telegram ? <ListSkeleton /> : <div className="telegram-setup">
       <div className="integration-heading"><span className="telegram-mark"><Icon name="send" /></span><span><strong>{telegram.configured ? `@${telegram.botUsername}` : t("No bot configured")}</strong><small>{t(telegram.configured ? "Token encrypted in the local database" : "BotFather issues the token used by Torrentinel")}</small></span><a className="button button--quiet" href="https://t.me/BotFather" target="_blank" rel="noreferrer"><Icon name="external" />{t("Create bot with BotFather")}</a></div>

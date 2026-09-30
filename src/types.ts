@@ -1,6 +1,7 @@
 export type TrackerKey = "kinozal" | "rutor" | "rutracker";
 export type SubscriptionType = "direct" | "rule";
 export type TrackerMarkerStyle = "icons" | "abbreviations";
+export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 export interface User {
   id: string;

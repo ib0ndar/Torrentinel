@@ -8,6 +8,7 @@ import { capitalize, errorMessage, formatPollInterval, relativeTime } from "../f
 import { useI18n } from "../i18n";
 import { SubscriptionInspector } from "./SubscriptionInspector";
 import type { Collection, Notify, SubscriptionSummary, Tracker, TrackerKey, User } from "../types";
+import { PAGE_SIZE_OPTIONS } from "../types";
 
 const DEFAULT_IGNORED_PHRASES = ["Trailer", "Трейлер", "Teaser", "Тизер", "Soundtrack", "Саундтрек"];
 export function Workspace({ user, onUserChange, notify, intervalMinutes }: { user: User; onUserChange: (user: User) => void; notify: Notify; intervalMinutes: number | null }) {
@@ -58,7 +59,7 @@ export function Workspace({ user, onUserChange, notify, intervalMinutes }: { use
       <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions"><button className="icon-button" title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger" title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button></div></header>
       <div className="list-toolbar"><div className="filter-tabs">{(["all", "unread", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{t(capitalize(name))}</button>)}</div><label className="search-box"><Icon name="search" size={16} /><input aria-label={t("Filter this collection")} placeholder={t("Filter this collection")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
       {user.paginationEnabled && <nav className="pagination" aria-label={t("Pagination")}>
-        <label>{t("Entries per page")} <select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{[25, 50, 100, 200].map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+        <label>{t("Entries per page")} <select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
         <span role="status">{t("Page {page} of {pages} · {total} entries", { page, pages: pageCount, total })}</span>
         <div className="pagination-actions"><button className="button button--quiet" aria-label={t("First page")} disabled={loading || page === 1} onClick={() => setPage(1)}>«</button><button className="button button--quiet" aria-label={t("Previous page")} disabled={loading || page === 1} onClick={() => setPage(page - 1)}>‹</button><button className="button button--quiet" aria-label={t("Next page")} disabled={loading || page >= pageCount} onClick={() => setPage(page + 1)}>›</button><button className="button button--quiet" aria-label={t("Last page")} disabled={loading || page >= pageCount} onClick={() => setPage(pageCount)}>»</button></div>
       </nav>}

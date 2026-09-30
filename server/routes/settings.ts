@@ -8,7 +8,7 @@ import { origin, parse, resolvedMirrors, trackerKeySchema, urlSchema, type Route
 export function registerSettingsRoutes({ app, db, vault, telegram }: RouteServices): void {
   app.put("/api/settings/preferences", { preHandler: requireReadyUser }, async (request, reply) => {
     const input = parse(z.object({ language: z.enum(["en", "ru"]).optional(), paginationEnabled: z.boolean().optional(),
-      pageSize: z.union([z.literal(25), z.literal(50), z.literal(100), z.literal(200)]).optional() }), request.body, reply);
+      pageSize: z.union([z.literal(10), z.literal(20), z.literal(50), z.literal(100)]).optional() }), request.body, reply);
     if (!input || !request.user) return;
     const user = request.user;
     db.prepare(`UPDATE users SET language = ?, pagination_enabled = ?, page_size = ?, updated_at = ? WHERE id = ?`)
