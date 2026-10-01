@@ -3,7 +3,7 @@ import { api } from "../api";
 import type { Collection, Notify, SubscriptionSummary } from "../types";
 import { errorMessage } from "../format";
 
-export function useWorkspaceData(notify: Notify, paginationEnabled = false, pageSize = 50) {
+export function useWorkspaceData(notify: Notify, paginationEnabled = false, pageSize = 50, active = true) {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedId, setSelection] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionSummary[]>([]);
@@ -44,6 +44,7 @@ export function useWorkspaceData(notify: Notify, paginationEnabled = false, page
 
   const loadSubscriptions = useCallback(async () => {
     subscriptionRequest.current?.abort();
+    if (!active) return;
     const controller = new AbortController();
     subscriptionRequest.current = controller;
     const id = selected.current;
@@ -69,7 +70,7 @@ export function useWorkspaceData(notify: Notify, paginationEnabled = false, page
     } finally {
       if (!controller.signal.aborted && selected.current === id) setLoading(false);
     }
-  }, [page, pageSize, paginationEnabled, filter, search]);
+  }, [page, pageSize, paginationEnabled, filter, search, active]);
 
   const refresh = useCallback(async () => {
     try {
@@ -99,3 +100,5 @@ export function useWorkspaceData(notify: Notify, paginationEnabled = false, page
   return { collections, selectedId, setSelectedId, subscriptions, loading, loadCollections, refresh,
     page, setPage: changePage, filter, setFilter: changeFilter, search, setSearch: changeSearch, total, pageCount };
 }
+
+export type WorkspaceData = ReturnType<typeof useWorkspaceData>;

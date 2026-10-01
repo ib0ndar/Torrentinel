@@ -1,10 +1,10 @@
 import { type CSSProperties, type FormEvent, useEffect, useState } from "react";
 import { api, jsonBody } from "../api";
-import { useWorkspaceData } from "../hooks/useWorkspaceData";
+import type { WorkspaceData } from "../hooks/useWorkspaceData";
 import { useDialog } from "../components/Dialogs";
 import { Icon } from "../components/Icon";
-import { Drawer, DrawerActions, EmptyCompact, EmptyState, Field, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, TrackerTag } from "../components/UI";
-import { capitalize, errorMessage, formatPollInterval, relativeTime } from "../format";
+import { Drawer, DrawerActions, EmptyState, Field, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, TrackerTag } from "../components/UI";
+import { capitalize, errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
 import { SubscriptionInspector } from "./SubscriptionInspector";
 import type { Collection, Notify, SubscriptionSummary, Tracker, TrackerKey, User } from "../types";
@@ -12,12 +12,11 @@ import { PAGE_SIZE_OPTIONS } from "../types";
 import { PageNavigation } from "../components/Pagination";
 
 const DEFAULT_IGNORED_PHRASES = ["Trailer", "Трейлер", "Teaser", "Тизер", "Soundtrack", "Саундтрек"];
-export function Workspace({ user, onUserChange, notify, intervalMinutes }: { user: User; onUserChange: (user: User) => void; notify: Notify; intervalMinutes: number | null }) {
+export function Workspace({ user, onUserChange, notify, data, onNewCollection }: { user: User; onUserChange: (user: User) => void; notify: Notify; data: WorkspaceData; onNewCollection: () => void }) {
   const { t } = useI18n(), dialog = useDialog();
-  const data = useWorkspaceData(notify, user.paginationEnabled, user.pageSize);
   const { collections, selectedId, setSelectedId, subscriptions, loading, loadCollections, refresh, filter, setFilter, page, setPage, total, pageCount } = data;
-  const [search, setSearch] = useState("");
-  const [newCollection, setNewCollection] = useState(false), [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState(data.search);
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedSubscription, setSelectedSubscription] = useState<string | null>(null);
   const [savingSize, setSavingSize] = useState(false);
   // Debounce only typing, not collection/page navigation. Search always covers
@@ -50,12 +49,6 @@ export function Workspace({ user, onUserChange, notify, intervalMinutes }: { use
     } catch (error) { notify(errorMessage(error), "bad"); } finally { setSavingSize(false); }
   }
   return <div className="workspace">
-    <aside className="collection-rail">
-      <div className="rail-heading"><span>{t("Collections")}</span><button className="icon-button" title={t("New collection")} onClick={() => setNewCollection(true)}><Icon name="plus" /></button></div>
-      <div className="collection-list">{collections.map((collection) => <button key={collection.id} className={`collection-item ${selectedId === collection.id ? "collection-item--active" : ""}`} onClick={() => setSelectedId(collection.id)}><span className="collection-glyph">{collection.name.slice(0, 1).toUpperCase()}</span><span className="collection-copy"><strong>{collection.name}</strong><small>{t("{count} subscriptions", { count: collection.subscriptionCount })}</small></span>{collection.unreadCount > 0 && <span className="count-badge">{collection.unreadCount}</span>}</button>)}</div>
-      {collections.length === 0 && <EmptyCompact text={t("Create a collection to start monitoring.")} />}
-      <div className="rail-footer"><Icon name="clock" size={15} /><span>{intervalMinutes ? t("Checks run every {interval}", { interval: formatPollInterval(intervalMinutes) }) : t("Loading check interval")}</span></div>
-    </aside>
     <section className="subscription-pane">{selected ? <>
       <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions"><button className="icon-button" title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger" title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button></div></header>
       <div className="list-toolbar"><div className="filter-tabs">{(["all", "unread", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{t(capitalize(name))}</button>)}</div><label className="search-box"><Icon name="search" size={16} /><input aria-label={t("Filter this collection")} placeholder={t("Filter this collection")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
@@ -70,8 +63,7 @@ export function Workspace({ user, onUserChange, notify, intervalMinutes }: { use
       {user.paginationEnabled && <nav className="pagination pagination--bottom" aria-label={t("Bottom pagination")}>
         <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} announce={false} />
       </nav>}
-    </> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={() => setNewCollection(true)}>{t("New collection")}</button>} />}</section>
-    {newCollection && <NewCollection onClose={() => setNewCollection(false)} onCreated={async (id) => { setNewCollection(false); await loadCollections(); setSelectedId(id); }} notify={notify} />}
+    </> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={onNewCollection}>{t("New collection")}</button>} />}</section>
     {createOpen && selected && <CreateSubscription collection={selected} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); setPage(1); await refresh(); }} notify={notify} />}
     {selectedSubscription && <SubscriptionInspector key={selectedSubscription} id={selectedSubscription} collections={collections} onClose={() => setSelectedSubscription(null)} onChanged={refresh} notify={notify} />}
   </div>;
@@ -79,16 +71,6 @@ export function Workspace({ user, onUserChange, notify, intervalMinutes }: { use
 function SubscriptionRow({ item, index, onOpen }: { item: SubscriptionSummary; index: number; onOpen: () => void }) {
   const { t } = useI18n();
   return <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""}`} style={{ "--row-index": Math.min(index, 20) } as CSSProperties}><button type="button" className="subscription-open" onClick={onOpen}><span className="subscription-main"><span className={`type-icon type-icon--${item.type} ${item.isUnread ? "type-icon--unread" : ""}`} role="img" aria-label={`${t(item.isUnread ? "Unread" : "Read")} ${t(item.type)} ${t("Subscription")}`} title={t(item.isUnread ? "Unread — open to mark read" : "Read")}><Icon name={item.isUnread ? "bellAlert" : item.type === "direct" ? "link" : "rule"} size={17} /></span><span>{item.type === "rule" ? <PhraseDisplay phrases={item.requiredTerms} /> : <strong>{item.label === "Direct subscription" ? t(item.label) : item.label}</strong>}<small>{item.type === "rule" ? item.ignoredTerms.length ? t("Excludes {terms}", { terms: item.ignoredTerms.join(", ") }) : t("Matches every required phrase") : item.directUrl}</small></span></span><span className="tracker-stack">{item.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span><span className="time-cell">{item.lastCheckedAt ? relativeTime(item.lastCheckedAt) : t("Pending")}</span><span className="row-status">{item.lastError ? <span className="state state--error">{t("Needs attention")}</span> : !item.enabled ? <span className="state">{t("Paused")}</span> : !item.initialized ? <span className="state state--pending">{t("Learning")}</span> : <span className="state state--good">{t("Watching")}</span>}</span></button></div>;
-}
-function NewCollection({ onClose, onCreated, notify }: { onClose: () => void; onCreated: (id: string) => Promise<void>; notify: Notify }) {
-  const { t } = useI18n();
-  const [name, setName] = useState(""), [busy, setBusy] = useState(false);
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true);
-    try { const result = await api<{ collection: Collection }>("/api/collections", { method: "POST", ...jsonBody({ name }) }); await onCreated(result.collection.id); notify(t("Collection created")); }
-    catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
-  }
-  return <Drawer title={t("New collection")} subtitle={t("Create an isolated place for related subscriptions.")} onClose={onClose}><form onSubmit={submit}><Field label={t("Collection name")}><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} autoFocus required /></Field><DrawerActions onCancel={onClose} busy={busy} label={t("Create collection")} /></form></Drawer>;
 }
 function CreateSubscription({ collection, onClose, onCreated, notify }: { collection: Collection; onClose: () => void; onCreated: () => Promise<void>; notify: Notify }) {
   const { t } = useI18n();

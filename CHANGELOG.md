@@ -2,6 +2,24 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.6.1] - 2026-10-01
+
+### Changed
+
+- Consolidated desktop navigation and collections into one 260 px sidebar, giving the Monitor workspace 244 px more horizontal space.
+- Collections remain available in Settings and Administration. Selecting a collection returns directly to Monitor, while Settings and Administration stay near the bottom of the sidebar.
+- Collection selection, search, filters, and pagination remain available when switching pages. Subscription requests pause outside Monitor while collection counts continue to refresh.
+- Mobile pages retain bottom navigation and expose collections and the New collection action above the page content.
+
+### Fixed
+
+- Administration controls, mirrors, and tables fit narrower desktop widths without overflowing the page.
+- Added coverage for collection navigation between Monitor, Settings, and Administration.
+
+### Upgrade notes
+
+- No database schema changes. Existing collections, subscriptions, account preferences, and integrations are preserved.
+
 ## [0.6.0] - 2026-09-30
 
 ### Added
@@ -358,6 +376,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.6.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.1
 [0.6.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.0
 [0.5.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.6
 [0.5.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.5

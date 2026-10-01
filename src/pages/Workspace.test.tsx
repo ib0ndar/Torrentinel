@@ -7,6 +7,7 @@ import { DialogProvider } from "../components/Dialogs";
 import { setLanguage } from "../i18n";
 import type { SubscriptionSummary, User } from "../types";
 import { Workspace } from "./Workspace";
+import { useWorkspaceData } from "../hooks/useWorkspaceData";
 
 vi.mock("../api", async (original) => ({ ...await original<object>(), api: vi.fn() }));
 afterEach(() => { vi.resetAllMocks(); setLanguage("en"); });
@@ -25,7 +26,11 @@ it("keeps top and bottom navigation synchronized and hides both when pagination 
   });
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container), notify = vi.fn(), onUserChange = vi.fn();
-  const render = (current: User) => <DialogProvider><Workspace user={current} onUserChange={onUserChange} notify={notify} intervalMinutes={30} /></DialogProvider>;
+  function Harness({ current }: { current: User }) {
+    const data = useWorkspaceData(notify, current.paginationEnabled, current.pageSize);
+    return <DialogProvider><Workspace user={current} onUserChange={onUserChange} notify={notify} data={data} onNewCollection={() => undefined} /></DialogProvider>;
+  }
+  const render = (current: User) => <Harness current={current} />;
   const button = (navigation: Element, label: string) => navigation.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
   try {
     await act(async () => root.render(render(user)));
