@@ -4,9 +4,12 @@ import { requireReadyUser } from "../auth.js";
 import { jsonArray, jsonObject, ownsCollection, parse, type RouteServices } from "./shared.js";
 import { subscriptionLabel } from "./subscriptions.js";
 
-// A manual "Mark unread" reminder surfaces the subscription's latest change as unread.
-const UNREAD_EVENT_SQL = `(e.read_at IS NULL OR (s.manual_unread = 1 AND e.id = (SELECT latest.id FROM subscription_events latest
-  WHERE latest.subscription_id = s.id ORDER BY latest.created_at DESC, latest.rowid DESC LIMIT 1)))`;
+// A manual "Mark unread" reminder only needs its own entry when the subscription has no unread change to show.
+export const REMINDER_SQL = `s.manual_unread = 1 AND NOT EXISTS (SELECT 1 FROM subscription_events pending WHERE pending.subscription_id = s.id AND pending.read_at IS NULL)`;
+const SUBSCRIPTION_FIELDS_SQL = `s.id AS subscription_id, s.type, s.name, s.direct_url, s.required_terms, s.ignored_terms,
+      CASE WHEN json_valid(s.current_snapshot) THEN json_extract(s.current_snapshot, '$.title') END AS current_title,
+      (SELECT GROUP_CONCAT(st.tracker_key) FROM subscription_trackers st WHERE st.subscription_id = s.id) AS tracker_keys,
+      c.id AS collection_id, c.name AS collection_name`;
 const SNAPSHOT_FIELDS = ["title", "url", "coverUrl", "magnet", "torrentUrl"] as const;
 const RELEASE_FIELDS = ["trackerKey", "title", "url", "magnet", "torrentUrl"] as const;
 
@@ -16,18 +19,18 @@ export function registerActivityRoutes({ app, db }: RouteServices): void {
       page: z.coerce.number().int().min(1).max(1_000_000).default(1), pageSize: z.coerce.number().int().min(1).max(200).optional() }), request.query, reply);
     if (!query || !request.user) return;
     const userId = request.user.id, pageSize = query.pageSize ?? request.user.pageSize;
-    const where = `e.user_id = ? AND s.user_id = ?${query.filter === "unread" ? ` AND ${UNREAD_EVENT_SQL}` : ""}`;
+    const where = `e.user_id = ? AND s.user_id = ?${query.filter === "unread" ? " AND e.read_at IS NULL" : ""}`;
     const total = (db.prepare(`SELECT COUNT(*) AS count FROM subscription_events e JOIN subscriptions s ON s.id = e.subscription_id WHERE ${where}`)
       .get(userId, userId) as { count: number }).count;
     const pageCount = Math.max(1, Math.ceil(total / pageSize)), page = Math.min(query.page, pageCount);
-    const rows = db.prepare(`SELECT e.id, e.kind, e.summary, e.payload, e.created_at, e.read_at, ${UNREAD_EVENT_SQL} AS is_unread,
-      s.id AS subscription_id, s.type, s.name, s.direct_url, s.required_terms, s.ignored_terms,
-      CASE WHEN json_valid(s.current_snapshot) THEN json_extract(s.current_snapshot, '$.title') END AS current_title,
-      (SELECT GROUP_CONCAT(st.tracker_key) FROM subscription_trackers st WHERE st.subscription_id = s.id) AS tracker_keys,
-      c.id AS collection_id, c.name AS collection_name
+    const rows = db.prepare(`SELECT e.id, e.kind, e.summary, e.payload, e.created_at, e.read_at, ${SUBSCRIPTION_FIELDS_SQL}
       FROM subscription_events e JOIN subscriptions s ON s.id = e.subscription_id JOIN collections c ON c.id = s.collection_id
       WHERE ${where} ORDER BY e.created_at DESC, e.rowid DESC LIMIT ? OFFSET ?`).all(userId, userId, pageSize, (page - 1) * pageSize) as ActivityRow[];
-    return { events: rows.map(serializeActivity), total, page, pageSize, pageCount };
+    // Reminders are unread items too, so the unread view lists them alongside the changes.
+    const reminders = query.filter === "unread" ? (db.prepare(`SELECT ${SUBSCRIPTION_FIELDS_SQL}, s.last_changed_at
+      FROM subscriptions s JOIN collections c ON c.id = s.collection_id WHERE s.user_id = ? AND ${REMINDER_SQL}
+      ORDER BY COALESCE(s.last_changed_at, s.created_at) DESC, s.rowid DESC LIMIT 500`).all(userId) as ReminderRow[]).map(serializeReminder) : [];
+    return { events: rows.map(serializeActivity), total, page, pageSize, pageCount, reminders };
   });
 
   // Marks every change read and clears manual reminders, for one collection or all of them.
@@ -61,15 +64,20 @@ function compactPayload(payload: Record<string, unknown> | null) {
     previous: pick(payload.previous, SNAPSHOT_FIELDS), current: pick(payload.current, SNAPSHOT_FIELDS),
     releases: Array.isArray(payload.releases) ? payload.releases.map((release) => pick(release, RELEASE_FIELDS)).filter(Boolean) : undefined };
 }
-function serializeActivity(row: ActivityRow) {
+function serializeActivitySubscription(row: SubscriptionFieldsRow) {
   const requiredTerms = jsonArray(row.required_terms);
-  return { id: row.id, kind: row.kind, summary: row.summary, payload: compactPayload(jsonObject(row.payload)), createdAt: row.created_at, readAt: row.read_at, isUnread: Boolean(row.is_unread),
-    subscription: { id: row.subscription_id, type: row.type, label: subscriptionLabel(row.type, requiredTerms, row.current_title, row.name), directUrl: row.direct_url,
-      requiredTerms, ignoredTerms: jsonArray(row.ignored_terms), trackerKeys: row.tracker_keys?.split(",").filter(Boolean) || [] },
-    collection: { id: row.collection_id, name: row.collection_name } };
+  return { subscription: { id: row.subscription_id, type: row.type, label: subscriptionLabel(row.type, requiredTerms, row.current_title, row.name), directUrl: row.direct_url,
+    requiredTerms, ignoredTerms: jsonArray(row.ignored_terms), trackerKeys: row.tracker_keys?.split(",").filter(Boolean) || [] },
+  collection: { id: row.collection_id, name: row.collection_name } };
 }
-interface ActivityRow {
-  id: string; kind: string; summary: string; payload: string; created_at: string; read_at: string | null; is_unread: number;
+function serializeActivity(row: ActivityRow) {
+  return { id: row.id, kind: row.kind, summary: row.summary, payload: compactPayload(jsonObject(row.payload)), createdAt: row.created_at, readAt: row.read_at, isUnread: row.read_at === null,
+    ...serializeActivitySubscription(row) };
+}
+function serializeReminder(row: ReminderRow) { return { ...serializeActivitySubscription(row), lastChangedAt: row.last_changed_at }; }
+interface SubscriptionFieldsRow {
   subscription_id: string; type: "direct" | "rule"; name: string; direct_url: string | null; required_terms: string; ignored_terms: string;
   current_title: unknown; tracker_keys: string | null; collection_id: string; collection_name: string;
 }
+interface ActivityRow extends SubscriptionFieldsRow { id: string; kind: string; summary: string; payload: string; created_at: string; read_at: string | null }
+interface ReminderRow extends SubscriptionFieldsRow { last_changed_at: string | null }

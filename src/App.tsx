@@ -94,7 +94,8 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
     onSelect: (id: string) => navigate(collectionHref(id)),
     onCreate: () => setNewCollection(true),
   };
-  const unreadTotal = data.collections.reduce((sum, collection) => sum + collection.unreadCount, 0);
+  // Same unit as the Activity unread view: unread changes plus standalone "Mark unread" reminders.
+  const unreadTotal = data.collections.reduce((sum, collection) => sum + collection.activityCount, 0);
   const loadCollections = useCallback(() => data.loadCollections().catch((error) => notify(errorMessage(error), "bad")), [data.loadCollections, notify]);
   async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
   const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };

@@ -22,6 +22,8 @@ export interface Collection {
   name: string;
   subscriptionCount: number;
   unreadCount: number;
+  /** Unread changes plus manual "Mark unread" reminders without unread changes; matches the Activity unread view. */
+  activityCount: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -221,4 +223,9 @@ export interface ActivityEvent extends SubscriptionEvent {
   isUnread: boolean;
   subscription: Pick<Subscription, "id" | "type" | "label" | "directUrl" | "requiredTerms" | "ignoredTerms" | "trackerKeys">;
   collection: { id: string; name: string };
+}
+export interface ActivityReminder {
+  subscription: ActivityEvent["subscription"];
+  collection: ActivityEvent["collection"];
+  lastChangedAt?: string | null;
 }

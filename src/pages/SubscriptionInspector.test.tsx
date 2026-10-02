@@ -18,7 +18,7 @@ async function open(details: { subscription: Subscription; events: SubscriptionE
   vi.mocked(api).mockResolvedValue(details);
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(<DialogProvider><SubscriptionInspector id="1" collections={[{ id: "inbox", name: "Inbox", subscriptionCount: 1, unreadCount: 0 }]} onClose={vi.fn()} onChanged={async () => undefined} notify={vi.fn()} /></DialogProvider>));
+  await act(async () => root.render(<DialogProvider><SubscriptionInspector id="1" collections={[{ id: "inbox", name: "Inbox", subscriptionCount: 1, unreadCount: 0, activityCount: 0 }]} onClose={vi.fn()} onChanged={async () => undefined} notify={vi.fn()} /></DialogProvider>));
   return { root, drawer: document.querySelector<HTMLElement>(".drawer")! };
 }
 const event = (id: string, kind: string, summary: string, payload: Record<string, unknown> | null): SubscriptionEvent => ({ id, kind, summary, payload, createdAt: new Date(Date.now() - 3_600_000).toISOString(), readAt: null });

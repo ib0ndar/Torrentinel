@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { api, jsonBody } from "../api";
 import { ChangeSummary } from "../components/ChangeDetails";
 import { useDialog } from "../components/Dialogs";
@@ -7,17 +7,17 @@ import { EmptyState, ListSkeleton, Page, PhraseDisplay, SubscriptionTypeIcon, Tr
 import { absoluteTime, errorMessage, relativeTime } from "../format";
 import { getLanguage, useI18n } from "../i18n";
 import type { ActivityFilter } from "../routing";
-import type { ActivityEvent, Collection, Notify, User } from "../types";
+import type { ActivityEvent, ActivityReminder, Collection, Notify, User } from "../types";
 import { SubscriptionInspector } from "./SubscriptionInspector";
 
-type ActivityResponse = { events: ActivityEvent[]; total: number; page: number; pageCount: number };
+type ActivityResponse = { events: ActivityEvent[]; total: number; page: number; pageCount: number; reminders?: ActivityReminder[] };
 const dayKey = (value: string) => { const date = new Date(value); return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; };
 
 export function Activity({ user, notify, filter, onFilterChange, collections, onCollectionsChanged }: {
   user: User; notify: Notify; filter: ActivityFilter; onFilterChange: (filter: ActivityFilter) => void; collections: Collection[]; onCollectionsChanged: () => Promise<void>;
 }) {
   const { t } = useI18n(), dialog = useDialog();
-  const [events, setEvents] = useState<ActivityEvent[]>([]), [total, setTotal] = useState(0), [loading, setLoading] = useState(true), [loadingMore, setLoadingMore] = useState(false);
+  const [events, setEvents] = useState<ActivityEvent[]>([]), [reminders, setReminders] = useState<ActivityReminder[]>([]), [total, setTotal] = useState(0), [loading, setLoading] = useState(true), [loadingMore, setLoadingMore] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const pages = useRef(1), request = useRef<AbortController | null>(null);
   const unreadSubscriptions = collections.reduce((sum, collection) => sum + collection.unreadCount, 0);
@@ -33,6 +33,7 @@ export function Activity({ user, notify, filter, onFilterChange, collections, on
       const seen = new Set<string>();
       setEvents(results.flatMap((result) => result.events).filter((event) => !seen.has(event.id) && Boolean(seen.add(event.id))));
       setTotal(results[0]?.total ?? 0);
+      setReminders(results[0]?.reminders ?? []);
       pages.current = Math.max(1, Math.min(pages.current, results[0]?.pageCount ?? 1));
     } catch (error) {
       if (!controller.signal.aborted) throw error;
@@ -60,14 +61,18 @@ export function Activity({ user, notify, filter, onFilterChange, collections, on
     const key = dayKey(event.createdAt), group = groups.at(-1);
     if (group?.key === key) group.events.push(event); else groups.push({ key, label: dayLabel(event.createdAt), events: [event] });
   }
+  const counts = filter === "unread"
+    ? [total > 0 ? t(total === 1 ? "{count} unread change" : "{count} unread changes", { count: total }) : "", reminders.length > 0 ? t("{count} marked unread", { count: reminders.length }) : ""].filter(Boolean).join(" · ")
+    : total > 0 ? t(total === 1 ? "{count} change" : "{count} changes", { count: total }) : "";
   return <Page eyebrow={t("All collections")} title={t("Activity")} description={t("Changes across your collections, newest first. Open an entry to see its details and mark it read.")}
     actions={<button className="button button--quiet activity-read" disabled={!unreadSubscriptions} onClick={() => void markAllRead()}><Icon name="check" size={16} />{t("Mark all read")}</button>}>
     <div className="list-toolbar activity-toolbar"><div className="filter-tabs">{(["unread", "all"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => onFilterChange(name)}>{t(name === "unread" ? "Unread" : "All")}</button>)}</div>
-      {!loading && total > 0 && <span className="activity-count">{t(filter === "unread" ? "{count} unread changes" : "{count} changes", { count: total })}</span>}</div>
-    {loading ? <ListSkeleton /> : events.length === 0 ? (filter === "unread"
+      {!loading && counts && <span className="activity-count">{counts}</span>}</div>
+    {loading ? <ListSkeleton /> : events.length === 0 && reminders.length === 0 ? (filter === "unread"
       ? <EmptyState icon="check" title={t("You’re all caught up")} text={t("New changes from all your collections will appear here.")} action={<button className="button button--quiet" onClick={() => onFilterChange("all")}>{t("Show all changes")}</button>} />
       : <EmptyState icon="clock" title={t("No changes yet")} text={t("Changes will appear here after the baseline.")} />)
-      : <>{groups.map((group) => <section className="activity-day" key={group.key}><h2>{group.label}</h2><div className="activity-list">{group.events.map((event) => <ActivityEntry key={event.id} event={event} onOpen={() => setOpenId(event.subscription.id)} />)}</div></section>)}
+      : <>{reminders.length > 0 && <section className="activity-day activity-reminders"><h2>{t("Marked unread")}</h2><div className="activity-list">{reminders.map((reminder) => <ReminderEntry key={reminder.subscription.id} reminder={reminder} onOpen={() => setOpenId(reminder.subscription.id)} />)}</div></section>}
+        {groups.map((group) => <section className="activity-day" key={group.key}><h2>{group.label}</h2><div className="activity-list">{group.events.map((event) => <ActivityEntry key={event.id} event={event} onOpen={() => setOpenId(event.subscription.id)} />)}</div></section>)}
         {events.length < total && <div className="activity-more"><button className="button button--quiet" disabled={loadingMore} onClick={() => void loadMore()}>{t("Load more")}</button></div>}</>}
     {openId && <SubscriptionInspector key={openId} id={openId} collections={collections} onClose={() => setOpenId(null)} onChanged={changed} notify={notify} />}
   </Page>;
@@ -80,14 +85,21 @@ export function Activity({ user, notify, filter, onFilterChange, collections, on
   }
 }
 function ActivityEntry({ event, onOpen }: { event: ActivityEvent; onOpen: () => void }) {
-  const { t } = useI18n(), { subscription } = event;
-  return <button type="button" className={`activity-entry ${event.isUnread ? "activity-entry--unread" : ""}`} onClick={onOpen}>
-    <SubscriptionTypeIcon type={subscription.type} unread={event.isUnread} />
+  return <ActivityRow item={event} unread={event.isUnread} summary={<ChangeSummary event={event} />} time={event.createdAt} onOpen={onOpen} />;
+}
+function ReminderEntry({ reminder, onOpen }: { reminder: ActivityReminder; onOpen: () => void }) {
+  const { t } = useI18n();
+  return <ActivityRow item={reminder} unread summary={<span className="change-summary">{t("Marked unread by you")}</span>} time={reminder.lastChangedAt || undefined} onOpen={onOpen} />;
+}
+function ActivityRow({ item, unread, summary, time, onOpen }: { item: Pick<ActivityEvent, "subscription" | "collection">; unread: boolean; summary: ReactNode; time?: string; onOpen: () => void }) {
+  const { t } = useI18n(), { subscription } = item;
+  return <button type="button" className={`activity-entry ${unread ? "activity-entry--unread" : ""}`} onClick={onOpen}>
+    <SubscriptionTypeIcon type={subscription.type} unread={unread} />
     <span className="activity-entry__main">
       <span className="activity-entry__label">{subscription.type === "rule" ? <PhraseDisplay phrases={subscription.requiredTerms} /> : <strong>{subscription.label === "Direct subscription" ? t(subscription.label) : subscription.label}</strong>}</span>
-      <ChangeSummary event={event} />
-      <span className="activity-entry__meta"><span className="activity-entry__collection"><Icon name="folder" size={13} />{event.collection.name}</span><span className="tracker-stack">{subscription.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span></span>
+      {summary}
+      <span className="activity-entry__meta"><span className="activity-entry__collection"><Icon name="folder" size={13} />{item.collection.name}</span><span className="tracker-stack">{subscription.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span></span>
     </span>
-    <time className="activity-entry__time" dateTime={event.createdAt} title={absoluteTime(event.createdAt)}>{relativeTime(event.createdAt)}</time>
+    {time ? <time className="activity-entry__time" dateTime={time} title={absoluteTime(time)}>{relativeTime(time)}</time> : <span />}
   </button>;
 }

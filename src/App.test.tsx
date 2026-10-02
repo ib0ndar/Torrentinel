@@ -14,7 +14,7 @@ afterEach(() => { vi.resetAllMocks(); setLanguage("en"); window.history.replaceS
 it("keeps collections available across pages and returns to the chosen collection without background subscription polling", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();
-  const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 0, unreadCount: 0 }));
+  const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 0, unreadCount: 0, activityCount: 0 }));
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
@@ -82,7 +82,7 @@ it("returns to sign-in with one clear message when the session expires during ba
     if (expired) { expireSession(); throw new SessionExpiredError(); }
     if (path === "/api/auth/me") return { user: { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
-    if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0 }] };
+    if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0, activityCount: 0 }] };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
     throw new Error(`Unexpected request: ${path}`);
   });
@@ -113,7 +113,7 @@ it("switches to the password form when a request reports that the password must 
     if (reset) { requirePasswordChange(); throw new PasswordChangeRequiredError(); }
     if (path === "/api/auth/me") return { user };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
-    if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0 }] };
+    if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0, activityCount: 0 }] };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
     throw new Error(`Unexpected request: ${path}`);
   });
@@ -221,7 +221,7 @@ function memoryStorage(): Storage {
     removeItem: (key) => { values.delete(key); }, setItem: (key, value) => { values.set(key, String(value)); } };
 }
 function mockMonitor(options: { paginationEnabled?: boolean; unread?: number } = {}) {
-  const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 60, unreadCount: options.unread ?? 0 }));
+  const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 60, unreadCount: options.unread ?? 0, activityCount: options.unread ?? 0 }));
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: options.paginationEnabled ?? true, pageSize: 20, theme: "sentinel" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };

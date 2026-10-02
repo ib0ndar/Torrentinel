@@ -30,7 +30,7 @@ function render(filter: ActivityFilter, collections: Collection[]) {
   const root = createRoot(container), notify = vi.fn(), onCollectionsChanged = vi.fn(async () => undefined), onFilterChange = vi.fn();
   return { container, root, notify, onCollectionsChanged, onFilterChange, mount: () => act(async () => root.render(<DialogProvider><Activity user={user} notify={notify} filter={filter} onFilterChange={onFilterChange} collections={collections} onCollectionsChanged={onCollectionsChanged} /></DialogProvider>)) };
 }
-const collections: Collection[] = [{ id: "films", name: "Films", subscriptionCount: 4, unreadCount: 2 }, { id: "series", name: "Series", subscriptionCount: 1, unreadCount: 1 }];
+const collections: Collection[] = [{ id: "films", name: "Films", subscriptionCount: 4, unreadCount: 2, activityCount: 2 }, { id: "series", name: "Series", subscriptionCount: 1, unreadCount: 1, activityCount: 1 }];
 
 it("groups unread changes by day, loads more pages, and opens an entry in the inspector", async () => {
   let unread = [...events];
@@ -81,6 +81,34 @@ it("groups unread changes by day, loads more pages, and opens an entry in the in
     await act(async () => setLanguage("ru"));
     expect(view.container.querySelector("h1")?.textContent).toBe("Активность");
     expect(view.container.querySelector(".activity-day h2")?.textContent).toBe("Сегодня");
+  } finally { await act(async () => view.root.unmount()); }
+});
+
+it("lists Mark unread reminders above the changes and counts them separately in the header", async () => {
+  const reminder = { subscription: { ...direct, id: "d9", label: "Kept for later" }, collection: { id: "films", name: "Films" }, lastChangedAt: dayAt(3) };
+  let reminders = [reminder];
+  vi.mocked(api).mockImplementation(async (path, options) => {
+    if (path.startsWith("/api/activity?")) return { events: [events[0]], total: 1, page: 1, pageCount: 1, reminders };
+    if (path === "/api/subscriptions/d9/open" && options?.method === "POST") {
+      reminders = [];
+      return { subscription: { id: "d9", collectionId: "films", type: "direct", label: "Kept for later", directUrl: direct.directUrl, requiredTerms: [], ignoredTerms: [], trackerKeys: ["rutor"], enabled: true, initialized: true, isUnread: false, unreadCount: 0, eventCount: 0, matchCount: 0, createdAt: dayAt(30) }, events: [], matches: [] };
+    }
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const view = render("unread", collections);
+  try {
+    await view.mount();
+    expect(view.container.querySelector(".activity-count")?.textContent).toBe("1 unread change · 1 marked unread");
+    expect([...view.container.querySelectorAll(".activity-day h2")].map((heading) => heading.textContent)).toEqual(["Marked unread", "Today"]);
+    const entry = view.container.querySelector<HTMLButtonElement>(".activity-reminders .activity-entry")!;
+    expect(entry.classList.contains("activity-entry--unread")).toBe(true);
+    expect(entry.querySelector(".activity-entry__label")?.textContent).toBe("Kept for later");
+    expect(entry.querySelector(".change-summary")?.textContent).toBe("Marked unread by you");
+    expect(entry.querySelector(".activity-entry__time")?.textContent).toBe("3 days ago");
+    await act(async () => entry.click());
+    expect(api).toHaveBeenCalledWith("/api/subscriptions/d9/open", expect.objectContaining({ method: "POST" }));
+    expect(view.container.querySelector(".activity-reminders")).toBeNull();
+    expect(view.container.querySelector(".activity-count")?.textContent).toBe("1 unread change");
   } finally { await act(async () => view.root.unmount()); }
 });
 

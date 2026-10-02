@@ -41,26 +41,45 @@ afterEach(async () => { await services.app.close(); rmSync(path, { recursive: tr
 const get = (query = "") => services.app.inject({ url: `/api/activity${query}`, headers: { cookie } });
 const markRead = (payload: Record<string, unknown> = {}) => services.app.inject({ method: "POST", url: "/api/activity/read", headers: { cookie }, payload });
 const collections = async () => Object.fromEntries(((await services.app.inject({ url: "/api/collections", headers: { cookie } })).json().collections as Array<{ name: string; unreadCount: number }>).map((item) => [item.name, item.unreadCount]));
+const activityCounts = async () => Object.fromEntries(((await services.app.inject({ url: "/api/collections", headers: { cookie } })).json().collections as Array<{ name: string; activityCount: number }>).map((item) => [item.name, item.activityCount]));
 
 describe("activity across collections", () => {
-  it("lists unread changes newest first, including the latest change of a manual reminder, and never another account's events", async () => {
+  it("lists only unread changes newest first, lists manual reminders separately, and never another account's data", async () => {
     const unread = (await get()).json();
-    expect(unread).toMatchObject({ total: 3, page: 1, pageCount: 1, pageSize: 50 });
-    expect(unread.events.map((event: { id: string }) => event.id)).toEqual(["e3", "e5", "e1"]);
-    expect(unread.events.every((event: { isUnread: boolean }) => event.isUnread)).toBe(true);
+    expect(unread).toMatchObject({ total: 2, page: 1, pageCount: 1, pageSize: 50 });
+    expect(unread.events.map((event: { id: string }) => event.id)).toEqual(["e3", "e1"]);
+    expect(unread.events.every((event: { isUnread: boolean; readAt: string | null }) => event.isUnread && event.readAt === null)).toBe(true);
     expect(unread.events[0]).toMatchObject({ kind: "rule-match", readAt: null, subscription: { id: "r1", type: "rule", label: "Dune + 2160p", requiredTerms: ["Dune", "2160p"], ignoredTerms: ["Trailer"], trackerKeys: expect.arrayContaining(["rutracker", "kinozal"]) }, collection: { id: "films", name: "Films" } });
     expect(unread.events[0].payload.releases).toEqual([{ trackerKey: "rutracker", title: "Dune 2160p", url: "https://rutracker.org/forum/viewtopic.php?t=1", magnet: "magnet:?dune" }]);
-    expect(unread.events[1]).toMatchObject({ id: "e5", readAt: expect.any(String), isUnread: true, subscription: { label: "Reminder" } });
-    expect(unread.events[2]).toMatchObject({ subscription: { label: "Current title", type: "direct" }, collection: { name: "Inbox" },
+    expect(unread.reminders).toEqual([{ subscription: { id: "d2", type: "direct", label: "Reminder", directUrl: null, requiredTerms: [], ignoredTerms: [], trackerKeys: ["kinozal"] }, collection: { id: "films", name: "Films" }, lastChangedAt: null }]);
+    expect(unread.events[1]).toMatchObject({ subscription: { label: "Current title", type: "direct" }, collection: { name: "Inbox" },
       payload: { changes: ["title changed", "magnet changed"], previous: { title: "Old title", magnet: "magnet:?old" }, current: { title: "Current title", magnet: "magnet:?new" } } });
     expect(JSON.stringify(unread)).not.toContain("xxxxx");
+    expect(JSON.stringify(unread)).not.toContain("Secret");
 
     const all = (await get("?filter=all")).json();
     expect(all.total).toBe(5);
+    expect(all.reminders).toEqual([]);
     expect(all.events.map((event: { id: string }) => event.id)).toEqual(["e3", "e5", "e1", "e2", "e4"]);
-    expect(all.events.map((event: { isUnread: boolean }) => event.isUnread)).toEqual([true, true, true, false, false]);
+    expect(all.events.map((event: { isUnread: boolean }) => event.isUnread)).toEqual([true, false, true, false, false]);
     expect(all.events[3].payload).toEqual({ changes: ["metadata changed"] });
     expect(JSON.stringify(all)).not.toContain("secret");
+  });
+
+  it("counts the same unread items for the Activity badge as the unread view lists", async () => {
+    const total = async () => { const unread = (await get()).json(); return unread.total + unread.reminders.length; };
+    const badge = async () => Object.values(await activityCounts()).reduce((sum: number, value) => sum + Number(value), 0);
+    expect(await activityCounts()).toEqual({ Inbox: 1, Films: 2 });
+    expect(await badge()).toBe(await total());
+    // A reminder on a subscription that already has an unread change is not listed twice.
+    services.db.prepare("UPDATE subscriptions SET manual_unread = 1 WHERE id = 'd1'").run();
+    expect((await get()).json().reminders.map((reminder: { subscription: { id: string } }) => reminder.subscription.id)).toEqual(["d2"]);
+    expect(await activityCounts()).toEqual({ Inbox: 1, Films: 2 });
+    // Several unread changes on one subscription count once each in both places.
+    services.db.prepare("UPDATE subscription_events SET read_at = NULL WHERE id = 'e2'").run();
+    expect(await activityCounts()).toEqual({ Inbox: 2, Films: 2 });
+    expect(await collections()).toEqual({ Inbox: 1, Films: 2 });
+    expect(await badge()).toBe(await total());
   });
 
   it("pages deterministically, clamps the last page, and validates parameters", async () => {
@@ -73,7 +92,7 @@ describe("activity across collections", () => {
     expect((await services.app.inject({ url: "/api/activity" })).statusCode).toBe(401);
     services.db.prepare("UPDATE subscription_events SET read_at = ? WHERE user_id = ?").run(at(40), userId);
     services.db.prepare("UPDATE subscriptions SET manual_unread = 0 WHERE user_id = ?").run(userId);
-    expect((await get()).json()).toMatchObject({ total: 0, page: 1, pageCount: 1, events: [] });
+    expect((await get()).json()).toMatchObject({ total: 0, page: 1, pageCount: 1, events: [], reminders: [] });
   });
 
   it("marks one collection, then everything, read and clears manual reminders without touching other accounts", async () => {

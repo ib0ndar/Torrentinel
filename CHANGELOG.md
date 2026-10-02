@@ -6,7 +6,7 @@ All notable changes to Torrentinel are documented in this file.
 
 ### Added
 
-- Activity view (sidebar and mobile bottom bar) listing changes across all collections, newest first and grouped by day, with Unread and All filters, a total unread badge, and Load more. Opening an entry shows its details and marks it read.
+- Activity view (sidebar and mobile bottom bar) listing changes across all collections, newest first and grouped by day, with Unread and All filters, an unread badge, and Load more. Subscriptions marked unread by hand appear in a separate "Marked unread" group, and the badge counts exactly what the Unread view lists (unread changes plus those reminders). Opening an entry shows its details and marks it read.
 - Mark all read for a collection (header, or the more-actions menu on mobile) and for everything (Activity), after a confirmation that states how many subscriptions are affected. Reminders set with Mark unread are cleared too.
 - The selected collection, status filter, search, page, and sort are kept in the address (`/collections/…`), so reloads, bookmarks, new tabs, and Back/Forward return to the same view. Opening the app returns to the last used collection.
 - Sort control in the collection list: Last change (default), Name (A–Z), or Needs attention first. Sorting runs on the server, so pages stay complete.
