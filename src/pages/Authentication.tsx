@@ -6,15 +6,15 @@ import { setLanguage, useI18n, type Language } from "../i18n";
 import type { Notify, User } from "../types";
 
 export function BootScreen() { const { t } = useI18n(); return <div className="boot-screen"><BrandMark size={42} /><span>{t("Starting Torrentinel")}</span><span className="loading-line" /></div>; }
-export function Login({ onLogin, notify }: { onLogin: (user: User) => void; notify: Notify }) {
+export function Login({ onLogin, notify, initialUsername = "" }: { onLogin: (user: User) => void; notify: Notify; initialUsername?: string }) {
   const { t, language } = useI18n();
-  const [username, setUsername] = useState(""), [password, setPassword] = useState(""), [busy, setBusy] = useState(false);
+  const [username, setUsername] = useState(initialUsername), [password, setPassword] = useState(""), [busy, setBusy] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true);
     try { const result = await api<{ user: User }>("/api/auth/login", { method: "POST", ...jsonBody({ username, password }) }); onLogin(result.user); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
-  return <main className="login-page"><section className="login-brand"><BrandMark size={54} /><div><p className="eyebrow">{t("Private release monitor")}</p><h1>Torrentinel</h1><p>{t("Track change. Catch the release.")}</p></div></section><form className="login-form" onSubmit={submit}><p className="eyebrow">{t("Local access")}</p><h2>{t("Sign in")}</h2><Field label={t("Username")}><input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus required /></Field><Field label={t("Password")}><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></Field><button className="button button--primary button--wide" disabled={busy}>{t(busy ? "Signing in…" : "Sign in")}</button><Field label={t("Language")}><select value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">English</option><option value="ru">Русский</option></select></Field></form></main>;
+  return <main className="login-page"><section className="login-brand"><BrandMark size={54} /><div><p className="eyebrow">{t("Private release monitor")}</p><h1>Torrentinel</h1><p>{t("Track change. Catch the release.")}</p></div></section><form className="login-form" onSubmit={submit}><p className="eyebrow">{t("Local access")}</p><h2>{t("Sign in")}</h2><Field label={t("Username")}><input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus={!initialUsername} required /></Field><Field label={t("Password")}><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" autoFocus={Boolean(initialUsername)} required /></Field><button className="button button--primary button--wide" disabled={busy}>{t(busy ? "Signing in…" : "Sign in")}</button><Field label={t("Language")}><select value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">English</option><option value="ru">Русский</option></select></Field></form></main>;
 }
 export function ChangePassword({ user, onChanged, notify }: { user: User; onChanged: (user: User) => void; notify: Notify }) {
   const { t } = useI18n();

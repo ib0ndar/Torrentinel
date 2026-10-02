@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import packageManifest from "../package.json";
-import { api, ApiError } from "./api";
+import { api, ApiError, onSessionExpired, SESSION_EXPIRED_MESSAGE } from "./api";
 import { useSchedulerStatus } from "./hooks/useSchedulerStatus";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
 import { CollectionsNavigation, NewCollection } from "./components/CollectionsNavigation";
@@ -24,18 +24,27 @@ const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
 const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_VERSION}`;
 
 export default function App() {
-  const [user, setUser] = useState<User | null | undefined>(undefined), [toast, setToast] = useState<Toast | null>(null);
+  const { t } = useI18n();
+  const [user, setUser] = useState<User | null | undefined>(undefined), [toast, setToast] = useState<Toast | null>(null), [lastUsername, setLastUsername] = useState("");
   const [path, navigate] = useSimpleRouter();
-  const notify = useCallback((message: string, tone: Toast["tone"] = "good") => setToast({ id: Date.now(), message, tone }), []);
-  const updateUser = useCallback((value: User | null) => { if (value) { setLanguage(value.language); applyTheme(value.theme); } setUser(value); }, []);
+  const signedIn = useRef<string | null>(null);
+  // Identical messages (e.g. several requests failing at once) refresh nothing and stack nothing.
+  const notify = useCallback((message: string, tone: Toast["tone"] = "good") => setToast((current) => current && current.message === message && current.tone === tone ? current : { id: Date.now(), message, tone }), []);
+  const updateUser = useCallback((value: User | null) => { signedIn.current = value?.username ?? null; if (value) { setLanguage(value.language); applyTheme(value.theme); } setUser(value); }, []);
+  useEffect(() => onSessionExpired(() => {
+    if (signedIn.current === null) return;
+    setLastUsername(signedIn.current);
+    updateUser(null);
+    notify(t(SESSION_EXPIRED_MESSAGE), "bad");
+  }), [notify, updateUser, t]);
   useEffect(() => {
     api<{ user: User }>("/api/auth/me").then(({ user: current }) => updateUser(current)).catch((error) => {
-      if (error instanceof ApiError && error.status === 401) setUser(null); else notify(errorMessage(error), "bad");
+      if (error instanceof ApiError && error.status === 401) updateUser(null); else notify(errorMessage(error), "bad");
     });
   }, [notify, updateUser]);
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 4_000); return () => window.clearTimeout(timer); }, [toast]);
   if (user === undefined) return <BootScreen />;
-  if (!user) return <><Login onLogin={updateUser} notify={notify} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
+  if (!user) return <><Login onLogin={(value) => { setLastUsername(""); updateUser(value); }} notify={notify} initialUsername={lastUsername} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
   if (user.mustChangePassword) return <><ChangePassword user={user} onChanged={updateUser} notify={notify} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
   return <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}><DialogProvider><AppShell key={user.id} user={user} setUser={updateUser} notify={notify} path={path} navigate={navigate} />
     {toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}

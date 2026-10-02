@@ -10,6 +10,26 @@ export class ApiError extends Error {
   }
 }
 
+export const SESSION_EXPIRED_MESSAGE = "Your session has expired. Sign in again.";
+
+// A 401 from any endpoint other than sign-in means the session cookie is no
+// longer valid (expired, signed out elsewhere, server data reset, or account disabled).
+export class SessionExpiredError extends ApiError {
+  constructor() {
+    super(SESSION_EXPIRED_MESSAGE, 401, "SESSION_EXPIRED");
+    this.name = "SessionExpiredError";
+  }
+}
+
+const sessionExpiredListeners = new Set<() => void>();
+export function onSessionExpired(listener: () => void): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => { sessionExpiredListeners.delete(listener); };
+}
+export function expireSession(): void {
+  for (const listener of [...sessionExpiredListeners]) listener();
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("content-type")) headers.set("content-type", "application/json");
@@ -19,6 +39,10 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     code?: string;
     details?: unknown;
   };
+  if (response.status === 401 && path !== "/api/auth/login") {
+    expireSession();
+    throw new SessionExpiredError();
+  }
   if (!response.ok) {
     throw new ApiError(payload.error || `Request failed with HTTP ${response.status}`, response.status, payload.code, payload.details);
   }
