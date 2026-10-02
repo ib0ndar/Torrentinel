@@ -334,7 +334,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .match-row__title:hover strong { color: var(--accent); }
 .match-row__title > span { min-width: 0; display: grid; gap: 5px; }
 .match-row__actions { display: flex; gap: 6px; }
-.match-row__actions a { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); transition: border-color .14s ease, color .14s ease; }
+.match-row__actions a, .match-row__slot { width: 34px; height: 34px; flex: 0 0 auto; }
+.match-row__actions a { display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); transition: border-color .14s ease, color .14s ease; }
 .match-row__actions a:hover { border-color: var(--line-strong); color: var(--ink); }
 .match-list strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; transition: color .14s ease; }
 .match-list small { color: var(--dim); font-size: 11px; }

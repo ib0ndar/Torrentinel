@@ -11,7 +11,7 @@ All notable changes to Torrentinel are documented in this file.
 - The selected collection, status filter, search, page, and sort are kept in the address (`/collections/…`), so reloads, bookmarks, new tabs, and Back/Forward return to the same view. Opening the app returns to the last used collection.
 - Sort control in the collection list: Last change (default), Name (A–Z), or Needs attention first. Sorting runs on the server, so pages stay complete.
 - Change history in subscription details shows what changed: the old and new title, and links to the new and previous magnet and torrent file. Rule events list the matched releases.
-- Magnet and torrent-file actions for each rule match.
+- Magnet and torrent-file actions for each rule match, in fixed columns that stay aligned when some matches lack one of them.
 
 ### Changed
 

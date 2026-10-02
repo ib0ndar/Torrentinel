@@ -58,6 +58,7 @@ it("lists matched releases and offers magnet and torrent actions on rule matches
   ], matches: [
     { id: "m1", trackerKey: "rutracker", externalId: "1", title: "Dune 2160p", url: "https://rutracker.org/forum/viewtopic.php?t=1", magnet: "magnet:?dune", torrentUrl: "https://rutracker.org/dl.php?t=1", discoveredAt: new Date().toISOString() },
     { id: "m2", trackerKey: "kinozal", externalId: "2", title: "Dune 1080p", url: "https://kinozal.tv/details.php?id=2", magnet: null, torrentUrl: null, discoveredAt: new Date().toISOString() },
+    { id: "m3", trackerKey: "rutor", externalId: "3", title: "Dune 720p", url: "https://rutor.info/torrent/3", magnet: null, torrentUrl: "https://rutor.info/download/3", discoveredAt: new Date().toISOString() },
   ] });
   try {
     const [many, one] = [...drawer.querySelectorAll(".timeline-item")];
@@ -66,13 +67,30 @@ it("lists matched releases and offers magnet and torrent actions on rule matches
     expect(one.querySelector("strong")?.textContent).toBe("New match: Dune 2160p");
     expect(one.querySelector(".change-releases")).toBeNull();
 
-    const [first, second] = [...drawer.querySelectorAll(".match-row")];
+    const [first, second, third] = [...drawer.querySelectorAll(".match-row")];
     expect(first.querySelector(".match-row__title")?.getAttribute("href")).toBe("https://rutracker.org/forum/viewtopic.php?t=1");
     const magnet = first.querySelector<HTMLAnchorElement>('a[aria-label="Open magnet for Dune 2160p"]')!, torrent = first.querySelector<HTMLAnchorElement>('a[aria-label="Download torrent file for Dune 2160p"]')!;
     expect(magnet.getAttribute("href")).toBe("magnet:?dune");
     expect(torrent.getAttribute("href")).toBe("https://rutracker.org/dl.php?t=1");
     expect(torrent.target).toBe("_blank");
-    expect(second.querySelector(".match-row__actions")).toBeNull();
+    // Fixed slots keep the magnet and torrent columns aligned; missing actions leave an empty, hidden slot.
+    const slots = (row: Element) => [...row.querySelector(".match-row__actions")!.children].map((slot) => slot.tagName === "A" ? slot.getAttribute("title") : slot.getAttribute("aria-hidden") === "true" ? "empty" : "?");
+    expect(slots(first)).toEqual(["Magnet", "Torrent file"]);
+    expect(slots(second)).toEqual(["empty", "empty"]);
+    expect(slots(third)).toEqual(["empty", "Torrent file"]);
     expect(drawer.querySelectorAll(".match-list a a, .match-list a button")).toHaveLength(0);
   } finally { await act(async () => root.unmount()); }
+});
+
+it("omits action columns that no rule match uses", async () => {
+  const match = (id: string, torrentUrl: string | null): RuleMatch => ({ id, trackerKey: "rutor", externalId: id, title: `Release ${id}`, url: `https://rutor.info/torrent/${id}`, magnet: null, torrentUrl, discoveredAt: new Date().toISOString() });
+  const torrentsOnly = await open({ subscription: subscription({ type: "rule", label: "Dune", requiredTerms: ["Dune"] }), events: [], matches: [match("1", "https://rutor.info/download/1"), match("2", null)] });
+  try {
+    expect([...torrentsOnly.drawer.querySelectorAll(".match-row__actions")].map((actions) => actions.children.length)).toEqual([1, 1]);
+  } finally { await act(async () => torrentsOnly.root.unmount()); document.body.innerHTML = ""; }
+  const none = await open({ subscription: subscription({ type: "rule", label: "Dune", requiredTerms: ["Dune"] }), events: [], matches: [match("1", null), match("2", null)] });
+  try {
+    expect(none.drawer.querySelectorAll(".match-row")).toHaveLength(2);
+    expect(none.drawer.querySelector(".match-row__actions")).toBeNull();
+  } finally { await act(async () => none.root.unmount()); }
 });
