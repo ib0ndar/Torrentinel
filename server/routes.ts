@@ -7,6 +7,7 @@ import type { CoverCacheStore } from "./cover-cache.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCollectionRoutes } from "./routes/collections.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
+import { registerActivityRoutes } from "./routes/activity.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerSystemRoutes } from "./routes/system.js";
@@ -16,6 +17,7 @@ export function registerRoutes(app: FastifyInstance, db: SqliteDatabase, schedul
   registerAuthRoutes(services);
   registerCollectionRoutes(services);
   registerSubscriptionRoutes(services);
+  registerActivityRoutes(services);
   registerSettingsRoutes(services);
   registerAdminRoutes(services);
   registerSystemRoutes(services);

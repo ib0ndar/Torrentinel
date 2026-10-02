@@ -25,7 +25,8 @@ it("keeps collections available across pages and returns to the chosen collectio
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   const nav = (href: string) => container.querySelector<HTMLAnchorElement>(`.app-nav a[href="${href}"]`)!;
-  const collection = (name: string) => [...container.querySelectorAll<HTMLButtonElement>(".collection-navigation--desktop .collection-item")].find((button) => button.textContent?.includes(name))!;
+  const monitor = () => container.querySelector<HTMLAnchorElement>('.app-nav a[aria-label="Monitor"]')!;
+  const collection = (name: string) => [...container.querySelectorAll<HTMLAnchorElement>(".collection-navigation--desktop .collection-item")].find((link) => link.textContent?.includes(name))!;
   try {
     await act(async () => root.render(<App />));
     expect(container.querySelector(".workspace .collection-rail")).toBeNull();
@@ -52,14 +53,15 @@ it("keeps collections available across pages and returns to the chosen collectio
     const previous = subscriptionRequests();
     await act(async () => vi.advanceTimersByTime(30_000));
     expect(subscriptionRequests()).toBe(previous);
-    await act(async () => nav("/").click());
+    expect(monitor().getAttribute("href")).toBe("/collections/books");
+    await act(async () => monitor().click());
     expect(container.querySelector("h1")?.textContent).toBe("Books");
     await act(async () => nav("/admin").click());
     expect(container.querySelector("h1")?.textContent).toBe("Administration page");
     expect(container.querySelector(".collection-switcher__toggle")?.getAttribute("aria-expanded")).toBe("false");
     await act(async () => container.querySelector<HTMLButtonElement>(".collection-switcher__toggle")!.click());
-    await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".collection-navigation--switcher .collection-item")].find((button) => button.textContent?.includes("Films"))!.click());
-    expect(window.location.pathname).toBe("/");
+    await act(async () => [...container.querySelectorAll<HTMLAnchorElement>(".collection-navigation--switcher .collection-item")].find((link) => link.textContent?.includes("Films"))!.click());
+    expect(window.location.pathname).toBe("/collections/films");
     expect(container.querySelector("h1")?.textContent).toBe("Films");
     expect(container.querySelector(".collection-switcher")).toBeNull();
     expect(container.querySelector(".collection-navigation--mobile .collection-item--active")?.textContent).toContain("Films");
@@ -210,5 +212,146 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
     expect(container.querySelector(".login-form")).not.toBeNull();
     expect(menu()).toBeNull();
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+function memoryStorage(): Storage {
+  const values = new Map<string, string>();
+  return { get length() { return values.size; }, clear: () => values.clear(), getItem: (key) => values.get(key) ?? null, key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => { values.delete(key); }, setItem: (key, value) => { values.set(key, String(value)); } };
+}
+function mockMonitor(options: { paginationEnabled?: boolean; unread?: number } = {}) {
+  const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 60, unreadCount: options.unread ?? 0 }));
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: options.paginationEnabled ?? true, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
+    if (path === "/api/collections") return { collections };
+    if (path.startsWith("/api/activity?")) return { events: [], total: 0, page: 1, pageCount: 1 };
+    if (path.startsWith("/api/subscriptions?")) {
+      const page = Number(new URL(path, "http://test").searchParams.get("page") || "1");
+      return { subscriptions: [], total: 60, page: Math.min(page, 3), pageCount: 3 };
+    }
+    throw new Error(`Unexpected request: ${path}`);
+  });
+}
+const lastSubscriptionQuery = () => new URL(vi.mocked(api).mock.calls.filter(([path]) => path.startsWith("/api/subscriptions?")).at(-1)![0], "http://test").searchParams;
+const popState = (move: () => void) => act(() => new Promise<void>((resolve) => { window.addEventListener("popstate", () => resolve(), { once: true }); move(); }));
+const currentUrl = () => window.location.pathname + window.location.search;
+
+it("restores the collection, filter, search, page and sort from the URL, including after reload and back/forward", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  mockMonitor();
+  window.history.replaceState({}, "", "/collections/books?filter=unread&page=2&sort=name");
+  const container = document.createElement("div"); document.body.append(container);
+  let root = createRoot(container);
+  const filterTab = (label: string) => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")].find((button) => button.textContent === label)!;
+  const sort = () => container.querySelector<HTMLSelectElement>('select[aria-label="Sort"]')!;
+  const search = () => container.querySelector<HTMLInputElement>('input[aria-label="Filter this collection"]')!;
+  try {
+    await act(async () => root.render(<App />));
+    const expectView = (filter: string, page: string, sortValue: string, query = "") => {
+      expect(container.querySelector("h1")?.textContent).toBe("Books");
+      expect(container.querySelector(".filter-tabs .active")?.textContent).toBe(filter);
+      expect(container.querySelector(".pagination--top")?.textContent).toContain(`Page ${page} of 3`);
+      expect(sort().value).toBe(sortValue); expect(search().value).toBe(query);
+      expect(Object.fromEntries(lastSubscriptionQuery())).toMatchObject({ collectionId: "books", filter: filter.toLowerCase(), page, search: query, ...sortValue === "changed" ? {} : { sort: sortValue } });
+    };
+    expectView("Unread", "2", "name");
+    expect(currentUrl()).toBe("/collections/books?filter=unread&page=2&sort=name");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<App />));
+    expectView("Unread", "2", "name");
+
+    const start = window.history.length;
+    await act(async () => filterTab("Errors").click());
+    expect(currentUrl()).toBe("/collections/books?filter=errors&sort=name");
+    await act(async () => container.querySelector<HTMLButtonElement>('.pagination--top button[aria-label="Next page"]')!.click());
+    expect(currentUrl()).toBe("/collections/books?filter=errors&page=2&sort=name");
+    await act(async () => { sort().value = "attention"; sort().dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(currentUrl()).toBe("/collections/books?filter=errors&sort=attention");
+    expect(window.history.length).toBe(start + 3);
+    const type = async (value: string) => {
+      await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search(), value); search().dispatchEvent(new Event("input", { bubbles: true })); });
+      await act(() => new Promise((resolve) => window.setTimeout(resolve, 300)));
+    };
+    await type("du"); await type("dune 2");
+    expect(currentUrl()).toBe("/collections/books?filter=errors&q=dune+2&sort=attention");
+    expect(lastSubscriptionQuery().get("search")).toBe("dune 2");
+    expect(window.history.length).toBe(start + 3);
+
+    await popState(() => window.history.back());
+    expect(currentUrl()).toBe("/collections/books?filter=errors&page=2&sort=name");
+    expectView("Errors", "2", "name");
+    await popState(() => window.history.go(-2));
+    expectView("Unread", "2", "name");
+    await popState(() => window.history.forward());
+    expect(currentUrl()).toBe("/collections/books?filter=errors&sort=name");
+    expectView("Errors", "1", "name");
+
+    // Collection links keep the filter, search and sort but start on the first page.
+    const films = [...container.querySelectorAll<HTMLAnchorElement>(".collection-navigation--desktop .collection-item")].find((link) => link.textContent?.includes("Films"))!;
+    expect(films.getAttribute("href")).toBe("/collections/films?filter=errors&sort=name");
+    await act(async () => films.click());
+    expect(container.querySelector("h1")?.textContent).toBe("Films");
+    expect(currentUrl()).toBe("/collections/films?filter=errors&sort=name");
+    expect(lastSubscriptionQuery().get("collectionId")).toBe("films");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("resolves / and unknown collections to the last used or first collection without adding history entries", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.stubGlobal("localStorage", memoryStorage());
+  mockMonitor({ paginationEnabled: false });
+  const container = document.createElement("div"); document.body.append(container);
+  let root = createRoot(container);
+  try {
+    localStorage.setItem("torrentinel-last-collection:admin", "books");
+    const start = window.history.length;
+    await act(async () => root.render(<App />));
+    expect(currentUrl()).toBe("/collections/books");
+    expect(container.querySelector("h1")?.textContent).toBe("Books");
+    expect(window.history.length).toBe(start);
+
+    await act(async () => root.unmount());
+    localStorage.clear();
+    window.history.replaceState({}, "", "/collections/deleted?filter=unread&page=4");
+    root = createRoot(container);
+    await act(async () => root.render(<App />));
+    expect(currentUrl()).toBe("/collections/films?filter=unread");
+    expect(container.querySelector("h1")?.textContent).toBe("Films");
+    expect(localStorage.getItem("torrentinel-last-collection:admin")).toBe("films");
+    expect(window.history.length).toBe(start);
+    expect(vi.mocked(api).mock.calls.filter(([path]) => path.includes("collectionId=deleted")).length).toBeLessThanOrEqual(1);
+    expect(lastSubscriptionQuery().get("collectionId")).toBe("films");
+  } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); }
+});
+
+it("adds an Activity view with the total unread count and keeps Monitor one click away", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  mockMonitor({ paginationEnabled: false, unread: 2 });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const link = (label: string) => container.querySelector<HTMLAnchorElement>(`.app-nav a[aria-label^="${label}"]`)!;
+  try {
+    await act(async () => root.render(<App />));
+    const activity = link("Activity");
+    expect(activity.getAttribute("href")).toBe("/activity");
+    expect(activity.getAttribute("aria-label")).toBe("Activity, 4 unread");
+    expect(activity.querySelector(".nav-badge")?.textContent).toBe("4");
+    expect([...container.querySelectorAll(".app-nav > nav:first-of-type a")].map((item) => item.getAttribute("aria-label"))).toEqual(["Monitor", "Activity, 4 unread"]);
+    await act(async () => activity.click());
+    expect(currentUrl()).toBe("/activity");
+    expect(container.querySelector("h1")?.textContent).toBe("Activity");
+    expect(link("Activity").getAttribute("aria-current")).toBe("page");
+    expect(container.querySelector(".collection-switcher__current")?.textContent).toBe("Films");
+    expect(vi.mocked(api)).toHaveBeenCalledWith("/api/activity?filter=unread&page=1&pageSize=20", expect.anything());
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")].find((button) => button.textContent === "All")!.click());
+    expect(currentUrl()).toBe("/activity?filter=all");
+    await popState(() => window.history.back());
+    expect(container.querySelector(".filter-tabs .active")?.textContent).toBe("Unread");
+    await act(async () => link("Monitor").click());
+    expect(currentUrl()).toBe("/collections/films");
+    expect(container.querySelector("h1")?.textContent).toBe("Films");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

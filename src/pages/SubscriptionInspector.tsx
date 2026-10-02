@@ -1,10 +1,11 @@
 import { type FormEvent, useCallback, useContext, useEffect, useEffectEvent, useState } from "react";
 import { api, jsonBody } from "../api";
+import { ChangeDetails } from "../components/ChangeDetails";
 import { useDialog } from "../components/Dialogs";
 import { CheckActivityContext } from "../components/contexts";
 import { Icon } from "../components/Icon";
 import { Drawer, EmptyCompact, Field, ListSkeleton, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
-import { errorMessage, relativeTime, trackerName } from "../format";
+import { absoluteTime, errorMessage, relativeTime, trackerName } from "../format";
 import { useI18n } from "../i18n";
 import type { Collection, Notify, RuleMatch, Subscription, SubscriptionEvent, TrackerKey } from "../types";
 
@@ -57,19 +58,12 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
         <div><dt>{t("State")}</dt><dd>{t(item.initialized ? "Baseline established" : "Learning baseline")}</dd></div>
       </dl>}</section>
       {item.type === "direct" && <section className="detail-section"><div className="release-actions"><h3>{t("Release")}</h3><div className="source-links"><a href={item.currentSnapshot?.url || item.directUrl || "#"} target="_blank" rel="noreferrer"><Icon name="external" />{t("Tracker page")}</a>{item.currentSnapshot?.magnet && <a href={item.currentSnapshot.magnet}><Icon name="magnet" />{t("Magnet")}</a>}{item.currentSnapshot?.torrentUrl && <a href={item.currentSnapshot.torrentUrl} target="_blank" rel="noreferrer"><Icon name="download" />{t("Torrent file")}</a>}</div></div></section>}
-      {item.type === "rule" && <section className="detail-section"><div className="section-heading"><h3>{t("Matches")}</h3><span>{matches.length}</span></div>{matches.length ? <div className="match-list">{matches.map((match) => <a key={match.id} href={match.url} target="_blank" rel="noreferrer"><TrackerTag tracker={match.trackerKey} /><span><strong>{match.title}</strong><small>{relativeTime(match.discoveredAt)}</small></span><Icon name="external" /></a>)}</div> : <EmptyCompact text={t(item.initialized ? "No new releases matched this rule yet." : "The first baseline scan is pending.")} />}</section>}
-      <section className="detail-section"><div className="section-heading"><h3>{t("Change history")}</h3><span>{events.length}</span></div>{events.length ? <div className="timeline">{events.map((event) => <div className="timeline-item" key={event.id}><span className={!event.readAt ? "timeline-dot timeline-dot--new" : "timeline-dot"} /><div><strong>{eventSummary(event)}</strong><small>{relativeTime(event.createdAt)}</small></div></div>)}</div> : <EmptyCompact text={t("Changes will appear here after the baseline.")} />}</section>
+      {item.type === "rule" && <section className="detail-section"><div className="section-heading"><h3>{t("Matches")}</h3><span>{matches.length}</span></div>{matches.length ? <div className="match-list">{matches.map((match) => <div className="match-row" key={match.id}><TrackerTag tracker={match.trackerKey} /><a className="match-row__title" href={match.url} target="_blank" rel="noreferrer"><span><strong>{match.title}</strong><small>{relativeTime(match.discoveredAt)}</small></span><Icon name="external" /></a>
+        {(match.magnet || match.torrentUrl) && <span className="match-row__actions">{match.magnet && <a href={match.magnet} aria-label={t("Open magnet for {title}", { title: match.title })} title={t("Magnet")}><Icon name="magnet" size={16} /></a>}{match.torrentUrl && <a href={match.torrentUrl} target="_blank" rel="noreferrer" aria-label={t("Download torrent file for {title}", { title: match.title })} title={t("Torrent file")}><Icon name="download" size={16} /></a>}</span>}</div>)}</div> : <EmptyCompact text={t(item.initialized ? "No new releases matched this rule yet." : "The first baseline scan is pending.")} />}</section>}
+      <section className="detail-section"><div className="section-heading"><h3>{t("Change history")}</h3><span>{events.length}</span></div>{events.length ? <div className="timeline">{events.map((event) => <div className="timeline-item" key={event.id}><span className={!event.readAt ? "timeline-dot timeline-dot--new" : "timeline-dot"} /><div><ChangeDetails event={event} /><small title={absoluteTime(event.createdAt)}>{relativeTime(event.createdAt)}</small></div></div>)}</div> : <EmptyCompact text={t("Changes will appear here after the baseline.")} />}</section>
       <section className="detail-section detail-section--actions"><button className="button button--quiet" disabled={busy} onClick={markRead}>{t(item.isUnread ? "Mark read" : "Mark unread")}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, t(item.enabled ? "Subscription paused" : "Subscription resumed"))}>{t(item.enabled ? "Pause" : "Resume")}</button><button className="button button--danger" disabled={busy} onClick={() => void remove()}><Icon name="trash" />{t("Delete")}</button></section>
     </div>}
   </Drawer>;
-  function eventSummary(event: SubscriptionEvent): string {
-    if (event.kind === "direct-change" && Array.isArray(event.payload?.changes)) return event.payload.changes.map((value: unknown) => typeof value === "string" ? t(value) : "").filter(Boolean).join(", ");
-    if (event.kind === "rule-match" && Array.isArray(event.payload?.releases)) {
-      const releases = event.payload.releases as Array<{ title?: string }>;
-      return releases.length === 1 && releases[0].title ? t("New match: {title}", { title: releases[0].title }) : t("{count} new matches", { count: releases.length });
-    }
-    return event.summary;
-  }
 }
 function EditSubscriptionForm({ item, busy, onCancel, onSave }: { item: Subscription; busy: boolean; onCancel: () => void; onSave: (payload: Record<string, unknown>) => Promise<void> }) {
   const { t } = useI18n();

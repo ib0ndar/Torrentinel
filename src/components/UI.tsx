@@ -4,7 +4,7 @@ import { Icon, type IconName } from "./Icon";
 import { TrackerMarkerStyleContext } from "./contexts";
 import { trackerName } from "../format";
 import { useI18n } from "../i18n";
-import type { TrackerKey, TrackerMarkerStyle } from "../types";
+import type { SubscriptionType, TrackerKey, TrackerMarkerStyle } from "../types";
 
 export function Page({ title, eyebrow, description, actions, children }: { title: string; eyebrow: string; description: string; actions?: ReactNode; children: ReactNode }) {
   return <main className="page"><header className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{actions}</header><div className="page-body">{children}</div></main>;
@@ -57,6 +57,13 @@ export function InfoLine({ icon, children }: { icon: IconName; children: ReactNo
 export function EmptyState({ icon, title, text, action }: { icon: IconName; title: string; text: string; action?: ReactNode }) { return <div className="empty-state"><span><Icon name={icon} size={32} /></span><h2>{title}</h2><p>{text}</p>{action}</div>; }
 export function EmptyCompact({ text }: { text: string }) { return <div className="empty-compact">{text}</div>; }
 export function ListSkeleton() { return <div className="skeleton"><span /><span /><span /></div>; }
+// Unread keeps the link/rule icon and adds an accent dot on its corner.
+export function SubscriptionTypeIcon({ type, unread }: { type: SubscriptionType; unread: boolean }) {
+  const { t } = useI18n();
+  return <span className={`type-icon type-icon--${type} ${unread ? "type-icon--unread" : ""}`} role="img" aria-label={`${t(unread ? "Unread" : "Read")} ${t(type)} ${t("Subscription")}`} title={t(unread ? "Unread — open to mark read" : "Read")}>
+    <Icon name={type === "direct" ? "link" : "rule"} size={17} />{unread && <span className="unread-dot" />}
+  </span>;
+}
 export function TrackerTag({ tracker, variant: forcedVariant, decorative = false }: { tracker: TrackerKey; variant?: TrackerMarkerStyle; decorative?: boolean }) {
   const preferredVariant = useContext(TrackerMarkerStyleContext), variant = forcedVariant || preferredVariant, name = trackerName(tracker);
   const marker = variant === "icons" ? <img src={`/tracker-favicons/${tracker}.ico`} alt="" width="20" height="20" /> : tracker === "rutracker" ? "RT" : tracker === "kinozal" ? "KZ" : "RU";

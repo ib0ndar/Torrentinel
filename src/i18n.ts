@@ -121,6 +121,19 @@ export const russian: Record<string, string> = {
   "The URL does not belong to a supported tracker": "Адрес не принадлежит поддерживаемому трекеру", "Telegram bot is not configured": "Бот Telegram не настроен", "Both username and password are required to save tracker credentials": "Для сохранения данных входа нужны имя пользователя и пароль",
   "You cannot disable or demote your current account": "Нельзя отключить свою учётную запись или лишить её прав администратора",
   "direct": "по ссылке", "rule": "по правилу", "delivered": "доставлено", "failed": "ошибка", "skipped": "пропущено", "pending": "ожидание", "sending": "отправка", "baseline": "база сравнения", "unchanged": "без изменений", "new-matches": "новые совпадения", "continuous": "непрерывно", "coverage-gap": "пропуск", "recovered": "восстановлено", "enriched": "дополнено", "temporarily-unavailable": "временно недоступно",
+  "Last change": "Последнее изменение", "No changes yet": "Изменений пока нет", "Sort": "Сортировка", "Name (A–Z)": "Название (А–Я)", "Needs attention first": "Сначала требующие внимания",
+  "Mark all read": "Отметить все прочитанными", "Mark “{name}” as read?": "Отметить коллекцию «{name}» прочитанной?", "Collection marked read": "Коллекция отмечена прочитанной",
+  "One unread subscription in this collection will be marked read. Reminders set with Mark unread are cleared too.": "Непрочитанная подписка в этой коллекции будет отмечена прочитанной. Напоминания, заданные кнопкой «Отметить непрочитанным», тоже будут сняты.",
+  "{count} unread subscriptions in this collection will be marked read. Reminders set with Mark unread are cleared too.": "Будут отмечены прочитанными непрочитанные подписки в этой коллекции: {count}. Напоминания, заданные кнопкой «Отметить непрочитанным», тоже будут сняты.",
+  "Mark everything as read?": "Отметить всё прочитанным?", "Everything marked read": "Всё отмечено прочитанным",
+  "One unread subscription across all collections will be marked read. Reminders set with Mark unread are cleared too.": "Непрочитанная подписка будет отмечена прочитанной. Напоминания, заданные кнопкой «Отметить непрочитанным», тоже будут сняты.",
+  "{count} unread subscriptions across all collections will be marked read. Reminders set with Mark unread are cleared too.": "Будут отмечены прочитанными непрочитанные подписки во всех коллекциях: {count}. Напоминания, заданные кнопкой «Отметить непрочитанным», тоже будут сняты.",
+  "Activity": "Активность", "All collections": "Все коллекции", "{count} unread": "непрочитанных: {count}",
+  "Changes across your collections, newest first. Open an entry to see its details and mark it read.": "Изменения во всех коллекциях, сначала новые. Откройте запись, чтобы посмотреть подробности и отметить её прочитанной.",
+  "{count} unread changes": "Непрочитанных изменений: {count}", "{count} changes": "Изменений: {count}", "You’re all caught up": "Всё прочитано",
+  "New changes from all your collections will appear here.": "Здесь появятся новые изменения из всех ваших коллекций.", "Show all changes": "Показать все изменения", "Load more": "Показать ещё",
+  "Today": "Сегодня", "Yesterday": "Вчера", "Previous title:": "Прежнее название:", "New title:": "Новое название:", "Previous magnet": "Прежняя magnet-ссылка", "Previous torrent file": "Прежний торрент-файл", "+{count} more": "и ещё {count}",
+  "Open magnet for {title}": "Открыть magnet-ссылку: {title}", "Download torrent file for {title}": "Скачать торрент-файл: {title}",
 };
 
 let language: Language = "en";

@@ -1,31 +1,36 @@
-import { type CSSProperties, type FormEvent, useEffect, useState } from "react";
+import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
 import { api, jsonBody } from "../api";
 import type { WorkspaceData } from "../hooks/useWorkspaceData";
 import { useDialog } from "../components/Dialogs";
 import { Icon } from "../components/Icon";
-import { MenuButton } from "../components/Menu";
-import { Drawer, DrawerActions, EmptyState, Field, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, TrackerTag } from "../components/UI";
+import { MenuButton, type MenuItem } from "../components/Menu";
+import { Drawer, DrawerActions, EmptyState, Field, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, SubscriptionTypeIcon, TrackerTag } from "../components/UI";
 import { capitalize, errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
+import { MONITOR_SORTS, type MonitorSort } from "../routing";
 import { SubscriptionInspector } from "./SubscriptionInspector";
 import type { Collection, Notify, SubscriptionSummary, Tracker, TrackerKey, User } from "../types";
 import { PAGE_SIZE_OPTIONS } from "../types";
 import { PageNavigation } from "../components/Pagination";
 
 const DEFAULT_IGNORED_PHRASES = ["Trailer", "Трейлер", "Teaser", "Тизер", "Soundtrack", "Саундтрек"];
+const SORT_LABELS: Record<MonitorSort, string> = { changed: "Last change", name: "Name (A–Z)", attention: "Needs attention first" };
 export function Workspace({ user, onUserChange, notify, data, onNewCollection }: { user: User; onUserChange: (user: User) => void; notify: Notify; data: WorkspaceData; onNewCollection: () => void }) {
   const { t } = useI18n(), dialog = useDialog();
-  const { collections, selectedId, setSelectedId, subscriptions, loading, loadCollections, refresh, filter, setFilter, page, setPage, total, pageCount } = data;
+  const { collections, collectionsLoaded, selectedId, subscriptions, loading, loadCollections, refresh, filter, setFilter, sort, setSort, page, setPage, total, pageCount } = data;
   const [search, setSearch] = useState(data.search);
+  const sentSearch = useRef(data.search);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedSubscription, setSelectedSubscription] = useState<string | null>(null);
   const [savingSize, setSavingSize] = useState(false);
   // Debounce only typing, not collection/page navigation. Search always covers
   // the complete collection on the server, including off-page records.
   useEffect(() => {
-    const timer = window.setTimeout(() => data.setSearch(search), 250);
+    const timer = window.setTimeout(() => { sentSearch.current = search; data.setSearch(search); }, 250);
     return () => window.clearTimeout(timer);
   }, [search]);
+  // Back/forward and collection links can change the search from outside the box.
+  useEffect(() => { if (data.search !== sentSearch.current) { sentSearch.current = data.search; setSearch(data.search); } }, [data.search]);
   const selected = collections.find((collection) => collection.id === selectedId);
   async function renameCollection() {
     if (!selected) return;
@@ -39,7 +44,17 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection }:
     if (!selected) return;
     if (!await dialog.confirm({ eyebrow: t("Delete collection"), title: t("Delete “{name}”?", { name: selected.name }),
       description: t("This permanently removes the collection and every subscription inside it. This action cannot be undone."), confirmLabel: t("Delete collection"), tone: "danger" })) return;
-    try { await api(`/api/collections/${selected.id}`, { method: "DELETE" }); setSelectedId(null); await loadCollections(); notify(t("Collection deleted")); }
+    // The view falls back to another collection once the deleted one is gone from the list.
+    try { await api(`/api/collections/${selected.id}`, { method: "DELETE" }); await loadCollections(); notify(t("Collection deleted")); }
+    catch (error) { notify(errorMessage(error), "bad"); }
+  }
+  async function markCollectionRead() {
+    if (!selected?.unreadCount) return;
+    const count = selected.unreadCount;
+    if (!await dialog.confirm({ eyebrow: t("Mark all read"), title: t("Mark “{name}” as read?", { name: selected.name }),
+      description: t(count === 1 ? "One unread subscription in this collection will be marked read. Reminders set with Mark unread are cleared too." : "{count} unread subscriptions in this collection will be marked read. Reminders set with Mark unread are cleared too.", { count }),
+      confirmLabel: t("Mark all read") })) return;
+    try { await api("/api/activity/read", { method: "POST", ...jsonBody({ collectionId: selected.id }) }); await refresh(); notify(t("Collection marked read")); }
     catch (error) { notify(errorMessage(error), "bad"); }
   }
   async function changeSize(pageSize: number) {
@@ -49,30 +64,38 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection }:
       setPage(1); onUserChange(result.user);
     } catch (error) { notify(errorMessage(error), "bad"); } finally { setSavingSize(false); }
   }
+  const unread = Boolean(selected?.unreadCount);
+  const collectionActions: MenuItem[] = [...unread ? [{ id: "read", label: t("Mark all read"), icon: "check", onSelect: () => void markCollectionRead() } satisfies MenuItem] : [],
+    { id: "rename", label: t("Rename collection"), icon: "edit", onSelect: () => void renameCollection() }, { id: "delete", label: t("Delete collection"), icon: "trash", tone: "danger", onSelect: () => void deleteCollection() }];
+  // Navigation is only useful with more than one page; the page size stays reachable below the list.
+  const paged = user.paginationEnabled && pageCount > 1;
   return <div className="workspace">
     <section className="subscription-pane">{selected ? <>
-      <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions"><button className="icon-button header-action" aria-label={t("Rename collection")} title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger header-action" aria-label={t("Delete collection")} title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button>
-        <MenuButton className="icon-button header-more" triggerLabel={t("Collection actions")} menuLabel={t("Collection actions")} items={[{ id: "rename", label: t("Rename collection"), icon: "edit", onSelect: () => void renameCollection() }, { id: "delete", label: t("Delete collection"), icon: "trash", tone: "danger", onSelect: () => void deleteCollection() }]}><Icon name="more" /></MenuButton></div></header>
-      <div className="list-toolbar"><div className="filter-tabs">{(["all", "unread", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{t(capitalize(name))}</button>)}</div><label className="search-box"><Icon name="search" size={16} /><input aria-label={t("Filter this collection")} placeholder={t("Filter this collection")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
-      {user.paginationEnabled && <nav className="pagination" aria-label={t("Pagination")}>
-        <label className="pagination-size-picker"><span>{t("Entries per page")}</span><select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+      <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions">{unread && <button className="button button--quiet header-action header-read" onClick={() => void markCollectionRead()}><Icon name="check" size={16} />{t("Mark all read")}</button>}<button className="icon-button header-action" aria-label={t("Rename collection")} title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger header-action" aria-label={t("Delete collection")} title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button>
+        <MenuButton className="icon-button header-more" triggerLabel={t("Collection actions")} menuLabel={t("Collection actions")} items={collectionActions}><Icon name="more" /></MenuButton></div></header>
+      <div className="list-toolbar"><div className="filter-tabs">{(["all", "unread", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{t(capitalize(name))}</button>)}</div>
+        <div className="list-toolbar__controls"><label className="sort-picker" title={t("Sort")}><Icon name="sort" size={15} /><select aria-label={t("Sort")} value={sort} onChange={(event) => setSort(event.target.value as MonitorSort)}>{MONITOR_SORTS.map((value) => <option key={value} value={value}>{t(SORT_LABELS[value])}</option>)}</select></label>
+          <label className="search-box"><Icon name="search" size={16} /><input aria-label={t("Filter this collection")} placeholder={t("Filter this collection")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div></div>
+      {paged && <nav className="pagination pagination--top" aria-label={t("Pagination")}>
         <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} />
       </nav>}
-      <div className="subscription-head"><span>{t("Subscription")}</span><span>{t("Source")}</span><span>{t("Last check")}</span><span>{t("Status")}</span></div>
+      <div className="subscription-head"><span>{t("Subscription")}</span><span>{t("Source")}</span><span>{t("Last change")}</span><span>{t("Status")}</span></div>
       <div className="subscription-list">{loading ? <ListSkeleton /> : subscriptions.map((item, index) => <SubscriptionRow key={item.id} item={item} index={index} onOpen={() => setSelectedSubscription(item.id)} />)}
         {!loading && subscriptions.length === 0 && <EmptyState icon="monitor" title={t(selected.subscriptionCount ? "Nothing matches this view" : "No subscriptions yet")} text={t(selected.subscriptionCount ? "Try a different status filter or search." : "Add a direct tracker link or a rule to begin monitoring.")} action={!selected.subscriptionCount ? <button className="button button--primary" onClick={() => setCreateOpen(true)}>{t("Add subscription")}</button> : undefined} />}
       </div>
-      {user.paginationEnabled && <nav className="pagination pagination--bottom" aria-label={t("Bottom pagination")}>
-        <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} announce={false} />
+      {user.paginationEnabled && total > 0 && <nav className="pagination pagination--bottom" aria-label={t("Bottom pagination")}>
+        <label className="pagination-size-picker"><span>{t("Entries per page")}</span><select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
+        {paged && <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} announce={false} />}
       </nav>}
-    </> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={onNewCollection}>{t("New collection")}</button>} />}</section>
+    </> : !collectionsLoaded || collections.length ? <ListSkeleton /> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={onNewCollection}>{t("New collection")}</button>} />}</section>
     {createOpen && selected && <CreateSubscription collection={selected} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); setPage(1); await refresh(); }} notify={notify} />}
     {selectedSubscription && <SubscriptionInspector key={selectedSubscription} id={selectedSubscription} collections={collections} onClose={() => setSelectedSubscription(null)} onChanged={refresh} notify={notify} />}
   </div>;
 }
 function SubscriptionRow({ item, index, onOpen }: { item: SubscriptionSummary; index: number; onOpen: () => void }) {
   const { t } = useI18n();
-  return <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""}`} style={{ "--row-index": Math.min(index, 20) } as CSSProperties}><button type="button" className="subscription-open" onClick={onOpen}><span className="subscription-main"><span className={`type-icon type-icon--${item.type} ${item.isUnread ? "type-icon--unread" : ""}`} role="img" aria-label={`${t(item.isUnread ? "Unread" : "Read")} ${t(item.type)} ${t("Subscription")}`} title={t(item.isUnread ? "Unread — open to mark read" : "Read")}><Icon name={item.isUnread ? "bellAlert" : item.type === "direct" ? "link" : "rule"} size={17} /></span><span>{item.type === "rule" ? <PhraseDisplay phrases={item.requiredTerms} /> : <strong>{item.label === "Direct subscription" ? t(item.label) : item.label}</strong>}<small>{item.type === "rule" ? item.ignoredTerms.length ? t("Excludes {terms}", { terms: item.ignoredTerms.join(", ") }) : t("Matches every required phrase") : item.directUrl}</small></span></span><span className="tracker-stack">{item.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span><span className="time-cell">{item.lastCheckedAt ? relativeTime(item.lastCheckedAt) : t("Pending")}</span><span className="row-status">{item.lastError ? <span className="state state--error">{t("Needs attention")}</span> : !item.enabled ? <span className="state">{t("Paused")}</span> : !item.initialized ? <span className="state state--pending">{t("Learning")}</span> : <span className="state state--good">{t("Watching")}</span>}</span></button></div>;
+  const checked = item.lastCheckedAt ? t("Last checked {time}", { time: relativeTime(item.lastCheckedAt) }) : t("Waiting for first check");
+  return <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""}`} style={{ "--row-index": Math.min(index, 20) } as CSSProperties}><button type="button" className="subscription-open" onClick={onOpen}><span className="subscription-main"><SubscriptionTypeIcon type={item.type} unread={item.isUnread} /><span>{item.type === "rule" ? <PhraseDisplay phrases={item.requiredTerms} /> : <strong>{item.label === "Direct subscription" ? t(item.label) : item.label}</strong>}<small>{item.type === "rule" ? item.ignoredTerms.length ? t("Excludes {terms}", { terms: item.ignoredTerms.join(", ") }) : t("Matches every required phrase") : item.directUrl}</small></span></span><span className="tracker-stack">{item.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span><span className="time-cell" title={checked}>{item.lastChangedAt ? relativeTime(item.lastChangedAt) : <span className="time-cell__none">{t("No changes yet")}</span>}</span><span className="row-status">{item.lastError ? <span className="state state--error">{t("Needs attention")}</span> : !item.enabled ? <span className="state">{t("Paused")}</span> : !item.initialized ? <span className="state state--pending">{t("Learning")}</span> : <span className="state state--good">{t("Watching")}</span>}</span></button></div>;
 }
 function CreateSubscription({ collection, onClose, onCreated, notify }: { collection: Collection; onClose: () => void; onCreated: () => Promise<void>; notify: Notify }) {
   const { t } = useI18n();

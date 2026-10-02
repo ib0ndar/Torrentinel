@@ -4,8 +4,21 @@ All notable changes to Torrentinel are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Activity view (sidebar and mobile bottom bar) listing changes across all collections, newest first and grouped by day, with Unread and All filters, a total unread badge, and Load more. Opening an entry shows its details and marks it read.
+- Mark all read for a collection (header, or the more-actions menu on mobile) and for everything (Activity), after a confirmation that states how many subscriptions are affected. Reminders set with Mark unread are cleared too.
+- The selected collection, status filter, search, page, and sort are kept in the address (`/collections/…`), so reloads, bookmarks, new tabs, and Back/Forward return to the same view. Opening the app returns to the last used collection.
+- Sort control in the collection list: Last change (default), Name (A–Z), or Needs attention first. Sorting runs on the server, so pages stay complete.
+- Change history in subscription details shows what changed: the old and new title, and links to the new and previous magnet and torrent file. Rule events list the matched releases.
+- Magnet and torrent-file actions for each rule match.
+
 ### Changed
 
+- The collection list shows Last change instead of Last check (No changes yet when there are none); the last check is shown when hovering the time.
+- Unread subscriptions keep their link or rule icon and show an accent dot, instead of replacing the icon with a bell.
+- Page navigation is hidden when everything fits on one page, the top navigation is a single compact line, and Entries per page moved below the list. The mobile area above the list is much shorter.
+- Collections in the sidebar and the mobile strip are links, so they can be opened in a new tab.
 - The account control at the bottom of the sidebar now opens an account menu with Sign out, instead of signing out immediately.
 - Mobile bottom navigation adds an Account item with the scheduler status, Sign out, and the release version.
 - On mobile Monitor, the collections strip is a single row of compact chips (name and unread count) with the New collection button at the end, using less than half the previous height. The selected collection is kept in view.

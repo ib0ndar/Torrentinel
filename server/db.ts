@@ -19,6 +19,9 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
   db.pragma("busy_timeout = 5000");
   db.function("contains_text", { deterministic: true }, (value, query) =>
     String(value ?? "").toLocaleLowerCase("ru-RU").includes(String(query ?? "").toLocaleLowerCase("ru-RU")) ? 1 : 0);
+  // Case-insensitive name ordering for Latin and Cyrillic text (NOCASE only folds ASCII).
+  db.function("sort_text", { deterministic: true }, (value) =>
+    String(value ?? "").trim().toLocaleLowerCase("ru-RU").replaceAll("ё", "е"));
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -140,6 +143,7 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     );
     CREATE INDEX IF NOT EXISTS idx_events_subscription ON subscription_events(subscription_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_events_user_unread ON subscription_events(user_id, read_at);
+    CREATE INDEX IF NOT EXISTS idx_events_user_created ON subscription_events(user_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS rule_matches (
       id TEXT PRIMARY KEY,

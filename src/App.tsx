@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import packageManifest from "../package.json";
 import { api, ApiError, onPasswordChangeRequired, onSessionExpired, PASSWORD_CHANGE_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./api";
 import { useSchedulerStatus } from "./hooks/useSchedulerStatus";
@@ -9,16 +9,20 @@ import { CheckActivityContext, TrackerMarkerStyleContext } from "./components/co
 import { Icon, type IconName } from "./components/Icon";
 import { MenuButton, type MenuItem } from "./components/Menu";
 import { BrandMark } from "./components/UI";
+import { Activity } from "./pages/Activity";
 import { Admin } from "./pages/Administration";
 import { BootScreen, ChangePassword, Login } from "./pages/Authentication";
 import { Settings } from "./pages/Settings";
 import { Workspace } from "./pages/Workspace";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
+import { activityPath, DEFAULT_MONITOR_VIEW, isPlainClick, monitorPath, type MonitorView, parseRoute, storeCollectionId, storedCollectionId } from "./routing";
 import { applyTheme } from "./theme";
 import type { Collection, Notify, User } from "./types";
 
 type Toast = { id: number; message: string; tone: "good" | "bad" };
+type Navigate = (path: string, options?: { replace?: boolean }) => void;
+type BrowserLocation = { pathname: string; search: string };
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
 const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_VERSION}`;
@@ -26,7 +30,7 @@ const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_
 export default function App() {
   const { t } = useI18n();
   const [user, setUser] = useState<User | null | undefined>(undefined), [toast, setToast] = useState<Toast | null>(null), [lastUsername, setLastUsername] = useState("");
-  const [path, navigate] = useSimpleRouter();
+  const [location, navigate] = useBrowserLocation();
   const signedIn = useRef<string | null>(null);
   // Identical messages (e.g. several requests failing at once) refresh nothing and stack nothing.
   const notify = useCallback((message: string, tone: Toast["tone"] = "good") => setToast((current) => current && current.message === message && current.tone === tone ? current : { id: Date.now(), message, tone }), []);
@@ -54,33 +58,60 @@ export default function App() {
   if (user === undefined) return <BootScreen />;
   if (!user) return <><Login onLogin={(value) => { setLastUsername(""); updateUser(value); }} notify={notify} initialUsername={lastUsername} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
   if (user.mustChangePassword) return <><ChangePassword user={user} onChanged={updateUser} onSignOut={() => void signOut()} notify={notify} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
-  return <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}><DialogProvider><AppShell key={user.id} user={user} setUser={updateUser} notify={notify} path={path} navigate={navigate} />
+  return <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}><DialogProvider><AppShell key={user.id} user={user} setUser={updateUser} notify={notify} location={location} navigate={navigate} />
     {toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}
   </DialogProvider></TrackerMarkerStyleContext.Provider>;
 }
-function AppShell({ user, setUser, notify, path, navigate }: { user: User; setUser: (value: User | null) => void; notify: Notify; path: string; navigate: (path: string) => void }) {
+function AppShell({ user, setUser, notify, location, navigate }: { user: User; setUser: (value: User | null) => void; notify: Notify; location: BrowserLocation; navigate: Navigate }) {
   const { t } = useI18n();
-  const { status, intervalMinutes, checking, trackCheck } = useSchedulerStatus(path);
-  const monitorVisible = path !== "/settings" && !(path === "/admin" && user.isAdmin);
-  const data = useWorkspaceData(notify, user.paginationEnabled, user.pageSize, monitorVisible);
+  const parsed = parseRoute(location.pathname, location.search);
+  // Administration is administrator-only; others get the Monitor (and its URL) instead.
+  const route = parsed.name === "admin" && !user.isAdmin ? parseRoute("/", "") : parsed;
+  const monitorVisible = route.name === "monitor";
+  const { status, intervalMinutes, checking, trackCheck } = useSchedulerStatus(location.pathname);
+  // The last Monitor view is kept while other pages are open, so Monitor returns to it.
+  const [lastMonitorView, setLastMonitorView] = useState<MonitorView | null>(null);
+  const storedId = storedCollectionId(user.id);
+  const remembered = lastMonitorView ?? { ...DEFAULT_MONITOR_VIEW, collectionId: storedId };
+  const data = useWorkspaceData(notify, user.paginationEnabled, user.pageSize, monitorVisible, {
+    view: route.name === "monitor" && route.explicit ? route.view : remembered,
+    preferredCollectionIds: [lastMonitorView?.collectionId, storedId],
+    onViewChange: (view, options) => { if (monitorVisible) navigate(monitorPath(view), options); else setLastMonitorView(view); },
+  });
+  const resolvedPath = data.collectionsLoaded ? monitorPath(data.view) : null;
+  // "/" and unknown or deleted collections resolve to a collection without adding a history entry.
+  useLayoutEffect(() => { if (monitorVisible && resolvedPath) navigate(resolvedPath, { replace: true }); }, [monitorVisible, resolvedPath, navigate]);
+  useEffect(() => {
+    if (!monitorVisible || !resolvedPath || !data.view.collectionId) return;
+    setLastMonitorView(data.view); storeCollectionId(user.id, data.view.collectionId);
+  }, [monitorVisible, resolvedPath, user.id]); // data.view is rebuilt every render; resolvedPath identifies it.
   const [newCollection, setNewCollection] = useState(false);
+  const collectionHref = (id: string) => monitorPath({ ...data.view, collectionId: id, page: 1 });
   const collectionNavigation = {
     collections: data.collections,
     selectedId: monitorVisible ? data.selectedId : null,
-    onSelect: (id: string) => { data.setSelectedId(id); navigate("/"); },
+    hrefFor: collectionHref,
+    onSelect: (id: string) => navigate(collectionHref(id)),
     onCreate: () => setNewCollection(true),
   };
+  const unreadTotal = data.collections.reduce((sum, collection) => sum + collection.unreadCount, 0);
+  const loadCollections = useCallback(() => data.loadCollections().catch((error) => notify(errorMessage(error), "bad")), [data.loadCollections, notify]);
   async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
   const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };
   const versionTitle = APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`;
   const accountSummary = <div className="account-summary"><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span></div>;
   const schedulerLine = (className: string) => <div className={className}><span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>;
+  const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} />
+    : route.name === "admin" ? <Admin notify={notify} />
+    : route.name === "activity" ? <Activity key={route.filter} user={user} notify={notify} filter={route.filter} onFilterChange={(filter) => navigate(activityPath(filter))} collections={data.collections} onCollectionsChanged={loadCollections} />
+    : <Workspace user={user} onUserChange={setUser} notify={notify} data={data} onNewCollection={() => setNewCollection(true)} />;
   return <div className="app-shell">
     <aside className="app-nav">
       <div className="brand-lockup"><BrandMark size={28} scanning={checking} /><strong>Torrentinel</strong></div>
-      <nav><NavItem to="/" icon="monitor" label={t("Monitor")} active={monitorVisible} navigate={navigate} /></nav>
+      <nav><NavItem to={lastMonitorView ? monitorPath(lastMonitorView) : "/"} icon="monitor" label={t("Monitor")} active={monitorVisible} navigate={navigate} />
+        <NavItem to="/activity" icon="activity" label={t("Activity")} active={route.name === "activity"} navigate={navigate} badge={unreadTotal} /></nav>
       <CollectionsNavigation {...collectionNavigation} className="collection-navigation--desktop" />
-      <nav className="secondary-nav"><NavItem to="/settings" icon="sliders" label={t("Settings")} active={path === "/settings"} navigate={navigate} />{user.isAdmin && <NavItem to="/admin" icon="users" label={t("Administration")} active={path === "/admin"} navigate={navigate} />}</nav>
+      <nav className="secondary-nav"><NavItem to="/settings" icon="sliders" label={t("Settings")} active={route.name === "settings"} navigate={navigate} />{user.isAdmin && <NavItem to="/admin" icon="users" label={t("Administration")} active={route.name === "admin"} navigate={navigate} />}</nav>
       <MenuButton className="nav-link account-nav" triggerLabel={t("Account")} menuLabel={t("Account")} offset={16} header={<>{accountSummary}{schedulerLine("scheduler-mini scheduler-mini--menu")}</>}
         items={[signOut, { id: "version", label: `Torrentinel v${APP_VERSION}`, icon: "external", href: RELEASE_URL, title: versionTitle }]}><Icon name="user" size={18} /><span>{t("Account")}</span></MenuButton>
       {schedulerLine("scheduler-mini")}
@@ -88,10 +119,10 @@ function AppShell({ user, setUser, notify, path, navigate }: { user: User; setUs
       <a className="app-version" href={RELEASE_URL} target="_blank" rel="noreferrer" title={versionTitle}>v{APP_VERSION}</a>
     </aside>
     <div className="app-stage">
-      {monitorVisible ? <CollectionsNavigation {...collectionNavigation} className="collection-navigation--mobile" /> : <CollectionSwitcher key={path} {...collectionNavigation} current={data.collections.find((collection) => collection.id === data.selectedId)} />}
-      <CheckActivityContext.Provider value={trackCheck}>{path === "/settings" ? <Settings user={user} onUserChange={setUser} notify={notify} /> : path === "/admin" && user.isAdmin ? <Admin notify={notify} /> : <Workspace user={user} onUserChange={setUser} notify={notify} data={data} onNewCollection={() => setNewCollection(true)} />}</CheckActivityContext.Provider>
+      {monitorVisible ? <CollectionsNavigation {...collectionNavigation} className="collection-navigation--mobile" /> : <CollectionSwitcher key={location.pathname} {...collectionNavigation} current={data.collections.find((collection) => collection.id === data.selectedId)} />}
+      <CheckActivityContext.Provider value={trackCheck}>{page}</CheckActivityContext.Provider>
     </div>
-    {newCollection && <NewCollection onClose={() => setNewCollection(false)} onCreated={async (id) => { await data.loadCollections(); data.setSelectedId(id); setNewCollection(false); navigate("/"); }} notify={notify} />}
+    {newCollection && <NewCollection onClose={() => setNewCollection(false)} onCreated={async (id) => { await data.loadCollections(); setNewCollection(false); navigate(monitorPath({ ...DEFAULT_MONITOR_VIEW, collectionId: id })); }} notify={notify} />}
   </div>;
 }
 // Mobile-only compact entry point to the collections strip outside Monitor.
@@ -108,13 +139,20 @@ function CollectionSwitcher({ current, ...navigation }: Omit<Parameters<typeof C
     {expanded && <CollectionsNavigation {...navigation} id={listId} className="collection-navigation--mobile collection-navigation--switcher" />}
   </div>;
 }
-function NavItem({ to, icon, label, active, navigate }: { to: string; icon: IconName; label: string; active: boolean; navigate: (path: string) => void }) {
-  return <a href={to} aria-label={label} aria-current={active ? "page" : undefined} className={active ? "nav-link nav-link--active" : "nav-link"} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(to); }}><Icon name={icon} size={18} /><span>{label}</span></a>;
+function NavItem({ to, icon, label, active, navigate, badge = 0 }: { to: string; icon: IconName; label: string; active: boolean; navigate: Navigate; badge?: number }) {
+  const { t } = useI18n();
+  return <a href={to} aria-label={badge ? `${label}, ${t("{count} unread", { count: badge })}` : label} aria-current={active ? "page" : undefined} className={active ? "nav-link nav-link--active" : "nav-link"} onClick={(event) => { if (!isPlainClick(event)) return; event.preventDefault(); navigate(to); }}>
+    <Icon name={icon} size={18} /><span>{label}</span>{badge > 0 && <span className="count-badge nav-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span>}
+  </a>;
 }
-function useSimpleRouter(): [string, (path: string) => void] {
-  const currentPath = () => ["/", "/settings", "/admin"].includes(window.location.pathname) ? window.location.pathname : "/";
-  const [path, setPath] = useState(currentPath);
-  useEffect(() => { const handlePopState = () => setPath(currentPath()); window.addEventListener("popstate", handlePopState); return () => window.removeEventListener("popstate", handlePopState); }, []);
-  const navigate = useCallback((nextPath: string) => { if (nextPath === path) return; window.history.pushState({}, "", nextPath); setPath(nextPath); }, [path]);
-  return [path, navigate];
+function useBrowserLocation(): [BrowserLocation, Navigate] {
+  const read = () => ({ pathname: window.location.pathname, search: window.location.search });
+  const [location, setLocation] = useState<BrowserLocation>(read);
+  useEffect(() => { const handlePopState = () => setLocation(read()); window.addEventListener("popstate", handlePopState); return () => window.removeEventListener("popstate", handlePopState); }, []);
+  const navigate = useCallback<Navigate>((path, options) => {
+    if (path === window.location.pathname + window.location.search) return;
+    window.history[options?.replace ? "replaceState" : "pushState"]({}, "", path);
+    setLocation(read());
+  }, []);
+  return [location, navigate];
 }

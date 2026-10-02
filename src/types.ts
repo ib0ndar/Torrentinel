@@ -216,3 +216,9 @@ export interface DiagnosticsResponse {
 }
 export type Notify = (message: string, tone?: "good" | "bad") => void;
 export type SubscriptionSummary = Omit<Subscription, "currentSnapshot">;
+
+export interface ActivityEvent extends SubscriptionEvent {
+  isUnread: boolean;
+  subscription: Pick<Subscription, "id" | "type" | "label" | "directUrl" | "requiredTerms" | "ignoredTerms" | "trackerKeys">;
+  collection: { id: string; name: string };
+}

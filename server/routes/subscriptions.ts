@@ -12,11 +12,21 @@ const subscriptionCreateSchema = z.discriminatedUnion("type", [
 ]);
 const subscriptionUpdateSchema = z.object({ collectionId: z.string().min(1).optional(), enabled: z.boolean().optional(), url: urlSchema.optional(),
   trackerKeys: z.array(trackerKeySchema).min(1).optional(), requiredTerms: z.array(z.string()).min(1).max(30).optional(), ignoredTerms: z.array(z.string()).max(30).optional() });
+const RECENT_CHANGE_ORDER = "COALESCE(s.last_changed_at, s.created_at) DESC, s.created_at DESC, s.rowid DESC";
+// Mirrors serializeSubscription's label: rule phrases joined with " + ", else the current title or stored name.
+const LABEL_SQL = `CASE WHEN s.type = 'rule' THEN COALESCE((SELECT GROUP_CONCAT(value, ' + ') FROM json_each(CASE WHEN json_valid(s.required_terms) THEN s.required_terms ELSE '[]' END)), '')
+  ELSE COALESCE(NULLIF(TRIM(CASE WHEN json_valid(s.current_snapshot) THEN json_extract(s.current_snapshot, '$.title') END), ''), s.name, '') END`;
+const SUBSCRIPTION_ORDER = {
+  changed: RECENT_CHANGE_ORDER,
+  name: `${LABEL_SQL} = '', sort_text(${LABEL_SQL}), ${RECENT_CHANGE_ORDER}`,
+  // Same precedence as the list status: Needs attention, Paused, Learning, then everything else.
+  attention: `CASE WHEN s.last_error IS NOT NULL AND s.last_error <> '' THEN 0 WHEN s.enabled = 0 THEN 1 WHEN s.initialized = 0 THEN 2 ELSE 3 END, ${RECENT_CHANGE_ORDER}`,
+} as const;
 
 export function registerSubscriptionRoutes({ app, db, scheduler, coverCache }: RouteServices): void {
   app.get("/api/subscriptions", { preHandler: requireReadyUser }, async (request, reply) => {
     const query = parse(z.object({ collectionId: z.string().optional(), view: z.enum(["summary", "detail"]).default("detail"),
-      search: z.string().trim().max(200).default(""), filter: z.enum(["all", "unread", "errors"]).default("all"),
+      search: z.string().trim().max(200).default(""), filter: z.enum(["all", "unread", "errors"]).default("all"), sort: z.enum(["changed", "name", "attention"]).default("changed"),
       page: z.coerce.number().int().min(1).max(1_000_000).optional(), pageSize: z.coerce.number().int().min(1).max(200).optional() }), request.query, reply);
     if (!query || !request.user) return;
     const args: Array<string | number> = [request.user.id];
@@ -39,7 +49,7 @@ export function registerSubscriptionRoutes({ app, db, scheduler, coverCache }: R
     const pageCount = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(query.page ?? 1, pageCount);
     const rows = db.prepare(`${subscriptionSelect(query.view === "summary")} WHERE ${where.join(" AND ")}
-      ORDER BY COALESCE(s.last_changed_at, s.created_at) DESC, s.created_at DESC, s.rowid DESC ${paginated ? "LIMIT ? OFFSET ?" : ""}`)
+      ORDER BY ${SUBSCRIPTION_ORDER[query.sort]} ${paginated ? "LIMIT ? OFFSET ?" : ""}`)
       .all(...args, ...(paginated ? [pageSize, (page - 1) * pageSize] : [])) as SubscriptionDbRow[];
     return { subscriptions: rows.map(query.view === "summary" ? serializeSubscriptionSummary : serializeSubscription),
       total, page, pageSize: paginated ? pageSize : total, pageCount: paginated ? pageCount : 1 };
@@ -191,15 +201,18 @@ function subscriptionDetails(db: SqliteDatabase, id: string, userId: string) {
 }
 function normalizeTerms(terms: string[]): string[] { return [...new Set(terms.map((term) => term.trim()).filter(Boolean))]; }
 function ruleLabel(terms: string[]): string { return normalizeTerms(terms).join(" + ") || "Rule subscription"; }
+export function subscriptionLabel(type: "direct" | "rule", requiredTerms: string[], title: unknown, name: string): string {
+  if (type === "rule") return ruleLabel(requiredTerms);
+  return typeof title === "string" && title.trim() ? title : name || "Direct subscription";
+}
 function nextNumericSubscriptionId(db: SqliteDatabase): string {
   return String((db.prepare(`SELECT COALESCE(MAX(CASE WHEN id <> '' AND id NOT GLOB '*[^0-9]*' THEN CAST(id AS INTEGER) ELSE NULL END), 0) + 1 AS id FROM subscriptions`).get() as { id: number }).id);
 }
 function serializeSubscription(row: SubscriptionDbRow) {
-  const currentSnapshot = jsonObject(row.current_snapshot), title = row.current_title ?? currentSnapshot?.title;
-  const currentTitle = typeof title === "string" && title.trim() ? title : undefined;
+  const currentSnapshot = jsonObject(row.current_snapshot);
   const requiredTerms = jsonArray(row.required_terms);
   return { id: row.id, collectionId: row.collection_id, collectionName: row.collection_name, type: row.type,
-    label: row.type === "rule" ? ruleLabel(requiredTerms) : currentTitle || row.name || "Direct subscription", directUrl: row.direct_url,
+    label: subscriptionLabel(row.type, requiredTerms, row.current_title ?? currentSnapshot?.title, row.name), directUrl: row.direct_url,
     requiredTerms, ignoredTerms: jsonArray(row.ignored_terms), trackerKeys: row.tracker_keys?.split(",").filter(Boolean) || [], enabled: Boolean(row.enabled), initialized: Boolean(row.initialized),
     lastCheckedAt: row.last_checked_at, lastChangedAt: row.last_changed_at, lastError: row.last_error, currentSnapshot,
     isUnread: Boolean(row.manual_unread) || Number(row.unread_count) > 0, unreadCount: Number(row.unread_count), eventCount: Number(row.event_count), matchCount: Number(row.match_count), createdAt: row.created_at, updatedAt: row.updated_at };

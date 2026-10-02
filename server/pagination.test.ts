@@ -103,3 +103,45 @@ describe("server-side collection paging and filtering", () => {
     expect(login.json().user.theme).toBe("sentinel");
   });
 });
+
+describe("server-side collection sorting", () => {
+  function seedSorted() {
+    const { db } = services, at = (minute: number) => new Date(Date.UTC(2026, 8, 1, 12, minute)).toISOString();
+    db.prepare("INSERT INTO collections (id, user_id, name, created_at, updated_at) VALUES ('sorted', ?, 'Sorted', ?, ?)").run(userId, at(0), at(0));
+    const insert = db.prepare(`INSERT INTO subscriptions (id, user_id, collection_id, type, name, required_terms, current_snapshot, enabled, initialized, last_error, last_changed_at, created_at, updated_at)
+      VALUES (?, ?, 'sorted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const rows: Array<[id: string, type: string, title: string, terms: string[], enabled: number, initialized: number, error: string | null, changed: number | null]> = [
+      ["s1", "direct", "яблоко", [], 1, 1, null, 50], ["s2", "direct", "Арбуз", [], 1, 1, "offline", 10], ["s3", "direct", "banana", [], 0, 1, null, 40],
+      ["s4", "rule", "", ["Бета", "Альфа"], 1, 0, null, null], ["s5", "direct", "Ёжик", [], 1, 1, null, 30], ["s6", "direct", "Apple", [], 1, 1, "blocked", 60],
+      ["s7", "direct", "Дыня", [], 0, 0, null, 20], ["s8", "direct", "Жёлудь", [], 1, 1, null, 5],
+    ];
+    for (const [id, type, title, terms, enabled, initialized, error, changed] of rows)
+      insert.run(id, userId, type, type === "rule" ? "" : title, JSON.stringify(terms), type === "rule" ? null : JSON.stringify({ title }), enabled, initialized, error, changed === null ? null : at(changed), at(1), at(1));
+  }
+  const sorted = async (query: string) => (await services.app.inject({ url: `/api/subscriptions?view=summary&collectionId=sorted&${query}`, headers: { cookie } })).json();
+  const ids = (result: { subscriptions: Array<{ id: string }> }) => result.subscriptions.map((item) => item.id);
+
+  it("orders by last change by default, by name with Cyrillic case folding, and by attention", async () => {
+    seedSorted();
+    const byChange = ["s6", "s1", "s3", "s5", "s7", "s2", "s8", "s4"];
+    expect(ids(await sorted("page=1"))).toEqual(byChange);
+    expect(ids(await sorted("page=1&sort=changed"))).toEqual(byChange);
+    // apple, banana, арбуз, бета + альфа, дыня, ёжик (ё sorts as е), жёлудь, яблоко
+    expect(ids(await sorted("page=1&sort=name"))).toEqual(["s6", "s3", "s2", "s4", "s7", "s5", "s8", "s1"]);
+    // Errors, then paused, then learning, then the rest; each group by last change.
+    expect(ids(await sorted("page=1&sort=attention"))).toEqual(["s6", "s2", "s3", "s7", "s4", "s1", "s5", "s8"]);
+    expect(ids(await sorted("sort=name"))).toHaveLength(8);
+    for (const sort of ["bogus", "NAME", ""]) expect((await services.app.inject({ url: `/api/subscriptions?collectionId=sorted&sort=${sort}`, headers: { cookie } })).statusCode).toBe(400);
+  });
+
+  it("keeps sorted pages complete and combines sorting with filters", async () => {
+    seedSorted();
+    for (const sort of ["name", "attention", "changed"]) {
+      const full = ids(await sorted(`page=1&pageSize=100&sort=${sort}`)), paged: string[] = [];
+      for (let page = 1; page <= 3; page += 1) { const result = await sorted(`page=${page}&pageSize=3&sort=${sort}`); expect(result).toMatchObject({ total: 8, pageCount: 3, page }); paged.push(...ids(result)); }
+      expect(paged).toEqual(full);
+    }
+    expect(ids(await sorted("page=1&sort=name&filter=errors"))).toEqual(["s6", "s2"]);
+    expect(ids(await sorted(`page=1&sort=name&search=${encodeURIComponent("ЁЖ")}`))).toEqual(["s5"]);
+  });
+});

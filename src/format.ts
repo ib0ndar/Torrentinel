@@ -15,6 +15,7 @@ export function relativeTime(value: string): string {
   if (abs < 2_592_000) return formatter.format(Math.round(seconds / 86_400), "day");
   return new Date(value).toLocaleDateString(getLanguage(), { month: "short", day: "numeric", year: new Date(value).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
+export function absoluteTime(value: string): string { return new Date(value).toLocaleString(getLanguage(), { dateStyle: "medium", timeStyle: "short" }); }
 export function nearestPollIntervalIndex(minutes: number): number {
   return POLL_INTERVAL_OPTIONS.reduce((bestIndex, option, index) => Math.abs(option - minutes) < Math.abs(POLL_INTERVAL_OPTIONS[bestIndex] - minutes) ? index : bestIndex, 0);
 }
