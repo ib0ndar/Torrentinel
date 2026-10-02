@@ -2,7 +2,7 @@
 
 All notable changes to Torrentinel are documented in this file.
 
-## [Unreleased]
+## [0.8.0] - 2026-10-02
 
 ### Added
 
@@ -33,6 +33,11 @@ All notable changes to Torrentinel are documented in this file.
 - When a session expires or becomes invalid while the app is open, the interface returns to the sign-in form with a single "Your session has expired" message and the username pre-filled, instead of repeatedly showing "Authentication required" errors.
 - Members asked to change a temporary password (new accounts and administrator resets) no longer see the first-run "Secure the admin account" wording; the form asks for the temporary password. The password change screen also offers Sign out.
 - A request that reports a required password change now opens the password change form instead of showing repeated errors.
+
+### Upgrade notes
+
+- Startup adds the `idx_events_user_created` index on `subscription_events` for the Activity view. There are no table or column changes, and 0.7.0 runs unchanged against an upgraded database. Back up the database and application-data directory together before updating, as usual.
+- New API endpoints: `GET /api/activity` and `POST /api/activity/read`. `GET /api/subscriptions` accepts `sort=changed|name|attention`, and `GET /api/collections` returns `activityCount` per collection.
 
 ## [0.7.0] - 2026-10-02
 
@@ -426,6 +431,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.8.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.7.0
 [0.6.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.1
 [0.6.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.0
