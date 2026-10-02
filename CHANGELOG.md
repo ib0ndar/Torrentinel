@@ -6,9 +6,10 @@ All notable changes to Torrentinel are documented in this file.
 
 ### Changed
 
-- The account control at the bottom of the sidebar now opens an account menu with the username and Sign out, instead of signing out immediately.
-- Mobile bottom navigation adds an Account item with the scheduler status, the release version, and Sign out.
-- On mobile, Settings and Administration show a compact one-line collections switcher with the current collection. Expanding it reveals the full collections strip; Monitor keeps the full strip.
+- The account control at the bottom of the sidebar now opens an account menu with Sign out, instead of signing out immediately.
+- Mobile bottom navigation adds an Account item with the scheduler status, Sign out, and the release version.
+- On mobile Monitor, the collections strip is a single row of compact chips (name and unread count) with the New collection button at the end, using less than half the previous height. The selected collection is kept in view.
+- On mobile, Settings and Administration show a compact one-line collections switcher with the current collection. Expanding it reveals the collections strip.
 - The sign-in form no longer pre-fills the default `admin` credentials.
 - Rename, tracker-page, and sign-out actions use dedicated pencil, external-link, and sign-out icons.
 

@@ -95,7 +95,7 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(menu()?.getAttribute("aria-label")).toBe("Account");
     expect(trigger.getAttribute("aria-controls")).toBe(menu()!.id);
-    expect(menu()!.parentElement!.textContent).toContain("admin");
+    expect(document.querySelector(".menu-popover__header")).toBeNull();
     const items = [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     expect(items.map((item) => item.textContent)).toEqual(["Sign out"]);
     expect(document.activeElement).toBe(items[0]);
@@ -106,12 +106,13 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
 
     const mobile = container.querySelector<HTMLButtonElement>(".account-nav")!;
     expect(mobile.getAttribute("aria-label")).toBe("Account");
-    await act(async () => key(mobile, "ArrowUp"));
+    await act(async () => key(mobile, "ArrowDown"));
     const mobileItems = [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    expect(mobileItems.map((item) => item.textContent)).toEqual([expect.stringMatching(/^Torrentinel v\d/), "Sign out"]);
-    expect(document.activeElement).toBe(mobileItems[1]);
-    await act(async () => key(mobileItems[1], "ArrowDown"));
+    expect(mobileItems.map((item) => item.textContent)).toEqual(["Sign out", expect.stringMatching(/^Torrentinel v\d/)]);
     expect(document.activeElement).toBe(mobileItems[0]);
+    await act(async () => key(mobileItems[0], "ArrowDown"));
+    expect(document.activeElement).toBe(mobileItems[1]);
+    expect(menu()!.parentElement!.textContent).toContain("admin");
     expect(menu()!.parentElement!.textContent).toContain("Monitor ready");
     await act(async () => document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
     expect(menu()).toBeNull();

@@ -65,9 +65,9 @@ function AppShell({ user, setUser, notify, path, navigate }: { user: User; setUs
       <CollectionsNavigation {...collectionNavigation} className="collection-navigation--desktop" />
       <nav className="secondary-nav"><NavItem to="/settings" icon="sliders" label={t("Settings")} active={path === "/settings"} navigate={navigate} />{user.isAdmin && <NavItem to="/admin" icon="users" label={t("Administration")} active={path === "/admin"} navigate={navigate} />}</nav>
       <MenuButton className="nav-link account-nav" triggerLabel={t("Account")} menuLabel={t("Account")} offset={16} header={<>{accountSummary}{schedulerLine("scheduler-mini scheduler-mini--menu")}</>}
-        items={[{ id: "version", label: `Torrentinel v${APP_VERSION}`, icon: "external", href: RELEASE_URL, title: versionTitle }, signOut]}><Icon name="user" size={18} /><span>{t("Account")}</span></MenuButton>
+        items={[signOut, { id: "version", label: `Torrentinel v${APP_VERSION}`, icon: "external", href: RELEASE_URL, title: versionTitle }]}><Icon name="user" size={18} /><span>{t("Account")}</span></MenuButton>
       {schedulerLine("scheduler-mini")}
-      <MenuButton className="account-button" menuLabel={t("Account")} align="start" header={accountSummary} items={[signOut]}><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span><Icon name="more" size={16} /></MenuButton>
+      <MenuButton className="account-button" menuLabel={t("Account")} align="start" items={[signOut]}><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span><Icon name="more" size={16} /></MenuButton>
       <a className="app-version" href={RELEASE_URL} target="_blank" rel="noreferrer" title={versionTitle}>v{APP_VERSION}</a>
     </aside>
     <div className="app-stage">
