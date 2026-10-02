@@ -18,6 +18,8 @@ All notable changes to Torrentinel are documented in this file.
 - Subscription status badges, including Needs attention, are visible again on mobile, as are status badges in Settings and Administration.
 - Collections can be renamed and deleted on mobile from a new more-actions menu in the collection header.
 - When a session expires or becomes invalid while the app is open, the interface returns to the sign-in form with a single "Your session has expired" message and the username pre-filled, instead of repeatedly showing "Authentication required" errors.
+- Members asked to change a temporary password (new accounts and administrator resets) no longer see the first-run "Secure the admin account" wording; the form asks for the temporary password. The password change screen also offers Sign out.
+- A request that reports a required password change now opens the password change form instead of showing repeated errors.
 
 ## [0.7.0] - 2026-10-02
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import packageManifest from "../package.json";
-import { api, ApiError, onSessionExpired, SESSION_EXPIRED_MESSAGE } from "./api";
+import { api, ApiError, onPasswordChangeRequired, onSessionExpired, PASSWORD_CHANGE_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./api";
 import { useSchedulerStatus } from "./hooks/useSchedulerStatus";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
 import { CollectionsNavigation, NewCollection } from "./components/CollectionsNavigation";
@@ -37,6 +37,14 @@ export default function App() {
     updateUser(null);
     notify(t(SESSION_EXPIRED_MESSAGE), "bad");
   }), [notify, updateUser, t]);
+  // The session is valid but the password must be changed first (an administrator reset also
+  // ends sessions, so this is normally only reached by requests racing that change).
+  useEffect(() => onPasswordChangeRequired(() => {
+    if (signedIn.current === null) return;
+    setUser((current) => current && !current.mustChangePassword ? { ...current, mustChangePassword: true } : current);
+    notify(t(PASSWORD_CHANGE_MESSAGE), "bad");
+  }), [notify, t]);
+  async function signOut() { try { await api("/api/auth/logout", { method: "POST" }); updateUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
   useEffect(() => {
     api<{ user: User }>("/api/auth/me").then(({ user: current }) => updateUser(current)).catch((error) => {
       if (error instanceof ApiError && error.status === 401) updateUser(null); else notify(errorMessage(error), "bad");
@@ -45,7 +53,7 @@ export default function App() {
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(null), 4_000); return () => window.clearTimeout(timer); }, [toast]);
   if (user === undefined) return <BootScreen />;
   if (!user) return <><Login onLogin={(value) => { setLastUsername(""); updateUser(value); }} notify={notify} initialUsername={lastUsername} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
-  if (user.mustChangePassword) return <><ChangePassword user={user} onChanged={updateUser} notify={notify} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
+  if (user.mustChangePassword) return <><ChangePassword user={user} onChanged={updateUser} onSignOut={() => void signOut()} notify={notify} />{toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}</>;
   return <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}><DialogProvider><AppShell key={user.id} user={user} setUser={updateUser} notify={notify} path={path} navigate={navigate} />
     {toast && <div key={toast.id} className={`toast toast--${toast.tone}`}>{toast.message}</div>}
   </DialogProvider></TrackerMarkerStyleContext.Provider>;

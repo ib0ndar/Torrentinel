@@ -85,6 +85,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .password-panel > .brand-mark { margin-bottom: 52px; }
 .password-panel h1 { max-width: 440px; font-size: clamp(36px, 6vw, 60px); line-height: 1; letter-spacing: -.055em; }
 .password-panel > p:not(.eyebrow) { margin: 18px 0 38px; color: var(--muted); }
+.password-sign-out { display: block; margin: 18px auto 0; }
 
 .field { display: grid; gap: 10px; margin-bottom: 22px; }
 .field > span { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }

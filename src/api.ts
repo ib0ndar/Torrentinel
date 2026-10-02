@@ -30,6 +30,26 @@ export function expireSession(): void {
   for (const listener of [...sessionExpiredListeners]) listener();
 }
 
+export const PASSWORD_CHANGE_MESSAGE = "Choose a new password to continue.";
+
+// A 428 means the session is valid but an administrator reset the password
+// (or it is still temporary), so only the password change endpoint is usable.
+export class PasswordChangeRequiredError extends ApiError {
+  constructor() {
+    super(PASSWORD_CHANGE_MESSAGE, 428, "PASSWORD_CHANGE_REQUIRED");
+    this.name = "PasswordChangeRequiredError";
+  }
+}
+
+const passwordChangeListeners = new Set<() => void>();
+export function onPasswordChangeRequired(listener: () => void): () => void {
+  passwordChangeListeners.add(listener);
+  return () => { passwordChangeListeners.delete(listener); };
+}
+export function requirePasswordChange(): void {
+  for (const listener of [...passwordChangeListeners]) listener();
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("content-type")) headers.set("content-type", "application/json");
@@ -42,6 +62,10 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (response.status === 401 && path !== "/api/auth/login") {
     expireSession();
     throw new SessionExpiredError();
+  }
+  if (response.status === 428 && payload.code === "PASSWORD_CHANGE_REQUIRED") {
+    requirePasswordChange();
+    throw new PasswordChangeRequiredError();
   }
   if (!response.ok) {
     throw new ApiError(payload.error || `Request failed with HTTP ${response.status}`, response.status, payload.code, payload.details);

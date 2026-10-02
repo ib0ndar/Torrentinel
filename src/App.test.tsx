@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import App from "./App";
-import { api, expireSession, SessionExpiredError } from "./api";
+import { api, expireSession, PasswordChangeRequiredError, requirePasswordChange, SessionExpiredError } from "./api";
 import { setLanguage } from "./i18n";
 
 vi.mock("./api", async (original) => ({ ...await original<object>(), api: vi.fn() }));
@@ -97,6 +97,53 @@ it("returns to sign-in with one clear message when the session expires during ba
     expect(toasts.map((toast) => toast.textContent)).toEqual(["Your session has expired. Sign in again."]);
     expect(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!.value).toBe("alice");
     expect(container.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe("");
+  } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
+});
+
+it("switches to the password form when a request reports that the password must be changed", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.useFakeTimers();
+  let reset = false;
+  const user = { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/auth/change-password") { reset = false; return { user }; }
+    if (path === "/api/auth/logout") return {};
+    if (reset) { requirePasswordChange(); throw new PasswordChangeRequiredError(); }
+    if (path === "/api/auth/me") return { user };
+    if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
+    if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0 }] };
+    if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const passwords = () => [...container.querySelectorAll<HTMLInputElement>('.password-panel input[type="password"]')];
+  const type = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
+  try {
+    window.history.replaceState({}, "", "/settings");
+    await act(async () => root.render(<App />));
+    expect(container.querySelector("h1")?.textContent).toBe("Settings page");
+    reset = true;
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(container.querySelector(".app-shell")).toBeNull();
+    expect(container.querySelector(".password-panel .eyebrow")?.textContent).toBe("Password change required");
+    expect(container.querySelector(".password-panel h1")?.textContent).toBe("Choose a new password.");
+    expect(container.querySelector(".password-panel label")?.textContent).toContain("Temporary password");
+    expect([...container.querySelectorAll(".toast")].map((toast) => toast.textContent)).toEqual(["Choose a new password to continue."]);
+
+    const [current, next, confirm] = passwords();
+    await act(async () => { type(current, "temporary-1"); type(next, "new-password-1"); type(confirm, "new-password-1"); });
+    await act(async () => container.querySelector<HTMLFormElement>(".password-panel form")!.requestSubmit());
+    expect(vi.mocked(api)).toHaveBeenCalledWith("/api/auth/change-password", expect.objectContaining({ method: "POST" }));
+    expect(container.querySelector("h1")?.textContent).toBe("Settings page");
+    expect(window.location.pathname).toBe("/settings");
+
+    reset = true;
+    await act(async () => vi.advanceTimersByTime(30_000));
+    await act(async () => container.querySelector<HTMLButtonElement>(".password-sign-out")!.click());
+    expect(vi.mocked(api)).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+    expect(container.querySelector(".login-form")).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!.value).toBe("");
   } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
 });
 
