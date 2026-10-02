@@ -2,6 +2,24 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.7.0] - 2026-10-02
+
+### Added
+
+- Appearance setting in Settings with eight color themes, saved per account: Sentinel (the existing theme and the default), Graphite, Frost, Nebula, Ember, Daylight, Paper, and High contrast.
+- Auto theme that follows the device's light or dark mode (Daylight or Sentinel) and switches immediately when the device changes.
+- Theme previews in Settings. A selected theme applies immediately and reverts if it cannot be saved.
+- The browser toolbar color follows the active theme. The last used theme is applied before the interface loads, so light themes do not flash dark on reload.
+
+### Changed
+
+- All interface colors now come from theme tokens, and translucent tints are derived with `color-mix()`. Sentinel looks the same as before.
+
+### Upgrade notes
+
+- Adds a `theme` column to `users` with the default `sentinel`, so existing accounts keep their current appearance.
+- Theme colors use CSS `color-mix()`, which requires Chrome or Edge 111, Safari 16.2, Firefox 113, or later.
+
 ## [0.6.1] - 2026-10-01
 
 ### Changed
@@ -376,6 +394,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[0.7.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.7.0
 [0.6.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.1
 [0.6.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.0
 [0.5.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.5.6

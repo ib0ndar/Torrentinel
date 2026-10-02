@@ -14,7 +14,7 @@ afterEach(() => { vi.resetAllMocks(); setLanguage("en"); });
 
 it("keeps top and bottom navigation synchronized and hides both when pagination is off", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 20 };
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 20, theme: "sentinel" };
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === "/api/collections") return { collections: [{ id: "inbox", name: "Inbox", subscriptionCount: 25, unreadCount: 0 }] };
     const page = Number(new URL(path, "http://test").searchParams.get("page") || "1");

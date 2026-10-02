@@ -2,6 +2,8 @@ export type TrackerKey = "kinozal" | "rutor" | "rutracker";
 export type SubscriptionType = "direct" | "rule";
 export type TrackerMarkerStyle = "icons" | "abbreviations";
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+export const THEME_PREFERENCES = ["auto", "sentinel", "graphite", "frost", "nebula", "ember", "daylight", "paper", "high-contrast"] as const;
+export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 
 export interface User {
   id: string;
@@ -12,6 +14,7 @@ export interface User {
   language: "en" | "ru";
   paginationEnabled: boolean;
   pageSize: number;
+  theme: ThemePreference;
 }
 
 export interface Collection {

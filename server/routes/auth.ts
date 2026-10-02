@@ -4,15 +4,17 @@ import { nowIso } from "../db.js";
 import { createSession, destroySession, requireUser } from "../auth.js";
 import { parse, type RouteServices } from "./shared.js";
 import type { AuthUser } from "../types.js";
+import { themePreference } from "../types.js";
 
 interface UserDbRow {
   id: string; username: string; password_hash: string; is_admin: number; disabled: number;
   must_change_password: number; tracker_marker_style: AuthUser["trackerMarkerStyle"];
-  language: AuthUser["language"]; pagination_enabled: number; page_size: number;
+  language: AuthUser["language"]; pagination_enabled: number; page_size: number; theme: string;
 }
 export function serializeUser(row: UserDbRow): AuthUser {
   return { id: row.id, username: row.username, isAdmin: Boolean(row.is_admin), mustChangePassword: Boolean(row.must_change_password),
-    trackerMarkerStyle: row.tracker_marker_style, language: row.language, paginationEnabled: Boolean(row.pagination_enabled), pageSize: row.page_size };
+    trackerMarkerStyle: row.tracker_marker_style, language: row.language, paginationEnabled: Boolean(row.pagination_enabled), pageSize: row.page_size,
+    theme: themePreference(row.theme) };
 }
 export function registerAuthRoutes({ app, db }: RouteServices): void {
   app.post("/api/auth/login", async (request, reply) => {

@@ -16,7 +16,7 @@ it("keeps collections available across pages and returns to the chosen collectio
   vi.useFakeTimers();
   const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 0, unreadCount: 0 }));
   vi.mocked(api).mockImplementation(async (path) => {
-    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20 } };
+    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
     if (path === "/api/collections") return { collections };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };

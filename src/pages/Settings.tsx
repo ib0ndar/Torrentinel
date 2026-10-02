@@ -5,7 +5,8 @@ import { Icon } from "../components/Icon";
 import { ListSkeleton, Page, TrackerTag } from "../components/UI";
 import { errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
-import type { Notify, TelegramStatus, Tracker, TrackerKey, TrackerMarkerStyle, User } from "../types";
+import { applyTheme, THEME_CHOICES, type ThemeId } from "../theme";
+import type { Notify, TelegramStatus, ThemePreference, Tracker, TrackerKey, TrackerMarkerStyle, User } from "../types";
 import { PAGE_SIZE_OPTIONS } from "../types";
 
 type TrackerSettingsDraft = { mirror: string; username: string; password: string; saving: boolean };
@@ -28,10 +29,15 @@ export function Settings({ user, onUserChange, notify }: { user: User; onUserCha
     }, 5_000);
     return () => window.clearInterval(interval);
   }, [telegram?.configured, telegram?.linked]);
-  async function savePreference(input: Partial<Pick<User, "language" | "paginationEnabled" | "pageSize">>) {
+  async function savePreference(input: Partial<Pick<User, "language" | "paginationEnabled" | "pageSize" | "theme">>): Promise<boolean> {
     setPreferenceBusy(true);
-    try { const result = await api<{ user: User }>("/api/settings/preferences", { method: "PUT", ...jsonBody(input) }); onUserChange(result.user); notify(t("Preference saved")); }
-    catch (error) { notify(errorMessage(error), "bad"); } finally { setPreferenceBusy(false); }
+    try { const result = await api<{ user: User }>("/api/settings/preferences", { method: "PUT", ...jsonBody(input) }); onUserChange(result.user); notify(t("Preference saved")); return true; }
+    catch (error) { notify(errorMessage(error), "bad"); return false; } finally { setPreferenceBusy(false); }
+  }
+  async function setTheme(theme: ThemePreference) {
+    if (preferenceBusy || theme === user.theme) return;
+    applyTheme(theme);
+    if (!await savePreference({ theme })) applyTheme(user.theme);
   }
   async function generateLink() {
     try { const result = await api<{ link: typeof link }>("/api/telegram/link-code", { method: "POST" }); setLink(result.link); }
@@ -76,8 +82,9 @@ export function Settings({ user, onUserChange, notify }: { user: User; onUserCha
     try { const result = await api<{ user: User }>("/api/settings/source-markers", { method: "PUT", ...jsonBody({ trackerMarkerStyle }) }); onUserChange(result.user); notify(t("Source marker preference saved")); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setMarkerBusy(false); }
   }
-  return <Page title={t("Settings")} eyebrow={t("Preferences & access")} description={t("Personalize source markers and configure private tracker access and Telegram delivery.")}>
+  return <Page title={t("Settings")} eyebrow={t("Preferences & access")} description={t("Personalize the appearance and source markers, and configure private tracker access and Telegram delivery.")}>
     <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Language")}</h2></div><div className="settings-control settings-control--preferences"><label className="settings-field"><span>{t("Interface language")}</span><select disabled={preferenceBusy} value={user.language} onChange={(event) => void savePreference({ language: event.target.value as User["language"] })}><option value="en">English</option><option value="ru">Русский</option></select></label></div></section>
+    <section className="settings-section settings-section--top"><div className="settings-copy"><h2>{t("Appearance")}</h2><p>{t("Choose the color theme for this account. Auto follows your device’s light or dark mode.")}</p></div><fieldset className="theme-options" disabled={preferenceBusy}><legend className="theme-options__legend">{t("Color theme")}</legend>{THEME_CHOICES.map((choice) => <label key={choice.id} className={user.theme === choice.id ? "theme-option theme-option--active" : "theme-option"}><input type="radio" name="theme" value={choice.id} checked={user.theme === choice.id} onChange={() => void setTheme(choice.id)} /><span className="theme-swatch" aria-hidden="true">{choice.id === "auto" ? <><ThemeSwatch theme="sentinel" /><ThemeSwatch theme="daylight" /></> : <ThemeSwatch theme={choice.id} />}</span><span className="theme-option__copy"><strong>{t(choice.label)}</strong><small>{t(choice.family)}</small></span>{user.theme === choice.id && <span className="theme-option__check" aria-hidden="true"><Icon name="check" size={20} /></span>}</label>)}</fieldset></section>
     <section className="settings-section settings-section--top">
       <div className="settings-copy"><h2>{t("Pagination")}</h2><p>{t("Show collections in pages. Turn off to load all entries. Search and status filters always run on the server.")}</p></div>
       <div className="settings-control settings-control--preferences settings-control--pagination">
@@ -101,4 +108,7 @@ export function Settings({ user, onUserChange, notify }: { user: User; onUserCha
       </section>;
     })}</div></section>
   </Page>;
+}
+function ThemeSwatch({ theme }: { theme: ThemeId }) {
+  return <span className="theme-swatch__face" data-theme={theme}><span><span className="theme-swatch__title" /><span className="theme-swatch__text" /><span className="theme-swatch__action" /></span></span>;
 }

@@ -81,6 +81,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - Reliable Telegram notifications with artwork, release links, a persistent delivery queue, and automatic retries
 - Server-side collection search and status filters, optional pagination, and quick page-size controls
 - English (default) and Russian interfaces and Telegram release messages, selected per account in Settings
+- Eight color themes, including two light themes and a high-contrast theme, plus Auto, which follows the device's light or dark mode; selected per account in Settings
 - Persistent cover fallback when an image host is temporarily unavailable
 - Tracker credentials, mirrors, and Telegram bots configured from the web interface
 - Administrator-managed accounts with no public registration

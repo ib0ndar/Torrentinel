@@ -14,6 +14,7 @@ import { Settings } from "./pages/Settings";
 import { Workspace } from "./pages/Workspace";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
+import { applyTheme } from "./theme";
 import type { Notify, User } from "./types";
 
 type Toast = { id: number; message: string; tone: "good" | "bad" };
@@ -25,7 +26,7 @@ export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined), [toast, setToast] = useState<Toast | null>(null);
   const [path, navigate] = useSimpleRouter();
   const notify = useCallback((message: string, tone: Toast["tone"] = "good") => setToast({ id: Date.now(), message, tone }), []);
-  const updateUser = useCallback((value: User | null) => { if (value) setLanguage(value.language); setUser(value); }, []);
+  const updateUser = useCallback((value: User | null) => { if (value) { setLanguage(value.language); applyTheme(value.theme); } setUser(value); }, []);
   useEffect(() => {
     api<{ user: User }>("/api/auth/me").then(({ user: current }) => updateUser(current)).catch((error) => {
       if (error instanceof ApiError && error.status === 401) setUser(null); else notify(errorMessage(error), "bad");

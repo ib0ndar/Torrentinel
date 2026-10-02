@@ -120,6 +120,7 @@ describe("database migrations", () => {
         .toEqual({ tracker_marker_style: "icons" });
       expect(db.prepare("SELECT language, pagination_enabled, page_size FROM users WHERE username = 'admin'").get())
         .toEqual({ language: "en", pagination_enabled: 1, page_size: 50 });
+      expect(db.prepare("SELECT theme FROM users WHERE username = 'admin'").get()).toEqual({ theme: "sentinel" });
       expect(() => db.prepare("UPDATE users SET language = 'invalid'").run()).toThrow(/CHECK/);
       expect(() => db.prepare("UPDATE users SET page_size = 0").run()).toThrow(/CHECK/);
     } finally {

@@ -1,12 +1,12 @@
 import packageManifest from "../../package.json";
 
-export type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert";
+export type IconName = "monitor" | "sliders" | "users" | "arrow" | "plus" | "clock" | "edit" | "trash" | "search" | "link" | "rule" | "folder" | "refresh" | "alert" | "external" | "magnet" | "download" | "send" | "close" | "bellAlert" | "check";
 const SPRITE_URL = `/brand/ui/sprite.svg?v=${encodeURIComponent(packageManifest.version)}`;
 const symbols: Record<IconName, string> = {
   monitor: "monitor-eye", sliders: "settings", users: "shield", arrow: "resume", plus: "add", clock: "clock",
   edit: "settings", trash: "trash", search: "search", link: "link", rule: "keyword", folder: "hexagon",
   refresh: "sync", alert: "alert", external: "tracker", magnet: "magnet", download: "download", send: "bell",
-  close: "add", bellAlert: "bell-alert",
+  close: "add", bellAlert: "bell-alert", check: "check",
 };
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {

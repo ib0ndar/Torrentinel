@@ -84,4 +84,22 @@ describe("server-side collection paging and filtering", () => {
     for (const payload of [{ language: "de" }, { pageSize: 25 }, { pageSize: 200 }, { pageSize: 26 }, { paginationEnabled: "false" }]) expect((await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload })).statusCode).toBe(400);
     expect((await app.inject({ method: "PUT", url: "/api/settings/preferences", payload: { language: "ru" } })).statusCode).toBe(401);
   });
+  it("persists the per-user theme preference, including Auto, without touching other preferences", async () => {
+    const { app, db } = services;
+    const me = async () => (await app.inject({ url: "/api/auth/me", headers: { cookie } })).json().user;
+    expect((await me()).theme).toBe("sentinel");
+    for (const theme of ["auto", "graphite", "frost", "nebula", "ember", "daylight", "paper", "high-contrast", "sentinel"]) {
+      const response = await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload: { theme } });
+      expect(response.statusCode).toBe(200); expect(response.json().user.theme).toBe(theme);
+      expect(await me()).toMatchObject({ theme, language: "en", paginationEnabled: true, pageSize: 50 });
+    }
+    await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload: { theme: "daylight" } });
+    await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload: { language: "ru" } });
+    expect(await me()).toMatchObject({ theme: "daylight", language: "ru" });
+    for (const theme of ["solarized", "", "AUTO", null, 1]) expect((await app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload: { theme } })).statusCode).toBe(400);
+    db.prepare("UPDATE users SET theme = 'retired-theme' WHERE id = ?").run(userId);
+    expect((await me()).theme).toBe("sentinel");
+    const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "admin", password: "admin" } });
+    expect(login.json().user.theme).toBe("sentinel");
+  });
 });

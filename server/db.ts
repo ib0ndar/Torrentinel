@@ -347,6 +347,12 @@ function migrate(db: SqliteDatabase): void {
     }
   }
 
+  if (!userColumns.some((column) => column.name === "theme")) {
+    // Unlike the other preferences this has no CHECK constraint, so themes can be added without a table rebuild.
+    // The API validates values and unknown stored values fall back to Sentinel.
+    db.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'sentinel'");
+  }
+
   const trackerStateColumns = db.prepare("PRAGMA table_info(subscription_tracker_state)")
     .all() as Array<{ name: string }>;
   if (!trackerStateColumns.some((column) => column.name === "discovery_revision")) {
