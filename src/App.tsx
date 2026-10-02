@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import packageManifest from "../package.json";
 import { api, ApiError } from "./api";
 import { useSchedulerStatus } from "./hooks/useSchedulerStatus";
@@ -7,6 +7,7 @@ import { CollectionsNavigation, NewCollection } from "./components/CollectionsNa
 import { DialogProvider } from "./components/Dialogs";
 import { CheckActivityContext, TrackerMarkerStyleContext } from "./components/contexts";
 import { Icon, type IconName } from "./components/Icon";
+import { MenuButton, type MenuItem } from "./components/Menu";
 import { BrandMark } from "./components/UI";
 import { Admin } from "./pages/Administration";
 import { BootScreen, ChangePassword, Login } from "./pages/Authentication";
@@ -15,7 +16,7 @@ import { Workspace } from "./pages/Workspace";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
 import { applyTheme } from "./theme";
-import type { Notify, User } from "./types";
+import type { Collection, Notify, User } from "./types";
 
 type Toast = { id: number; message: string; tone: "good" | "bad" };
 const APP_VERSION = packageManifest.version;
@@ -53,21 +54,41 @@ function AppShell({ user, setUser, notify, path, navigate }: { user: User; setUs
     onCreate: () => setNewCollection(true),
   };
   async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
+  const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };
+  const versionTitle = APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`;
+  const accountSummary = <div className="account-summary"><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span></div>;
+  const schedulerLine = (className: string) => <div className={className}><span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>;
   return <div className="app-shell">
     <aside className="app-nav">
       <div className="brand-lockup"><BrandMark size={28} scanning={checking} /><strong>Torrentinel</strong></div>
       <nav><NavItem to="/" icon="monitor" label={t("Monitor")} active={monitorVisible} navigate={navigate} /></nav>
       <CollectionsNavigation {...collectionNavigation} className="collection-navigation--desktop" />
       <nav className="secondary-nav"><NavItem to="/settings" icon="sliders" label={t("Settings")} active={path === "/settings"} navigate={navigate} />{user.isAdmin && <NavItem to="/admin" icon="users" label={t("Administration")} active={path === "/admin"} navigate={navigate} />}</nav>
-      <div className="scheduler-mini"><span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>
-      <button className="account-button" onClick={logout}><span className="avatar">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t("Sign out")}</small></span><Icon name="arrow" size={15} /></button>
-      <a className="app-version" href={RELEASE_URL} target="_blank" rel="noreferrer" title={APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`}>v{APP_VERSION}</a>
+      <MenuButton className="nav-link account-nav" triggerLabel={t("Account")} menuLabel={t("Account")} offset={16} header={<>{accountSummary}{schedulerLine("scheduler-mini scheduler-mini--menu")}</>}
+        items={[{ id: "version", label: `Torrentinel v${APP_VERSION}`, icon: "external", href: RELEASE_URL, title: versionTitle }, signOut]}><Icon name="user" size={18} /><span>{t("Account")}</span></MenuButton>
+      {schedulerLine("scheduler-mini")}
+      <MenuButton className="account-button" menuLabel={t("Account")} align="start" header={accountSummary} items={[signOut]}><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span><Icon name="more" size={16} /></MenuButton>
+      <a className="app-version" href={RELEASE_URL} target="_blank" rel="noreferrer" title={versionTitle}>v{APP_VERSION}</a>
     </aside>
     <div className="app-stage">
-      <CollectionsNavigation {...collectionNavigation} className="collection-navigation--mobile" />
+      {monitorVisible ? <CollectionsNavigation {...collectionNavigation} className="collection-navigation--mobile" /> : <CollectionSwitcher key={path} {...collectionNavigation} current={data.collections.find((collection) => collection.id === data.selectedId)} />}
       <CheckActivityContext.Provider value={trackCheck}>{path === "/settings" ? <Settings user={user} onUserChange={setUser} notify={notify} /> : path === "/admin" && user.isAdmin ? <Admin notify={notify} /> : <Workspace user={user} onUserChange={setUser} notify={notify} data={data} onNewCollection={() => setNewCollection(true)} />}</CheckActivityContext.Provider>
     </div>
     {newCollection && <NewCollection onClose={() => setNewCollection(false)} onCreated={async (id) => { await data.loadCollections(); data.setSelectedId(id); setNewCollection(false); navigate("/"); }} notify={notify} />}
+  </div>;
+}
+// Mobile-only compact entry point to the collections strip outside Monitor.
+function CollectionSwitcher({ current, ...navigation }: Omit<Parameters<typeof CollectionsNavigation>[0], "className" | "id"> & { current?: Collection }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false), listId = useId();
+  return <div className="collection-switcher">
+    <div className="collection-switcher__bar">
+      <button type="button" className="collection-switcher__toggle" aria-expanded={expanded} aria-controls={expanded ? listId : undefined} onClick={() => setExpanded((value) => !value)}>
+        <span className="collection-switcher__label">{t("Collections")}</span><span className="collection-switcher__separator" aria-hidden="true">·</span><span className="collection-switcher__current">{current?.name ?? t("No collection selected")}</span><Icon name="chevron" size={17} />
+      </button>
+      <button type="button" className="icon-button" aria-label={t("New collection")} title={t("New collection")} onClick={navigation.onCreate}><Icon name="plus" /></button>
+    </div>
+    {expanded && <CollectionsNavigation {...navigation} id={listId} className="collection-navigation--mobile collection-navigation--switcher" />}
   </div>;
 }
 function NavItem({ to, icon, label, active, navigate }: { to: string; icon: IconName; label: string; active: boolean; navigate: (path: string) => void }) {

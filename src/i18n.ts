@@ -29,7 +29,7 @@ export const russian: Record<string, string> = {
   "Current password": "Текущий пароль", "New password": "Новый пароль", "Confirm new password": "Повторите новый пароль",
   "Save new password": "Сохранить новый пароль", "New passwords do not match": "Новые пароли не совпадают", "Password changed": "Пароль изменён",
   "Monitor": "Монитор", "Settings": "Настройки", "Administration": "Администрирование", "Polling trackers": "Проверка трекеров",
-  "Monitor ready": "Монитор готов", "Loading schedule": "Загрузка расписания", "Sign out": "Выйти", "Next {time}": "Следующая проверка {time}",
+  "Monitor ready": "Монитор готов", "Loading schedule": "Загрузка расписания", "Sign out": "Выйти", "Collection actions": "Действия с коллекцией", "No collection selected": "Коллекция не выбрана", "Next {time}": "Следующая проверка {time}",
   "Language": "Язык", "Interface language": "Язык интерфейса",
   "Appearance": "Оформление", "Color theme": "Цветовая тема",
   "Choose the color theme for this account. Auto follows your device’s light or dark mode.": "Выберите цветовую тему для этой учётной записи. «Авто» повторяет светлый или тёмный режим устройства.",

@@ -3,6 +3,7 @@ import { api, jsonBody } from "../api";
 import type { WorkspaceData } from "../hooks/useWorkspaceData";
 import { useDialog } from "../components/Dialogs";
 import { Icon } from "../components/Icon";
+import { MenuButton } from "../components/Menu";
 import { Drawer, DrawerActions, EmptyState, Field, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, TrackerTag } from "../components/UI";
 import { capitalize, errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
@@ -50,7 +51,8 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection }:
   }
   return <div className="workspace">
     <section className="subscription-pane">{selected ? <>
-      <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions"><button className="icon-button" title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger" title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button></div></header>
+      <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions"><button className="icon-button header-action" aria-label={t("Rename collection")} title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger header-action" aria-label={t("Delete collection")} title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button>
+        <MenuButton className="icon-button header-more" triggerLabel={t("Collection actions")} menuLabel={t("Collection actions")} items={[{ id: "rename", label: t("Rename collection"), icon: "edit", onSelect: () => void renameCollection() }, { id: "delete", label: t("Delete collection"), icon: "trash", tone: "danger", onSelect: () => void deleteCollection() }]}><Icon name="more" /></MenuButton></div></header>
       <div className="list-toolbar"><div className="filter-tabs">{(["all", "unread", "errors"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => setFilter(name)}>{t(capitalize(name))}</button>)}</div><label className="search-box"><Icon name="search" size={16} /><input aria-label={t("Filter this collection")} placeholder={t("Filter this collection")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
       {user.paginationEnabled && <nav className="pagination" aria-label={t("Pagination")}>
         <label className="pagination-size-picker"><span>{t("Entries per page")}</span><select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>

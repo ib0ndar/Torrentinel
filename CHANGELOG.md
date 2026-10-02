@@ -2,6 +2,21 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The account control at the bottom of the sidebar now opens an account menu with the username and Sign out, instead of signing out immediately.
+- Mobile bottom navigation adds an Account item with the scheduler status, the release version, and Sign out.
+- On mobile, Settings and Administration show a compact one-line collections switcher with the current collection. Expanding it reveals the full collections strip; Monitor keeps the full strip.
+- The sign-in form no longer pre-fills the default `admin` credentials.
+- Rename, tracker-page, and sign-out actions use dedicated pencil, external-link, and sign-out icons.
+
+### Fixed
+
+- Subscription status badges, including Needs attention, are visible again on mobile, as are status badges in Settings and Administration.
+- Collections can be renamed and deleted on mobile from a new more-actions menu in the collection header.
+
 ## [0.7.0] - 2026-10-02
 
 ### Added

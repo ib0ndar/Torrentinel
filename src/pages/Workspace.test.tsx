@@ -54,3 +54,46 @@ it("keeps top and bottom navigation synchronized and hides both when pagination 
     expect(container.querySelectorAll("nav.pagination")).toHaveLength(0);
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it("renames and deletes the collection from the more-actions menu", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/collections") return { collections: [{ id: "inbox", name: "Inbox", subscriptionCount: 0, unreadCount: 0 }] };
+    if (path.startsWith("/api/subscriptions?")) return { subscriptions: [], total: 0, page: 1, pageCount: 1 };
+    return {};
+  });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), notify = vi.fn();
+  function Harness() {
+    const data = useWorkspaceData(notify, false, 20);
+    return <DialogProvider><Workspace user={user} onUserChange={vi.fn()} notify={notify} data={data} onNewCollection={() => undefined} /></DialogProvider>;
+  }
+  const more = () => container.querySelector<HTMLButtonElement>(".header-more")!;
+  const choose = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((item) => item.textContent === label)!;
+  const submitDialog = () => container.querySelector(".app-dialog form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  try {
+    await act(async () => root.render(<Harness />));
+    expect(container.querySelector('.header-action[aria-label="Rename collection"]')).not.toBeNull();
+    expect(container.querySelector('.header-action[aria-label="Delete collection"]')).not.toBeNull();
+    expect(more().getAttribute("aria-label")).toBe("Collection actions");
+    await act(async () => more().click());
+    expect(document.querySelector('[role="menu"]')?.getAttribute("aria-label")).toBe("Collection actions");
+    await act(async () => choose("Rename collection").click());
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector(".app-dialog h2")?.textContent).toBe("Rename collection");
+    const input = container.querySelector<HTMLInputElement>(".app-dialog input")!;
+    expect(input.value).toBe("Inbox");
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Watchlist"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => submitDialog());
+    expect(vi.mocked(api)).toHaveBeenCalledWith("/api/collections/inbox", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "Watchlist" }) }));
+    expect(notify).toHaveBeenCalledWith("Collection renamed");
+
+    await act(async () => more().click());
+    await act(async () => choose("Delete collection").click());
+    expect(container.querySelector(".app-dialog h2")?.textContent).toBe("Delete “Inbox”?");
+    await act(async () => submitDialog());
+    expect(vi.mocked(api)).toHaveBeenCalledWith("/api/collections/inbox", { method: "DELETE" });
+    expect(notify).toHaveBeenCalledWith("Collection deleted");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
