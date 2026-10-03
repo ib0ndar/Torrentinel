@@ -187,7 +187,7 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(trigger.getAttribute("aria-controls")).toBe(menu()!.id);
     expect(document.querySelector(".menu-popover__header")).toBeNull();
     const items = [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    expect(items.map((item) => item.textContent)).toEqual(["Sign out"]);
+    expect(items.map((item) => item.textContent)).toEqual(["Change password", "Sign out"]);
     expect(document.activeElement).toBe(items[0]);
     await act(async () => key(items[0], "Escape"));
     expect(menu()).toBeNull();
@@ -198,7 +198,7 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(mobile.getAttribute("aria-label")).toBe("Account");
     await act(async () => key(mobile, "ArrowDown"));
     const mobileItems = [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    expect(mobileItems.map((item) => item.textContent)).toEqual(["Sign out", expect.stringMatching(/^Torrentinel v\d/)]);
+    expect(mobileItems.map((item) => item.textContent)).toEqual(["Change password", "Sign out", expect.stringMatching(/^Torrentinel v\d/)]);
     expect(document.activeElement).toBe(mobileItems[0]);
     await act(async () => key(mobileItems[0], "ArrowDown"));
     expect(document.activeElement).toBe(mobileItems[1]);
@@ -208,7 +208,7 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(menu()).toBeNull();
 
     await act(async () => trigger.click());
-    await act(async () => menu()!.querySelector<HTMLElement>('[role="menuitem"]')!.click());
+    await act(async () => [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "Sign out")!.click());
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
     expect(container.querySelector(".login-form")).not.toBeNull();
     expect(menu()).toBeNull();

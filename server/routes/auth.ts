@@ -1,7 +1,7 @@
 import { compare, hash } from "bcryptjs";
 import { z } from "zod";
 import { nowIso } from "../db.js";
-import { createSession, destroySession, requireUser } from "../auth.js";
+import { createSession, destroyOtherSessions, destroySession, requireUser } from "../auth.js";
 import { parse, type RouteServices } from "./shared.js";
 import type { AuthUser } from "../types.js";
 import { themePreference } from "../types.js";
@@ -34,8 +34,12 @@ export function registerAuthRoutes({ app, db }: RouteServices): void {
     if (!input || !request.user) return;
     const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(request.user.id) as { password_hash: string } | undefined;
     if (!row || !(await compare(input.currentPassword, row.password_hash))) return reply.code(400).send({ error: "Current password is incorrect" });
-    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?")
-      .run(await hash(input.newPassword, 12), nowIso(), request.user.id);
+    const passwordHash = await hash(input.newPassword, 12), userId = request.user.id;
+    // Other browsers and devices must sign in again with the new password; this session stays.
+    db.transaction(() => {
+      db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?").run(passwordHash, nowIso(), userId);
+      destroyOtherSessions(db, request, userId);
+    })();
     request.user.mustChangePassword = false;
     return { user: request.user };
   });

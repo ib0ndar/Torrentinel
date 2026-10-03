@@ -6,6 +6,9 @@ export const POLL_INTERVAL_MARKERS = [5, 60, 180, 360] as const;
 export function capitalize(value: string): string { return value[0].toUpperCase() + value.slice(1); }
 export function trackerName(key: TrackerKey): string { return key === "rutracker" ? "RuTracker" : key === "kinozal" ? "Kinozal" : "Rutor"; }
 export function errorMessage(error: unknown): string { return t(error instanceof Error ? error.message : String(error)); }
+export function isHttpUrl(value: string): boolean {
+  try { return ["http:", "https:"].includes(new URL(value).protocol); } catch { return false; }
+}
 export function relativeTime(value: string): string {
   const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1_000), abs = Math.abs(seconds);
   const formatter = new Intl.RelativeTimeFormat(getLanguage(), { numeric: "auto" });

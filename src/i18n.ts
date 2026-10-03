@@ -135,6 +135,12 @@ export const russian: Record<string, string> = {
   "New changes from all your collections will appear here.": "Здесь появятся новые изменения из всех ваших коллекций.", "Show all changes": "Показать все изменения", "Load more": "Показать ещё",
   "Today": "Сегодня", "Yesterday": "Вчера", "Previous title:": "Прежнее название:", "New title:": "Новое название:", "Previous magnet": "Прежняя magnet-ссылка", "Previous torrent file": "Прежний торрент-файл", "+{count} more": "и ещё {count}",
   "Open magnet for {title}": "Открыть magnet-ссылку: {title}", "Download torrent file for {title}": "Скачать торрент-файл: {title}",
+  "Overview": "Обзор", "Mirrors": "Зеркала", "Diagnostics": "Диагностика", "Administration sections": "Разделы администрирования",
+  "Tracker log pages": "Страницы журнала трекеров", "Tracker log pages, bottom": "Страницы журнала трекеров, внизу", "Telegram delivery pages": "Страницы доставки в Telegram", "Telegram delivery pages, bottom": "Страницы доставки в Telegram, внизу",
+  "Settings sections": "Разделы настроек", "Saved automatically": "Сохраняется автоматически", "Save to apply": "Применяется после сохранения",
+  "Change password": "Сменить пароль", "Change the password for {name}. Other browsers and devices signed in to this account are signed out.": "Смена пароля для {name}. На других устройствах и в других браузерах потребуется войти снова.",
+  "The new password must have at least {count} characters": "Новый пароль должен содержать не менее {count} символов",
+  "Unsaved changes": "Не сохранено", "Discard": "Отменить",
 };
 
 let language: Language = "en";

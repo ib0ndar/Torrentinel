@@ -180,17 +180,6 @@ export interface TrackerObservation {
   observedAt: string;
 }
 
-export interface DiagnosticRun {
-  id: string;
-  trigger: string;
-  startedAt: string;
-  finishedAt?: string | null;
-  checked: number;
-  changed: number;
-  errors: number;
-  durationMs?: number | null;
-}
-
 export interface TelegramDelivery {
   id: string;
   subscriptionId?: string | null;
@@ -208,14 +197,10 @@ export interface TelegramDelivery {
   createdAt: string;
 }
 
-export interface DiagnosticsResponse {
-  retentionHours: number;
-  generatedAt: string;
-  observations: TrackerObservation[];
-  runs: DiagnosticRun[];
-  telegramDeliveries: TelegramDelivery[];
-  notificationQueue?: Array<{ id: string; username: string; subscriptionId: string; attempts: number; nextAttemptAt: string; lastError?: string | null; status: string }>;
-}
+export interface PagedResult { total: number; page: number; pageSize: number; pageCount: number }
+export interface ObservationsResponse extends PagedResult { retentionHours: number; observations: TrackerObservation[]; outcomes: string[] }
+export interface DeliveriesResponse extends PagedResult { retentionHours: number; telegramDeliveries: TelegramDelivery[] }
+export interface NotificationQueueRow { id: string; username: string; subscriptionId: string; subscriptionName?: string | null; attempts: number; nextAttemptAt: string; lastError?: string | null; status: string }
 export type Notify = (message: string, tone?: "good" | "bad") => void;
 export type SubscriptionSummary = Omit<Subscription, "currentSnapshot">;
 

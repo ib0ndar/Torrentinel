@@ -267,7 +267,7 @@ Username: admin
 Password: admin
 ```
 
-Torrentinel requires the default password to be changed immediately. Configure tracker accounts, mirrors, and Telegram bots under **Settings**. Manage users and the polling interval under **Administration**.
+Torrentinel requires the default password to be changed immediately. Configure tracker accounts, mirrors, and Telegram bots under **Settings**, where each account can also change its password later (**Settings → Account**; this signs out the account's other sessions). Manage users, global mirrors, the polling interval, and diagnostics under **Administration**.
 
 Do not expose a new installation to an untrusted network until the default administrator password has been changed.
 

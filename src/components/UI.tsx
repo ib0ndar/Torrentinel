@@ -6,8 +6,8 @@ import { trackerName } from "../format";
 import { useI18n } from "../i18n";
 import type { SubscriptionType, TrackerKey, TrackerMarkerStyle } from "../types";
 
-export function Page({ title, eyebrow, description, actions, children }: { title: string; eyebrow: string; description: string; actions?: ReactNode; children: ReactNode }) {
-  return <main className="page"><header className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{actions}</header><div className="page-body">{children}</div></main>;
+export function Page({ title, eyebrow, description, actions, navigation, children }: { title: string; eyebrow: string; description: string; actions?: ReactNode; navigation?: ReactNode; children: ReactNode }) {
+  return <main className="page"><header className={navigation ? "page-header page-header--navigation" : "page-header"}><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{actions}</header>{navigation}<div className="page-body">{children}</div></main>;
 }
 export function Drawer({ title, subtitle, onClose, wide = false, extraWide = false, headerMedia, children }: { title: string; subtitle: string; onClose: () => void; wide?: boolean; extraWide?: boolean; headerMedia?: ReactNode; children: ReactNode }) {
   const { t } = useI18n();

@@ -14,7 +14,7 @@ const subscriptionUpdateSchema = z.object({ collectionId: z.string().min(1).opti
   trackerKeys: z.array(trackerKeySchema).min(1).optional(), requiredTerms: z.array(z.string()).min(1).max(30).optional(), ignoredTerms: z.array(z.string()).max(30).optional() });
 const RECENT_CHANGE_ORDER = "COALESCE(s.last_changed_at, s.created_at) DESC, s.created_at DESC, s.rowid DESC";
 // Mirrors serializeSubscription's label: rule phrases joined with " + ", else the current title or stored name.
-const LABEL_SQL = `CASE WHEN s.type = 'rule' THEN COALESCE((SELECT GROUP_CONCAT(value, ' + ') FROM json_each(CASE WHEN json_valid(s.required_terms) THEN s.required_terms ELSE '[]' END)), '')
+export const LABEL_SQL = `CASE WHEN s.type = 'rule' THEN COALESCE((SELECT GROUP_CONCAT(value, ' + ') FROM json_each(CASE WHEN json_valid(s.required_terms) THEN s.required_terms ELSE '[]' END)), '')
   ELSE COALESCE(NULLIF(TRIM(CASE WHEN json_valid(s.current_snapshot) THEN json_extract(s.current_snapshot, '$.title') END), ''), s.name, '') END`;
 const SUBSCRIPTION_ORDER = {
   changed: RECENT_CHANGE_ORDER,

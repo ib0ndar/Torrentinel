@@ -367,6 +367,13 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 36px; border-bottom: 1px solid var(--line); }
 .page-header > div > p:last-child { margin-top: 14px; color: var(--muted); font-size: 15px; }
 .page-body { max-width: 1180px; }
+.page-header--navigation { padding-bottom: 26px; border-bottom: 0; }
+.page-tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.page-tabs::-webkit-scrollbar { display: none; }
+.page-tab { position: relative; min-height: 46px; display: inline-flex; flex: 0 0 auto; align-items: center; padding: 0 14px; color: var(--dim); font-size: 14px; font-weight: 700; white-space: nowrap; transition: color .14s ease; }
+.page-tab:hover, .page-tab--active { color: var(--ink); }
+.page-tab--active::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 0; height: 2px; background: var(--brand-gradient); }
+.page-tab:focus-visible { outline-offset: -2px; }
 .activity-toolbar { border-bottom: 1px solid var(--line); }
 .activity-read { flex: 0 0 auto; white-space: nowrap; }
 .activity-count { color: var(--dim); font-size: 12px; font-weight: 650; }
@@ -391,8 +398,18 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .activity-entry__meta .tracker-tag img { width: 16px; height: 16px; }
 .activity-entry__time { align-self: start; padding-top: 2px; color: var(--dim); font-size: 12px; white-space: nowrap; }
 .activity-more { display: flex; justify-content: center; margin-top: 18px; }
-.settings-section { display: grid; grid-template-columns: minmax(220px, .65fr) minmax(420px, 1.35fr); gap: 70px; padding: 40px 0; border-bottom: 1px solid var(--line); }
+.settings-section { display: grid; grid-template-columns: minmax(220px, .65fr) minmax(420px, 1.35fr); gap: 70px; padding: 40px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 12px; }
 .settings-section--top { align-items: start; }
+.settings-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.settings-shortcuts a { min-height: 32px; display: inline-flex; flex: 0 0 auto; align-items: center; padding: 0 13px; border: 1px solid var(--line); border-radius: 16px; color: var(--muted); font-size: 13px; font-weight: 650; white-space: nowrap; transition: color .14s ease, border-color .14s ease, background .14s ease; }
+.settings-shortcuts a:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--overlay) 2.5%, transparent); color: var(--ink); }
+.save-note { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--dim); font-size: 12px; font-weight: 600; }
+.account-form { display: grid; gap: 14px; width: min(560px, 100%); }
+.account-form__new { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.form-error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 6px; background: color-mix(in srgb, var(--danger) 8%, transparent); color: var(--danger); font-size: 13px; line-height: 1.45; }
+.form-error .icon { margin-top: 1px; }
+.unsaved-hint { align-self: center; color: var(--warning); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.telegram-token { display: grid; gap: 18px; }
 .settings-copy h2, .table-section h2 { font-size: 19px; letter-spacing: -.025em; }
 .settings-copy p { max-width: 390px; margin-top: 10px; color: var(--muted); font-size: 14px; line-height: 1.55; }
 .settings-control { min-width: 0; }
@@ -454,6 +471,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .settings-control--pagination .check-line input { margin-top: 0; }
 .settings-control--pagination .settings-field { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 @media (max-width: 580px) {
+  .account-form__new { grid-template-columns: 1fr; }
   .settings-control--preferences .settings-field { grid-template-columns: 1fr; gap: 10px; }
   .settings-control--preferences select { width: min(200px, 100%); }
 }
@@ -478,6 +496,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .mirror-row strong { font-size: 13px; }
 .mirror-row small { color: var(--dim); font-size: 11px; }
 .mirror-row input { min-height: 39px; font-size: 13px; }
+.mirror-row__actions { min-width: 150px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 
 .admin-strip { min-height: 86px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 28px; border-bottom: 1px solid var(--line); }
 .admin-strip > div:first-child { display: flex; align-items: center; gap: 12px; }
@@ -605,7 +624,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   .coverage-metrics > span { text-align: left; }
   .mirror-row { grid-template-columns: 1fr auto; padding: 13px 0; }
   .mirror-row input { grid-column: 1; grid-row: 2; min-width: 0; }
-  .mirror-row .button { grid-column: 2; grid-row: 2; }
+  .mirror-row__actions { grid-column: 2; grid-row: 2; }
 }
 
 @media (max-width: 780px) {
@@ -701,8 +720,12 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
   .link-prompt .button { width: 100%; margin-left: 0; }
   .mirror-row { grid-template-columns: 1fr auto; padding: 13px 0; }
   .mirror-row input { grid-column: 1 / -1; grid-row: 2; }
-  .mirror-row .button { grid-column: 2; grid-row: 2; }
-  .mirror-row .text-button { grid-column: 2; }
+  .mirror-row__actions { grid-column: 1 / -1; grid-row: 3; min-width: 0; }
+  .page-tabs { margin-inline: -18px; padding-inline: 8px; }
+  .page-tab { padding: 0 10px; font-size: 13px; }
+  .page-tab--active::after { left: 8px; right: 8px; }
+  .settings-shortcuts { flex-wrap: nowrap; overflow-x: auto; margin-inline: -18px; padding: 14px 18px; scrollbar-width: none; }
+  .settings-shortcuts::-webkit-scrollbar { display: none; }
   .drawer-heading--with-media { grid-template-columns: 150px minmax(0, 1fr); gap: 18px; }
   .release-cover--thumbnail { width: 150px; }
   .login-page { display: block; padding: 54px 24px; }

@@ -16,12 +16,11 @@ import { Settings } from "./pages/Settings";
 import { Workspace } from "./pages/Workspace";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
-import { activityPath, DEFAULT_MONITOR_VIEW, isPlainClick, monitorPath, type MonitorView, parseRoute, storeCollectionId, storedCollectionId } from "./routing";
+import { activityPath, adminPath, DEFAULT_MONITOR_VIEW, isPlainClick, monitorPath, type MonitorView, type Navigate, parseRoute, storeCollectionId, storedCollectionId } from "./routing";
 import { applyTheme } from "./theme";
 import type { Collection, Notify, User } from "./types";
 
 type Toast = { id: number; message: string; tone: "good" | "bad" };
-type Navigate = (path: string, options?: { replace?: boolean }) => void;
 type BrowserLocation = { pathname: string; search: string };
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
@@ -81,11 +80,14 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   const resolvedPath = data.collectionsLoaded ? monitorPath(data.view) : null;
   // "/" and unknown or deleted collections resolve to a collection without adding a history entry.
   useLayoutEffect(() => { if (monitorVisible && resolvedPath) navigate(resolvedPath, { replace: true }); }, [monitorVisible, resolvedPath, navigate]);
+  // "/admin", unknown sections and invalid or default query values resolve to the canonical address in place.
+  const adminCanonical = route.name === "admin" ? adminPath(route.tab, route.diagnostics) : null;
+  useLayoutEffect(() => { if (adminCanonical && adminCanonical !== location.pathname + location.search) navigate(adminCanonical, { replace: true }); }, [adminCanonical, location.pathname, location.search, navigate]);
   useEffect(() => {
     if (!monitorVisible || !resolvedPath || !data.view.collectionId) return;
     setLastMonitorView(data.view); storeCollectionId(user.id, data.view.collectionId);
   }, [monitorVisible, resolvedPath, user.id]); // data.view is rebuilt every render; resolvedPath identifies it.
-  const [newCollection, setNewCollection] = useState(false);
+  const [newCollection, setNewCollection] = useState(false), [accountFocusRequest, setAccountFocusRequest] = useState(0);
   const collectionHref = (id: string) => monitorPath({ ...data.view, collectionId: id, page: 1 });
   const collectionNavigation = {
     collections: data.collections,
@@ -99,11 +101,12 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   const loadCollections = useCallback(() => data.loadCollections().catch((error) => notify(errorMessage(error), "bad")), [data.loadCollections, notify]);
   async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
   const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };
+  const changePassword: MenuItem = { id: "change-password", label: t("Change password"), icon: "key", onSelect: () => { navigate("/settings"); setAccountFocusRequest((value) => value + 1); } };
   const versionTitle = APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`;
   const accountSummary = <div className="account-summary"><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span></div>;
   const schedulerLine = (className: string) => <div className={className}><span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>;
-  const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} />
-    : route.name === "admin" ? <Admin notify={notify} />
+  const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} accountFocusRequest={accountFocusRequest} onAccountFocused={() => setAccountFocusRequest(0)} />
+    : route.name === "admin" ? <Admin notify={notify} tab={route.tab} diagnostics={route.diagnostics} pageSize={user.pageSize} navigate={navigate} />
     : route.name === "activity" ? <Activity key={route.filter} user={user} notify={notify} filter={route.filter} onFilterChange={(filter) => navigate(activityPath(filter))} collections={data.collections} onCollectionsChanged={loadCollections} />
     : <Workspace user={user} onUserChange={setUser} notify={notify} data={data} onNewCollection={() => setNewCollection(true)} />;
   return <div className="app-shell">
@@ -114,9 +117,9 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
       <CollectionsNavigation {...collectionNavigation} className="collection-navigation--desktop" />
       <nav className="secondary-nav"><NavItem to="/settings" icon="sliders" label={t("Settings")} active={route.name === "settings"} navigate={navigate} />{user.isAdmin && <NavItem to="/admin" icon="users" label={t("Administration")} active={route.name === "admin"} navigate={navigate} />}</nav>
       <MenuButton className="nav-link account-nav" triggerLabel={t("Account")} menuLabel={t("Account")} offset={16} header={<>{accountSummary}{schedulerLine("scheduler-mini scheduler-mini--menu")}</>}
-        items={[signOut, { id: "version", label: `Torrentinel v${APP_VERSION}`, icon: "external", href: RELEASE_URL, title: versionTitle }]}><Icon name="user" size={18} /><span>{t("Account")}</span></MenuButton>
+        items={[changePassword, signOut, { id: "version", label: `Torrentinel v${APP_VERSION}`, icon: "external", href: RELEASE_URL, title: versionTitle }]}><Icon name="user" size={18} /><span>{t("Account")}</span></MenuButton>
       {schedulerLine("scheduler-mini")}
-      <MenuButton className="account-button" menuLabel={t("Account")} align="start" items={[signOut]}><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span><Icon name="more" size={16} /></MenuButton>
+      <MenuButton className="account-button" menuLabel={t("Account")} align="start" items={[changePassword, signOut]}><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span><Icon name="more" size={16} /></MenuButton>
       <a className="app-version" href={RELEASE_URL} target="_blank" rel="noreferrer" title={versionTitle}>v{APP_VERSION}</a>
     </aside>
     <div className="app-stage">

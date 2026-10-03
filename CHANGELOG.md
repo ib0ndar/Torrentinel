@@ -2,6 +2,25 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Change your own password under **Settings → Account** (current password, new password, confirmation), also reachable with **Change password** in the account menu on desktop and mobile. A successful change keeps you signed in and signs out the account's other browsers and devices.
+- Settings opens with shortcuts to each section, and each section states whether it is saved automatically or needs its Save button.
+- Tracker access rows in Settings and global mirror rows in Administration show **Unsaved changes** with a **Discard** action while edited. Save is only available when something changed and the values are valid; pressing Enter in a row saves it.
+
+### Changed
+
+- Administration is split into **Overview** (scheduler, polling interval, RuTracker feed coverage), **Users**, **Mirrors**, and **Diagnostics** tabs, each with its own address (`/admin/overview`, `/admin/users`, `/admin/mirrors`, `/admin/diagnostics`). `/admin` opens Overview.
+- Tracker logs and Telegram deliveries are paged on the server with your entries-per-page setting instead of showing only the latest 100 records. The tracker and outcome filters and the pages are kept in the address, so reloads, bookmarks, and Back/Forward return to the same view. The outcome filter lists every outcome recorded in the retention window.
+- The notification queue, tracker logs, and Telegram deliveries show subscription names (rule phrases or the release title) instead of only numeric IDs, falling back to the ID when the subscription no longer exists.
+
+### Fixed
+
+- Tracker logins and the Telegram bot token are now entered in real forms, which removes the browser's "Password field is not contained in a form" warnings.
+- Saving one tracker access row no longer discards unsaved edits in the other rows.
+
 ## [0.8.0] - 2026-10-02
 
 ### Added
@@ -432,6 +451,7 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
+[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.8.0...HEAD
 [0.8.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.7.0
 [0.6.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.1

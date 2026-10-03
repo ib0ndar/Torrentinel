@@ -86,6 +86,12 @@ export function destroySession(db: SqliteDatabase, request: FastifyRequest, repl
   reply.clearCookie(COOKIE_NAME, { path: "/" });
 }
 
+// Ends every session of the user except the one making this request.
+export function destroyOtherSessions(db: SqliteDatabase, request: FastifyRequest, userId: string): number {
+  const token = request.cookies[COOKIE_NAME];
+  return db.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?").run(userId, token ? tokenHash(token) : "").changes;
+}
+
 export async function requireUser(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!request.user) {
     await reply.code(401).send({ error: "Authentication required" });
