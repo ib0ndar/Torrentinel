@@ -18,7 +18,7 @@ async function open(details: { subscription: Subscription; events: SubscriptionE
   vi.mocked(api).mockResolvedValue(details);
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(<DialogProvider><SubscriptionInspector id="1" collections={[{ id: "inbox", name: "Inbox", subscriptionCount: 1, unreadCount: 0, activityCount: 0 }]} onClose={vi.fn()} onChanged={async () => undefined} notify={vi.fn()} /></DialogProvider>));
+  await act(async () => root.render(<DialogProvider><SubscriptionInspector id="1" collections={[{ id: "inbox", name: "Inbox", subscriptionCount: 1, unreadCount: 0, activityCount: 0, errorCount: 0 }]} onClose={vi.fn()} onChanged={async () => undefined} notify={vi.fn()} /></DialogProvider>));
   return { root, drawer: document.querySelector<HTMLElement>(".drawer")! };
 }
 const event = (id: string, kind: string, summary: string, payload: Record<string, unknown> | null): SubscriptionEvent => ({ id, kind, summary, payload, createdAt: new Date(Date.now() - 3_600_000).toISOString(), readAt: null });
@@ -93,4 +93,27 @@ it("omits action columns that no rule match uses", async () => {
     expect(none.drawer.querySelectorAll(".match-row")).toHaveLength(2);
     expect(none.drawer.querySelector(".match-row__actions")).toBeNull();
   } finally { await act(async () => none.root.unmount()); }
+});
+
+it("refreshes the open details every 30 seconds only while the tab is visible", async () => {
+  vi.useFakeTimers();
+  let visibility: DocumentVisibilityState = "visible";
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+  const setVisibility = (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new Event("visibilitychange")); });
+  const { root } = await open({ subscription: subscription({}), events: [], matches: [] });
+  const refreshes = () => vi.mocked(api).mock.calls.filter(([path]) => path === "/api/subscriptions/1").length;
+  try {
+    expect(api).toHaveBeenCalledWith("/api/subscriptions/1/open", expect.anything());
+    expect(refreshes()).toBe(0);
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(refreshes()).toBe(1);
+    await setVisibility("hidden");
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(refreshes()).toBe(1);
+    await setVisibility("visible");
+    expect(refreshes()).toBe(2);
+    const last = vi.mocked(api).mock.calls.filter(([path]) => path === "/api/subscriptions/1").at(-1)!;
+    await act(async () => root.unmount());
+    expect(last[1]?.signal?.aborted).toBe(true);
+  } finally { vi.useRealTimers(); Reflect.deleteProperty(document, "visibilityState"); }
 });

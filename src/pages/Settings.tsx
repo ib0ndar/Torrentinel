@@ -4,6 +4,7 @@ import { useDialog } from "../components/Dialogs";
 import { Icon } from "../components/Icon";
 import { ListSkeleton, Page, TrackerTag } from "../components/UI";
 import { errorMessage, isHttpUrl, relativeTime } from "../format";
+import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { useI18n } from "../i18n";
 import { applyTheme, THEME_CHOICES, type ThemeId } from "../theme";
 import type { Notify, TelegramStatus, ThemePreference, Tracker, TrackerKey, TrackerMarkerStyle, User } from "../types";
@@ -29,14 +30,12 @@ export function Settings({ user, onUserChange, notify, accountFocusRequest = 0, 
   const loadTelegram = useCallback(async () => setTelegram((await api<{ telegram: TelegramStatus }>("/api/telegram")).telegram), []);
   const loadTrackers = useCallback(async () => { setTrackers((await api<{ trackers: Tracker[] }>("/api/trackers")).trackers); setTrackersLoaded(true); }, []);
   useEffect(() => { void Promise.all([loadTelegram(), loadTrackers()]).catch((error) => notify(errorMessage(error), "bad")); }, [loadTelegram, loadTrackers, notify]);
-  useEffect(() => {
-    if (!telegram?.configured || telegram.linked) return;
-    const interval = window.setInterval(() => {
-      void api<{ telegram: TelegramStatus }>("/api/telegram").then((result) => setTelegram(result.telegram)).catch(() => undefined);
-      setLink((current) => current && new Date(current.expiresAt).getTime() <= Date.now() ? null : current);
-    }, 5_000);
-    return () => window.clearInterval(interval);
-  }, [telegram?.configured, telegram?.linked]);
+  // While a chat is being linked, watch for the link and drop an expired code.
+  const pollLink = useCallback(() => {
+    void api<{ telegram: TelegramStatus }>("/api/telegram").then((result) => setTelegram(result.telegram)).catch(() => undefined);
+    setLink((current) => current && new Date(current.expiresAt).getTime() <= Date.now() ? null : current);
+  }, []);
+  useVisibleInterval(pollLink, telegram?.configured && !telegram.linked ? 5_000 : null);
   // A reload after following a shortcut renders the sections after the browser looked for the anchor.
   useEffect(() => { const id = decodeURIComponent(window.location.hash.slice(1)); if (SECTIONS.some((section) => section.id === id)) document.getElementById(id)?.scrollIntoView?.(); }, []);
   async function savePreference(input: Partial<Pick<User, "language" | "paginationEnabled" | "pageSize" | "theme">>): Promise<boolean> {

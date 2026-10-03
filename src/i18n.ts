@@ -141,6 +141,10 @@ export const russian: Record<string, string> = {
   "Change password": "Сменить пароль", "Change the password for {name}. Other browsers and devices signed in to this account are signed out.": "Смена пароля для {name}. На других устройствах и в других браузерах потребуется войти снова.",
   "The new password must have at least {count} characters": "Новый пароль должен содержать не менее {count} символов",
   "Unsaved changes": "Не сохранено", "Discard": "Отменить",
+  "Dismiss notification": "Закрыть уведомление", "Filter subscriptions": "Фильтр подписок", "Filter changes": "Фильтр изменений",
+  "Keyboard shortcuts": "Горячие клавиши", "Help": "Справка", "Shortcuts work on Monitor and Activity while no text field has focus.": "Работают на страницах «Монитор» и «Активность», когда курсор не в поле ввода.",
+  "Search the collection (Monitor)": "Поиск в коллекции (Монитор)", "Next row": "Следующая строка", "Previous row": "Предыдущая строка", "Open the focused row": "Открыть выбранную строку",
+  "Add a subscription (Monitor)": "Добавить подписку (Монитор)", "Show these shortcuts": "Показать эту справку", "Close a dialog or panel": "Закрыть диалог или панель",
 };
 
 let language: Language = "en";

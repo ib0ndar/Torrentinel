@@ -24,6 +24,8 @@ export interface Collection {
   unreadCount: number;
   /** Unread changes plus manual "Mark unread" reminders without unread changes; matches the Activity unread view. */
   activityCount: number;
+  /** Subscriptions whose last check failed; matches the Errors filter. */
+  errorCount: number;
   createdAt?: string;
   updatedAt?: string;
 }

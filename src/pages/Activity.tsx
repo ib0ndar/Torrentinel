@@ -3,7 +3,9 @@ import { api, jsonBody } from "../api";
 import { ChangeSummary } from "../components/ChangeDetails";
 import { useDialog } from "../components/Dialogs";
 import { Icon } from "../components/Icon";
-import { EmptyState, ListSkeleton, Page, PhraseDisplay, SubscriptionTypeIcon, TrackerTag } from "../components/UI";
+import { EmptyState, FilterTabs, ListSkeleton, Page, PhraseDisplay, SubscriptionTypeIcon, TrackerTag } from "../components/UI";
+import { moveRowFocus, useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { absoluteTime, errorMessage, relativeTime } from "../format";
 import { getLanguage, useI18n } from "../i18n";
 import type { ActivityFilter } from "../routing";
@@ -13,14 +15,17 @@ import { SubscriptionInspector } from "./SubscriptionInspector";
 type ActivityResponse = { events: ActivityEvent[]; total: number; page: number; pageCount: number; reminders?: ActivityReminder[] };
 const dayKey = (value: string) => { const date = new Date(value); return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; };
 
-export function Activity({ user, notify, filter, onFilterChange, collections, onCollectionsChanged }: {
-  user: User; notify: Notify; filter: ActivityFilter; onFilterChange: (filter: ActivityFilter) => void; collections: Collection[]; onCollectionsChanged: () => Promise<void>;
+export function Activity({ user, notify, filter, onFilterChange, collections, onCollectionsChanged, onShowShortcuts }: {
+  user: User; notify: Notify; filter: ActivityFilter; onFilterChange: (filter: ActivityFilter) => void; collections: Collection[]; onCollectionsChanged: () => Promise<void>; onShowShortcuts?: () => void;
 }) {
   const { t } = useI18n(), dialog = useDialog();
   const [events, setEvents] = useState<ActivityEvent[]>([]), [reminders, setReminders] = useState<ActivityReminder[]>([]), [total, setTotal] = useState(0), [loading, setLoading] = useState(true), [loadingMore, setLoadingMore] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const pages = useRef(1), request = useRef<AbortController | null>(null);
   const unreadSubscriptions = collections.reduce((sum, collection) => sum + collection.unreadCount, 0);
+  // Same total as the navigation badge: unread changes plus Mark unread reminders.
+  const unreadTotal = collections.reduce((sum, collection) => sum + collection.activityCount, 0);
+  useKeyboardShortcuts({ "?": onShowShortcuts, j: () => moveRowFocus(".activity-entry", 1), k: () => moveRowFocus(".activity-entry", -1) });
   // "Load more" keeps every loaded page; refreshes reload them all so read entries drop out without gaps.
   const load = useCallback(async () => {
     request.current?.abort();
@@ -43,7 +48,7 @@ export function Activity({ user, notify, filter, onFilterChange, collections, on
   }, [filter, user.pageSize]);
   const refresh = useCallback(() => load().catch((error) => notify(errorMessage(error), "bad")), [load, notify]);
   useEffect(() => { void refresh(); return () => request.current?.abort(); }, [refresh]);
-  useEffect(() => { const timer = window.setInterval(() => void refresh(), 30_000); return () => window.clearInterval(timer); }, [refresh]);
+  useVisibleInterval(refresh, 30_000);
   async function loadMore() {
     pages.current += 1; setLoadingMore(true);
     try { await refresh(); } finally { setLoadingMore(false); }
@@ -66,7 +71,7 @@ export function Activity({ user, notify, filter, onFilterChange, collections, on
     : total > 0 ? t(total === 1 ? "{count} change" : "{count} changes", { count: total }) : "";
   return <Page eyebrow={t("All collections")} title={t("Activity")} description={t("Changes across your collections, newest first. Open an entry to see its details and mark it read.")}
     actions={<button className="button button--quiet activity-read" disabled={!unreadSubscriptions} onClick={() => void markAllRead()}><Icon name="check" size={16} />{t("Mark all read")}</button>}>
-    <div className="list-toolbar activity-toolbar"><div className="filter-tabs">{(["unread", "all"] as const).map((name) => <button key={name} className={filter === name ? "active" : ""} onClick={() => onFilterChange(name)}>{t(name === "unread" ? "Unread" : "All")}</button>)}</div>
+    <div className="list-toolbar activity-toolbar"><FilterTabs label={t("Filter changes")} options={[{ value: "unread" as const, label: t("Unread"), count: unreadTotal }, { value: "all" as const, label: t("All") }]} value={filter} onChange={onFilterChange} />
       {!loading && counts && <span className="activity-count">{counts}</span>}</div>
     {loading ? <ListSkeleton /> : events.length === 0 && reminders.length === 0 ? (filter === "unread"
       ? <EmptyState icon="check" title={t("You’re all caught up")} text={t("New changes from all your collections will appear here.")} action={<button className="button button--quiet" onClick={() => onFilterChange("all")}>{t("Show all changes")}</button>} />

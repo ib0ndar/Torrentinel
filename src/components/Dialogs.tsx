@@ -1,5 +1,6 @@
 import { createContext, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useI18n } from "../i18n";
 
 type DialogBaseOptions = {
@@ -64,30 +65,13 @@ function AppDialog({ request, onCancel, onAccept }: { request: DialogRequest; on
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const tone = request.tone || "default";
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const frame = window.requestAnimationFrame(() => {
-      if (inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
-      else confirmRef.current?.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
-    };
-  }, []);
+  useFocusTrap(dialogRef, () => {
+    if (inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
+    else confirmRef.current?.focus();
+  });
+  // Escape closes only this dialog, never a drawer behind it.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); return; }
-    if (event.key !== "Tab" || !dialogRef.current) return;
-    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")]
-      .filter((element) => element.getClientRects().length > 0);
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); }
   }
   function submit(event: FormEvent) {
     event.preventDefault();

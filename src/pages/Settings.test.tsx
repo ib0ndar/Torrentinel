@@ -254,3 +254,27 @@ it("opens the Account section from the account menu and focuses the current pass
     expect(document.activeElement).not.toBe(current());
   } finally { await act(async () => root.unmount()); container.remove(); window.history.replaceState({}, "", "/"); }
 });
+
+it("checks for a linked Telegram chat only while the tab is visible and checks again on return", async () => {
+  vi.useFakeTimers();
+  let visibility: DocumentVisibilityState = "visible", linked = false;
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+  const setVisibility = (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new Event("visibilitychange")); });
+  const { container, cleanup } = await renderSettings(() => [], (path) => path === "/api/telegram" ? { telegram: { configured: true, linked, botUsername: "watch_bot" } } : undefined);
+  const checks = () => vi.mocked(api).mock.calls.filter(([path]) => path === "/api/telegram").length;
+  try {
+    expect(checks()).toBe(1);
+    await act(async () => vi.advanceTimersByTime(5_000));
+    expect(checks()).toBe(2);
+    await setVisibility("hidden");
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(checks()).toBe(2);
+    linked = true;
+    await setVisibility("visible");
+    expect(checks()).toBe(3);
+    expect(container.querySelector(".linked-account")).not.toBeNull();
+    // Linked: polling stops.
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(checks()).toBe(3);
+  } finally { await cleanup(); vi.useRealTimers(); Reflect.deleteProperty(document, "visibilityState"); }
+});

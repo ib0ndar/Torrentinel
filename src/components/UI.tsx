@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { TrackerMarkerStyleContext } from "./contexts";
 import { trackerName } from "../format";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useI18n } from "../i18n";
 import type { SubscriptionType, TrackerKey, TrackerMarkerStyle } from "../types";
 
@@ -11,10 +12,19 @@ export function Page({ title, eyebrow, description, actions, navigation, childre
 }
 export function Drawer({ title, subtitle, onClose, wide = false, extraWide = false, headerMedia, children }: { title: string; subtitle: string; onClose: () => void; wide?: boolean; extraWide?: boolean; headerMedia?: ReactNode; children: ReactNode }) {
   const { t } = useI18n();
+  const drawerRef = useRef<HTMLElement>(null), closeRef = useRef<HTMLButtonElement>(null);
+  // An autoFocus field keeps focus; otherwise the close button gets it.
+  useFocusTrap(drawerRef, () => closeRef.current?.focus());
   useEffect(() => { const key = (event: KeyboardEvent) => event.key === "Escape" && onClose(); window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key); }, [onClose]);
   // Render outside the animated application stage: its stacking/transform
   // context must not put fixed drawers behind mobile navigation.
-  return createPortal(<div className="drawer-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside className={`drawer ${wide ? "drawer--wide" : ""} ${extraWide ? "drawer--details" : ""}`} role="dialog" aria-modal="true" aria-label={title}><header><div className={`drawer-heading ${headerMedia ? "drawer-heading--with-media" : ""}`}>{headerMedia}<div className="drawer-heading__copy"><p className="eyebrow">{subtitle}</p><h2>{title}</h2></div></div><button className="icon-button" onClick={onClose} aria-label={t("Close")}><Icon name="close" /></button></header><div className="drawer-body">{children}</div></aside></div>, document.body);
+  return createPortal(<div className="drawer-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside ref={drawerRef} className={`drawer ${wide ? "drawer--wide" : ""} ${extraWide ? "drawer--details" : ""}`} role="dialog" aria-modal="true" aria-label={title}><header><div className={`drawer-heading ${headerMedia ? "drawer-heading--with-media" : ""}`}>{headerMedia}<div className="drawer-heading__copy"><p className="eyebrow">{subtitle}</p><h2>{title}</h2></div></div><button ref={closeRef} type="button" className="icon-button" onClick={onClose} aria-label={t("Close")} title={t("Close")}><Icon name="close" /></button></header><div className="drawer-body">{children}</div></aside></div>, document.body);
+}
+// Toggle buttons in a labelled group (not a tablist: the lists are not tab panels), with optional counts.
+export function FilterTabs<T extends string>({ label, options, value, onChange }: { label: string; options: Array<{ value: T; label: string; count?: number; alert?: boolean }>; value: T; onChange: (value: T) => void }) {
+  return <div className="filter-tabs" role="group" aria-label={label}>{options.map((option) => <button key={option.value} type="button" className={value === option.value ? "active" : ""} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>
+    <span className="filter-tabs__label">{option.label}</span>{typeof option.count === "number" && <> <span className={`filter-count ${option.alert && option.count > 0 ? "filter-count--alert" : ""}`}>{option.count}</span></>}
+  </button>)}</div>;
 }
 export function DrawerActions({ onCancel, busy, label, disabled = false }: { onCancel: () => void; busy: boolean; label: string; disabled?: boolean }) {
   const { t } = useI18n();

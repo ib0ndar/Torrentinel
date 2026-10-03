@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import App from "./App";
-import { api, expireSession, PasswordChangeRequiredError, requirePasswordChange, SessionExpiredError } from "./api";
+import { api, ApiError, expireSession, PasswordChangeRequiredError, requirePasswordChange, SessionExpiredError } from "./api";
 import { setLanguage } from "./i18n";
 
 vi.mock("./api", async (original) => ({ ...await original<object>(), api: vi.fn() }));
@@ -187,7 +187,7 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(trigger.getAttribute("aria-controls")).toBe(menu()!.id);
     expect(document.querySelector(".menu-popover__header")).toBeNull();
     const items = [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    expect(items.map((item) => item.textContent)).toEqual(["Change password", "Sign out"]);
+    expect(items.map((item) => item.textContent)).toEqual(["Change password", "Keyboard shortcuts", "Sign out"]);
     expect(document.activeElement).toBe(items[0]);
     await act(async () => key(items[0], "Escape"));
     expect(menu()).toBeNull();
@@ -198,7 +198,7 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(mobile.getAttribute("aria-label")).toBe("Account");
     await act(async () => key(mobile, "ArrowDown"));
     const mobileItems = [...menu()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    expect(mobileItems.map((item) => item.textContent)).toEqual(["Change password", "Sign out", expect.stringMatching(/^Torrentinel v\d/)]);
+    expect(mobileItems.map((item) => item.textContent)).toEqual(["Change password", "Keyboard shortcuts", "Sign out", expect.stringMatching(/^Torrentinel v\d/)]);
     expect(document.activeElement).toBe(mobileItems[0]);
     await act(async () => key(mobileItems[0], "ArrowDown"));
     expect(document.activeElement).toBe(mobileItems[1]);
@@ -244,14 +244,14 @@ it("restores the collection, filter, search, page and sort from the URL, includi
   window.history.replaceState({}, "", "/collections/books?filter=unread&page=2&sort=name");
   const container = document.createElement("div"); document.body.append(container);
   let root = createRoot(container);
-  const filterTab = (label: string) => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")].find((button) => button.textContent === label)!;
+  const filterTab = (label: string) => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")].find((button) => button.querySelector(".filter-tabs__label")?.textContent === label)!;
   const sort = () => container.querySelector<HTMLSelectElement>('select[aria-label="Sort"]')!;
   const search = () => container.querySelector<HTMLInputElement>('input[aria-label="Filter this collection"]')!;
   try {
     await act(async () => root.render(<App />));
     const expectView = (filter: string, page: string, sortValue: string, query = "") => {
       expect(container.querySelector("h1")?.textContent).toBe("Books");
-      expect(container.querySelector(".filter-tabs .active")?.textContent).toBe(filter);
+      expect(container.querySelector(".filter-tabs .active .filter-tabs__label")?.textContent).toBe(filter);
       expect(container.querySelector(".pagination--top")?.textContent).toContain(`Page ${page} of 3`);
       expect(sort().value).toBe(sortValue); expect(search().value).toBe(query);
       expect(Object.fromEntries(lastSubscriptionQuery())).toMatchObject({ collectionId: "books", filter: filter.toLowerCase(), page, search: query, ...sortValue === "changed" ? {} : { sort: sortValue } });
@@ -349,9 +349,142 @@ it("adds an Activity view with the total unread count and keeps Monitor one clic
     await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")].find((button) => button.textContent === "All")!.click());
     expect(currentUrl()).toBe("/activity?filter=all");
     await popState(() => window.history.back());
-    expect(container.querySelector(".filter-tabs .active")?.textContent).toBe("Unread");
+    expect(container.querySelector(".filter-tabs .active .filter-tabs__label")?.textContent).toBe("Unread");
     await act(async () => link("Monitor").click());
     expect(currentUrl()).toBe("/collections/films");
     expect(container.querySelector("h1")?.textContent).toBe("Films");
   } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("scrolls to the top for another page but not for filter changes or Back/Forward", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  mockMonitor({ paginationEnabled: false });
+  window.history.replaceState({}, "", "/collections/films");
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 640 });
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const nav = (label: string) => container.querySelector<HTMLAnchorElement>(`.app-nav a[aria-label^="${label}"]`)!;
+  try {
+    await act(async () => root.render(<App />));
+    expect(scrollTo).not.toHaveBeenCalled();
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")][1].click());
+    expect(currentUrl()).toBe("/collections/films?filter=unread");
+    expect(scrollTo).not.toHaveBeenCalled();
+    await act(async () => nav("Settings").click());
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+    await act(async () => nav("Activity").click());
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    await popState(() => window.history.back());
+    expect(currentUrl()).toBe("/settings");
+    await popState(() => window.history.back());
+    expect(currentUrl()).toBe("/collections/films?filter=unread");
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+  } finally { await act(async () => root.unmount()); container.remove(); scrollTo.mockRestore(); Reflect.deleteProperty(window, "scrollY"); }
+});
+
+it("rewrites a stale /admin address reached with Back/Forward to the member's Monitor URL", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  mockMonitor({ paginationEnabled: false });
+  const member = { id: "member", username: "maria", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  const base = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, init) => path === "/api/auth/me" ? { user: member } : base(path, init));
+  window.history.replaceState({}, "", "/collections/books");
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    expect(container.querySelector("h1")?.textContent).toBe("Books");
+    window.history.pushState({}, "", "/admin/users?x=1");
+    const length = window.history.length;
+    await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
+    expect(currentUrl()).toBe("/collections/books");
+    expect(window.history.length).toBe(length);
+    expect(container.querySelector("h1")?.textContent).toBe("Books");
+    expect(vi.mocked(api).mock.calls.some(([path]) => path.startsWith("/api/admin/"))).toBe(false);
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("opens an accessible keyboard shortcuts dialog with ? on Monitor and Activity or from the account menu, but not with ? on Settings", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  mockMonitor({ paginationEnabled: false });
+  window.history.replaceState({}, "", "/collections/films");
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const dialog = () => document.querySelector<HTMLElement>('.shortcuts-dialog[role="dialog"]');
+  const press = (key: string, target: Element = document.activeElement ?? document.body) => act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey: key === "?", bubbles: true, cancelable: true })); });
+  const frame = () => act(() => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+  try {
+    await act(async () => root.render(<App />));
+    await press("?");
+    expect(dialog()?.getAttribute("aria-modal")).toBe("true");
+    expect(document.getElementById(dialog()!.getAttribute("aria-labelledby")!)?.textContent).toBe("Keyboard shortcuts");
+    expect([...dialog()!.querySelectorAll(".shortcut-list kbd")].map((key) => key.textContent)).toEqual(["/", "j", "k", "Enter", "a", "?", "Esc"]);
+    await frame();
+    expect(document.activeElement?.textContent).toBe("Close");
+    // A second ? is ignored while the dialog is open; Escape closes it.
+    await press("?");
+    expect(document.querySelectorAll(".shortcuts-dialog")).toHaveLength(1);
+    await press("Escape");
+    expect(dialog()).toBeNull();
+
+    await act(async () => container.querySelector<HTMLAnchorElement>('.app-nav a[aria-label^="Activity"]')!.click());
+    await press("?", document.body);
+    expect(dialog()).not.toBeNull();
+    await act(async () => dialog()!.querySelector<HTMLButtonElement>(".app-dialog__actions button")!.click());
+    expect(dialog()).toBeNull();
+
+    await act(async () => container.querySelector<HTMLAnchorElement>('.app-nav a[aria-label="Settings"]')!.click());
+    await press("?", document.body);
+    expect(dialog()).toBeNull();
+    const trigger = container.querySelector<HTMLButtonElement>(".account-button")!;
+    await act(async () => trigger.click());
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "Keyboard shortcuts")!.click());
+    expect(dialog()).not.toBeNull();
+    await act(async () => dialog()!.querySelector<HTMLButtonElement>('button[aria-label="Close dialog"]')!.click());
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+
+    await act(async () => setLanguage("ru"));
+    await act(async () => trigger.click());
+    expect([...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toContain("Горячие клавиши");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("keeps sign-in errors until dismissed or replaced by signing in, and lifts the stack above the mobile navigation in the app", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  let attempts = 0;
+  const user = { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/auth/me") throw new ApiError("Authentication required", 401);
+    if (path === "/api/auth/login") { if (++attempts < 3) throw new ApiError("Invalid username or password", 401); return { user }; }
+    if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
+    if (path === "/api/collections") return { collections: [] };
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  vi.useFakeTimers();
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const toasts = () => [...container.querySelectorAll(".toast")].map((toast) => toast.textContent);
+  const submit = () => act(async () => container.querySelector<HTMLFormElement>(".login-form")!.requestSubmit());
+  try {
+    await act(async () => root.render(<App />));
+    expect(container.querySelector(".toast-stack--navigation")).toBeNull();
+    const fill = (selector: string, value: string) => { const input = container.querySelector<HTMLInputElement>(selector)!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
+    await act(async () => { fill('input[autocomplete="username"]', "admin"); fill('input[type="password"]', "wrong"); });
+    await submit();
+    expect(toasts()).toEqual(["Invalid username or password"]);
+    expect(container.querySelector('[role="alert"] .toast')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(toasts()).toEqual(["Invalid username or password"]);
+    await act(async () => container.querySelector<HTMLButtonElement>('.toast button[aria-label="Dismiss notification"]')!.click());
+    expect(toasts()).toEqual([]);
+    await submit();
+    expect(toasts()).toEqual(["Invalid username or password"]);
+    await submit();
+    expect(container.querySelector(".app-shell")).not.toBeNull();
+    expect(toasts()).toEqual([]);
+    expect(container.querySelector(".toast-stack--navigation")).not.toBeNull();
+  } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
 });

@@ -9,17 +9,26 @@ All notable changes to Torrentinel are documented in this file.
 - Change your own password under **Settings → Account** (current password, new password, confirmation), also reachable with **Change password** in the account menu on desktop and mobile. A successful change keeps you signed in and signs out the account's other browsers and devices.
 - Settings opens with shortcuts to each section, and each section states whether it is saved automatically or needs its Save button.
 - Tracker access rows in Settings and global mirror rows in Administration show **Unsaved changes** with a **Discard** action while edited. Save is only available when something changed and the values are valid; pressing Enter in a row saves it.
+- Keyboard shortcuts on Monitor and Activity: `/` focuses the collection search, `j` / `k` move to the next or previous row (Enter opens it), `a` opens Add subscription, and `?` lists the shortcuts. They are ignored while typing in a field, with Ctrl/Cmd/Alt, and while a dialog, panel or menu is open. **Keyboard shortcuts** in the account menu shows the same list.
+- The All, Unread and Errors filters in a collection show how many subscriptions each one holds, and the Activity Unread filter shows the unread total. `GET /api/collections` returns a new per-collection `errorCount` (subscriptions whose last check failed, as listed by the Errors filter).
 
 ### Changed
 
 - Administration is split into **Overview** (scheduler, polling interval, RuTracker feed coverage), **Users**, **Mirrors**, and **Diagnostics** tabs, each with its own address (`/admin/overview`, `/admin/users`, `/admin/mirrors`, `/admin/diagnostics`). `/admin` opens Overview.
 - Tracker logs and Telegram deliveries are paged on the server with your entries-per-page setting instead of showing only the latest 100 records. The tracker and outcome filters and the pages are kept in the address, so reloads, bookmarks, and Back/Forward return to the same view. The outcome filter lists every outcome recorded in the retention window.
 - The notification queue, tracker logs, and Telegram deliveries show subscription names (rule phrases or the release title) instead of only numeric IDs, falling back to the ID when the subscription no longer exists.
+- Notifications stack (up to three, newest at the bottom) instead of replacing each other and sit above the mobile bottom bar. Confirmations close after four seconds, or later while hovered or focused; errors stay until closed with their close button (or Escape) and are cleared when you sign in or out. Screen readers announce confirmations politely and errors immediately.
+- Detail panels and forms that slide in from the side keep keyboard focus inside while open, start on the close button (or the first field), lock page scrolling, and return focus to where you were when closed.
+- Background refreshes (collections, Activity, open details, scheduler status and the Telegram link check) pause while the browser tab is hidden and refresh once when you return.
+- Filter buttons report which one is selected to assistive technology, and icon-only buttons have accessible names.
 
 ### Fixed
 
 - Tracker logins and the Telegram bot token are now entered in real forms, which removes the browser's "Password field is not contained in a form" warnings.
 - Saving one tracker access row no longer discards unsaved edits in the other rows.
+- Opening another page now starts at the top instead of keeping the previous page's scroll position; filter, sort and page changes keep the position.
+- A member who reaches an old `/admin` address with Back/Forward now also gets the Monitor address in the address bar.
+- Long outcome badges such as `temporarily-unavailable` wrap inside their column in the Diagnostics tracker logs instead of overflowing it.
 
 ## [0.8.0] - 2026-10-02
 

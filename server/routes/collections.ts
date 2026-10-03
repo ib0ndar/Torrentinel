@@ -13,11 +13,12 @@ export function registerCollectionRoutes({ app, db, coverCache }: RouteServices)
         SELECT 1 FROM subscription_events e WHERE e.subscription_id = s.id AND e.read_at IS NULL
       ) THEN 1 ELSE 0 END), 0) AS unread_count,
       COALESCE(SUM((SELECT COUNT(*) FROM subscription_events e WHERE e.subscription_id = s.id AND e.read_at IS NULL)
-        + CASE WHEN ${REMINDER_SQL} THEN 1 ELSE 0 END), 0) AS activity_count FROM collections c
+        + CASE WHEN ${REMINDER_SQL} THEN 1 ELSE 0 END), 0) AS activity_count,
+      COALESCE(SUM(CASE WHEN s.last_error IS NOT NULL AND s.last_error <> '' THEN 1 ELSE 0 END), 0) AS error_count FROM collections c
       LEFT JOIN subscriptions s ON s.collection_id = c.id WHERE c.user_id = ? GROUP BY c.id ORDER BY c.created_at`).all(request.user!.id);
     return { collections: rows.map((value) => {
       const row = value as Record<string, unknown>;
-      return { id: row.id, name: row.name, subscriptionCount: Number(row.subscription_count), unreadCount: Number(row.unread_count), activityCount: Number(row.activity_count), createdAt: row.created_at, updatedAt: row.updated_at };
+      return { id: row.id, name: row.name, subscriptionCount: Number(row.subscription_count), unreadCount: Number(row.unread_count), activityCount: Number(row.activity_count), errorCount: Number(row.error_count), createdAt: row.created_at, updatedAt: row.updated_at };
     }) };
   });
   app.post("/api/collections", { preHandler: requireReadyUser }, async (request, reply) => {
@@ -26,7 +27,7 @@ export function registerCollectionRoutes({ app, db, coverCache }: RouteServices)
     const timestamp = nowIso(), id = nanoid();
     try { db.prepare("INSERT INTO collections (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(id, request.user.id, input.name, timestamp, timestamp); }
     catch (error) { if (isUniqueError(error)) return reply.code(409).send({ error: "A collection with this name already exists" }); throw error; }
-    return reply.code(201).send({ collection: { id, name: input.name, subscriptionCount: 0, unreadCount: 0, activityCount: 0 } });
+    return reply.code(201).send({ collection: { id, name: input.name, subscriptionCount: 0, unreadCount: 0, activityCount: 0, errorCount: 0 } });
   });
   app.patch("/api/collections/:id", { preHandler: requireReadyUser }, async (request, reply) => {
     const params = parse(idParams, request.params, reply), input = parse(collectionSchema, request.body, reply);

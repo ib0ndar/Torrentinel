@@ -82,6 +82,22 @@ describe("activity across collections", () => {
     expect(await badge()).toBe(await total());
   });
 
+  it("counts failed subscriptions per collection like the Errors filter, for the signed-in account only", async () => {
+    const errorCounts = async () => Object.fromEntries(((await services.app.inject({ url: "/api/collections", headers: { cookie } })).json().collections as Array<{ name: string; errorCount: number }>).map((item) => [item.name, item.errorCount]));
+    expect(await errorCounts()).toEqual({ Inbox: 0, Films: 0 });
+    const fail = services.db.prepare("UPDATE subscriptions SET last_error = ? WHERE id = ?");
+    fail.run("HTTP 503", "r1"); fail.run("Blocked by the tracker", "d2"); fail.run("", "d1"); fail.run("Secret failure", "p1");
+    expect(await errorCounts()).toEqual({ Inbox: 0, Films: 2 });
+    const filtered = (await services.app.inject({ url: "/api/subscriptions?collectionId=films&filter=errors", headers: { cookie } })).json();
+    expect(filtered.subscriptions.map((subscription: { id: string }) => subscription.id).sort()).toEqual(["d2", "r1"]);
+    const inbox = (await services.app.inject({ url: `/api/subscriptions?collectionId=${inboxId}&filter=errors`, headers: { cookie } })).json();
+    expect(inbox.subscriptions).toEqual([]);
+    const created = await services.app.inject({ method: "POST", url: "/api/collections", headers: { cookie }, payload: { name: "Series" } });
+    expect(created.json().collection).toMatchObject({ name: "Series", subscriptionCount: 0, unreadCount: 0, activityCount: 0, errorCount: 0 });
+    fail.run(null, "r1");
+    expect(await errorCounts()).toEqual({ Inbox: 0, Films: 1, Series: 0 });
+  });
+
   it("pages deterministically, clamps the last page, and validates parameters", async () => {
     const pages = [1, 2, 3].map(async (page) => (await get(`?filter=all&page=${page}&pageSize=2`)).json());
     const [first, second, third] = await Promise.all(pages);

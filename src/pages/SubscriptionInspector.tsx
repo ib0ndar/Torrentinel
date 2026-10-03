@@ -1,9 +1,10 @@
-import { type FormEvent, useCallback, useContext, useEffect, useEffectEvent, useState } from "react";
+import { type FormEvent, useCallback, useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import { api, jsonBody } from "../api";
 import { ChangeDetails } from "../components/ChangeDetails";
 import { useDialog } from "../components/Dialogs";
 import { CheckActivityContext } from "../components/contexts";
 import { Icon } from "../components/Icon";
+import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { Drawer, EmptyCompact, Field, ListSkeleton, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
 import { absoluteTime, errorMessage, relativeTime, trackerName } from "../format";
 import { useI18n } from "../i18n";
@@ -22,7 +23,10 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
   }, [id]);
   const onOpened = useEffectEvent(() => onChanged()), onOpenError = useEffectEvent((error: unknown) => notify(errorMessage(error), "bad"));
   useEffect(() => { const controller = new AbortController(); void load(true, controller.signal).then(() => { if (!controller.signal.aborted) return onOpened(); }).catch((error) => { if (!controller.signal.aborted) onOpenError(error); }); return () => controller.abort(); }, [load]);
-  useEffect(() => { const controller = new AbortController(); const interval = window.setInterval(() => void load(false, controller.signal).catch(() => undefined), 30_000); return () => { window.clearInterval(interval); controller.abort(); }; }, [load]);
+  const poll = useRef<AbortController | null>(null);
+  const refreshDetails = useCallback(() => { poll.current?.abort(); const controller = new AbortController(); poll.current = controller; void load(false, controller.signal).catch(() => undefined); }, [load]);
+  useVisibleInterval(refreshDetails, 30_000);
+  useEffect(() => () => poll.current?.abort(), [load]);
   async function update(payload: Record<string, unknown>, message: string) {
     setBusy(true);
     try { await api(`/api/subscriptions/${id}`, { method: "PATCH", ...jsonBody(payload) }); await Promise.all([load(), onChanged()]); notify(message); return true; }

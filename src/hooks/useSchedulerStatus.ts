@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { SchedulerStatus } from "../types";
+import { useVisibleInterval } from "./useVisibleInterval";
 
 export type TrackCheck = <T>(work: Promise<T>) => Promise<T>;
 type StatusResponse = { scheduler: SchedulerStatus; intervalMinutes: number };
@@ -43,15 +44,13 @@ export function useSchedulerStatus(path: string) {
     };
   }, []);
   useEffect(() => { void loadStatus(); }, [loadStatus, path]);
-  useEffect(() => {
-    const timer = window.setInterval(() => void loadStatus(), checking ? ACTIVE_REFRESH_MS : IDLE_REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [checking, loadStatus]);
+  useVisibleInterval(loadStatus, checking ? ACTIVE_REFRESH_MS : IDLE_REFRESH_MS);
   useEffect(() => {
     if (!upcomingRunAt) return;
     const delay = Date.parse(upcomingRunAt) - Date.now() + 1_500;
     if (!(delay > 0 && delay <= MAX_SCHEDULED_DELAY_MS)) return;
-    const timer = window.setTimeout(() => void loadStatus(), delay);
+    // A hidden tab skips it; becoming visible refreshes anyway.
+    const timer = window.setTimeout(() => { if (document.visibilityState !== "hidden") void loadStatus(); }, delay);
     return () => window.clearTimeout(timer);
   }, [upcomingRunAt, loadStatus]);
 

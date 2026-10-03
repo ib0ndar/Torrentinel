@@ -27,10 +27,10 @@ const events: ActivityEvent[] = [
 function render(filter: ActivityFilter, collections: Collection[]) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div"); document.body.append(container);
-  const root = createRoot(container), notify = vi.fn(), onCollectionsChanged = vi.fn(async () => undefined), onFilterChange = vi.fn();
-  return { container, root, notify, onCollectionsChanged, onFilterChange, mount: () => act(async () => root.render(<DialogProvider><Activity user={user} notify={notify} filter={filter} onFilterChange={onFilterChange} collections={collections} onCollectionsChanged={onCollectionsChanged} /></DialogProvider>)) };
+  const root = createRoot(container), notify = vi.fn(), onCollectionsChanged = vi.fn(async () => undefined), onFilterChange = vi.fn(), onShowShortcuts = vi.fn();
+  return { container, root, notify, onCollectionsChanged, onFilterChange, onShowShortcuts, mount: () => act(async () => root.render(<DialogProvider><Activity user={user} notify={notify} filter={filter} onFilterChange={onFilterChange} collections={collections} onCollectionsChanged={onCollectionsChanged} onShowShortcuts={onShowShortcuts} /></DialogProvider>)) };
 }
-const collections: Collection[] = [{ id: "films", name: "Films", subscriptionCount: 4, unreadCount: 2, activityCount: 2 }, { id: "series", name: "Series", subscriptionCount: 1, unreadCount: 1, activityCount: 1 }];
+const collections: Collection[] = [{ id: "films", name: "Films", subscriptionCount: 4, unreadCount: 2, activityCount: 2, errorCount: 0 }, { id: "series", name: "Series", subscriptionCount: 1, unreadCount: 1, activityCount: 1, errorCount: 0 }];
 
 it("groups unread changes by day, loads more pages, and opens an entry in the inspector", async () => {
   let unread = [...events];
@@ -149,4 +149,59 @@ it("marks everything read after confirming with the number of unread subscriptio
     expect(view.onCollectionsChanged).toHaveBeenCalled();
     expect(view.container.querySelector(".empty-state h2")?.textContent).toBe("You’re all caught up");
   } finally { await act(async () => view.root.unmount()); }
+});
+
+it("shows the filters as pressed toggle buttons with the unread total, and moves through entries with j and k", async () => {
+  vi.mocked(api).mockResolvedValue({ events, total: 3, page: 1, pageCount: 1 });
+  const view = render("unread", collections);
+  const press = async (key: string, options: KeyboardEventInit = {}) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options });
+    await act(async () => { (document.activeElement ?? document.body).dispatchEvent(event); });
+    return event;
+  };
+  try {
+    await view.mount();
+    const group = view.container.querySelector<HTMLElement>('.filter-tabs[role="group"]')!;
+    expect(group.getAttribute("aria-label")).toBe("Filter changes");
+    expect([...group.querySelectorAll("button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["Unread 3", "true"], ["All", "false"]]);
+    await act(async () => group.querySelectorAll("button")[1].click());
+    expect(view.onFilterChange).toHaveBeenCalledWith("all");
+    await act(async () => setLanguage("ru"));
+    expect([...group.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Непрочитанные 3", "Все"]);
+    await act(async () => setLanguage("en"));
+
+    const entries = () => [...view.container.querySelectorAll<HTMLButtonElement>(".activity-entry")];
+    await press("j"); expect(document.activeElement).toBe(entries()[0]);
+    await press("j"); expect(document.activeElement).toBe(entries()[1]);
+    await press("k"); expect(document.activeElement).toBe(entries()[0]);
+    entries()[0].blur();
+    await press("k"); expect(document.activeElement).toBe(entries()[2]);
+    await press("?", { shiftKey: true }); expect(view.onShowShortcuts).toHaveBeenCalledOnce();
+    // Monitor-only shortcuts do nothing here.
+    expect((await press("a")).defaultPrevented).toBe(false);
+    expect((await press("/")).defaultPrevented).toBe(false);
+  } finally { await act(async () => view.root.unmount()); }
+});
+
+it("stops polling while the tab is hidden and refreshes when it returns", async () => {
+  vi.useFakeTimers();
+  let visibility: DocumentVisibilityState = "visible";
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+  const setVisibility = (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new Event("visibilitychange")); });
+  vi.mocked(api).mockResolvedValue({ events: [], total: 0, page: 1, pageCount: 1 });
+  const view = render("unread", collections);
+  const requests = () => vi.mocked(api).mock.calls.filter(([path]) => path.startsWith("/api/activity?")).length;
+  try {
+    await view.mount();
+    expect(requests()).toBe(1);
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(requests()).toBe(2);
+    await setVisibility("hidden");
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(requests()).toBe(2);
+    await setVisibility("visible");
+    expect(requests()).toBe(3);
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(requests()).toBe(4);
+  } finally { await act(async () => view.root.unmount()); vi.useRealTimers(); Reflect.deleteProperty(document, "visibilityState"); }
 });

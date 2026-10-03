@@ -200,3 +200,100 @@ it("renames and deletes the collection from the more-actions menu", async () => 
     expect(notify).toHaveBeenCalledWith("Collection deleted");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it("exposes the status filters as pressed toggle buttons with collection counts", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  let counts = { subscriptionCount: 12, unreadCount: 3, errorCount: 2 };
+  vi.mocked(api).mockImplementation(async (path) => path === "/api/collections" ? { collections: [{ id: "inbox", name: "Inbox", activityCount: 0, ...counts }] } : { subscriptions: [], total: 0, page: 1, pageCount: 1 });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), notify = vi.fn();
+  function Harness() { const data = useWorkspaceData(notify, false, 20); return <DialogProvider><Workspace user={user} onUserChange={vi.fn()} notify={notify} data={data} onNewCollection={() => undefined} /></DialogProvider>; }
+  const group = () => container.querySelector<HTMLElement>('.filter-tabs[role="group"]')!;
+  const buttons = () => [...group().querySelectorAll<HTMLButtonElement>("button")];
+  vi.useFakeTimers();
+  try {
+    await act(async () => root.render(<Harness />));
+    expect(group().getAttribute("aria-label")).toBe("Filter subscriptions");
+    expect(container.querySelector('[role="tablist"], [role="tab"]')).toBeNull();
+    expect(buttons().map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["All 12", "true"], ["Unread 3", "false"], ["Errors 2", "false"]]);
+    expect(buttons()[2].querySelector(".filter-count--alert")).not.toBeNull();
+    await act(async () => buttons()[2].click());
+    expect(buttons().map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "false", "true"]);
+    expect(vi.mocked(api).mock.calls.at(-1)![0]).toContain("filter=errors");
+    await act(async () => setLanguage("ru"));
+    expect(buttons().map((button) => button.textContent)).toEqual(["Все 12", "Непрочитанные 3", "Ошибки 2"]);
+    await act(async () => setLanguage("en"));
+    // Counts follow the collection list on the next background refresh.
+    counts = { subscriptionCount: 13, unreadCount: 0, errorCount: 0 };
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(buttons().map((button) => button.textContent)).toEqual(["All 13", "Unread 0", "Errors 0"]);
+    expect(buttons()[2].querySelector(".filter-count--alert")).toBeNull();
+  } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
+});
+
+it("supports /, j, k, a and ? on the Monitor and ignores them while typing, with modifiers, or under a menu, drawer or dialog", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  const subscriptions: SubscriptionSummary[] = ["One", "Two", "Three"].map((label, index) => ({ id: String(index + 1), label, collectionId: "inbox", type: "direct", requiredTerms: [], ignoredTerms: [], trackerKeys: ["rutor"],
+    enabled: true, initialized: true, isUnread: false, unreadCount: 0, eventCount: 0, matchCount: 0, createdAt: "2026-09-30T00:00:00Z" }));
+  vi.mocked(api).mockImplementation(async (path) => path === "/api/collections" ? { collections: [{ id: "inbox", name: "Inbox", subscriptionCount: 3, unreadCount: 0, activityCount: 0, errorCount: 0 }] }
+    : path === "/api/trackers" ? { trackers: [] } : { subscriptions, total: 3, page: 1, pageCount: 1 });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), notify = vi.fn(), showShortcuts = vi.fn();
+  function Harness() { const data = useWorkspaceData(notify, false, 20); return <DialogProvider><Workspace user={user} onUserChange={vi.fn()} notify={notify} data={data} onNewCollection={() => undefined} onShowShortcuts={showShortcuts} /></DialogProvider>; }
+  const rows = () => [...container.querySelectorAll<HTMLButtonElement>(".subscription-open")];
+  const search = () => container.querySelector<HTMLInputElement>(".search-box input")!;
+  const press = async (key: string, options: KeyboardEventInit = {}, target: Element = document.activeElement ?? document.body) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options });
+    await act(async () => { target.dispatchEvent(event); });
+    return event;
+  };
+  try {
+    await act(async () => root.render(<Harness />));
+    expect(rows()).toHaveLength(3);
+    await press("j"); expect(document.activeElement).toBe(rows()[0]);
+    await press("j"); expect(document.activeElement).toBe(rows()[1]);
+    await press("j"); await press("j"); expect(document.activeElement).toBe(rows()[2]);
+    await press("k"); expect(document.activeElement).toBe(rows()[1]);
+    rows()[1].blur();
+    await press("k"); expect(document.activeElement).toBe(rows()[2]);
+    rows()[2].blur();
+    // Non-Latin layouts use the physical key.
+    await press("о", { code: "KeyJ" }); expect(document.activeElement).toBe(rows()[0]);
+    rows()[0].blur();
+
+    expect((await press("/")).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(search());
+    const typed = await press("j");
+    expect(typed.defaultPrevented).toBe(false); expect(document.activeElement).toBe(search());
+    search().blur();
+    for (const modifier of ["ctrlKey", "metaKey", "altKey"] as const) {
+      const event = await press("j", { [modifier]: true });
+      expect(event.defaultPrevented).toBe(false); expect(document.activeElement).toBe(document.body);
+    }
+    await press("J", { shiftKey: true }); expect(document.activeElement).toBe(document.body);
+
+    await press("?", { shiftKey: true }); expect(showShortcuts).toHaveBeenCalledOnce();
+
+    await act(async () => container.querySelector<HTMLButtonElement>(".header-more")!.click());
+    expect(document.querySelector(".menu-popover")).not.toBeNull();
+    await press("?", { shiftKey: true }, document.body); await press("a", {}, document.body);
+    expect(showShortcuts).toHaveBeenCalledOnce(); expect(document.querySelector(".drawer")).toBeNull();
+    await press("Escape");
+    expect(document.querySelector(".menu-popover")).toBeNull();
+
+    await press("a");
+    expect(document.querySelector(".drawer h2")?.textContent).toBe("Add subscription");
+    const field = document.activeElement;
+    await press("j", {}, document.body); await press("/", {}, document.body);
+    expect(document.activeElement).toBe(field);
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(document.querySelector(".drawer")).toBeNull();
+
+    await act(async () => container.querySelector<HTMLButtonElement>('.header-action[aria-label="Rename collection"]')!.click());
+    expect(container.querySelector(".app-dialog")).not.toBeNull();
+    await press("a", {}, document.body);
+    expect(document.querySelector(".drawer")).toBeNull();
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});

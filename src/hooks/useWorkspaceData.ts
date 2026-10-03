@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { api } from "../api";
 import type { Collection, Notify, SubscriptionSummary } from "../types";
 import { errorMessage } from "../format";
+import { useVisibleInterval } from "./useVisibleInterval";
 import { DEFAULT_MONITOR_VIEW, type MonitorFilter, type MonitorSort, type MonitorView } from "../routing";
 
 // With routing the view (collection, filter, search, page, sort) comes from the URL and changes are
@@ -111,10 +112,7 @@ export function useWorkspaceData(notify: Notify, paginationEnabled = false, page
     void loadSubscriptions().catch((error) => notify(errorMessage(error), "bad"));
     return () => subscriptionRequest.current?.abort();
   }, [loadSubscriptions, notify]);
-  useEffect(() => {
-    const timer = window.setInterval(() => void refresh(), 30_000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+  useVisibleInterval(refresh, 30_000);
 
   const setPage = (value: number) => { if (value !== page) changeView({ page: value }); };
   const setFilter = (value: MonitorFilter) => { if (value !== filter) changeView({ filter: value, page: 1 }); };

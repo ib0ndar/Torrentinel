@@ -6,6 +6,7 @@ import { api } from "../api";
 import type { Collection, SubscriptionSummary } from "../types";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useSchedulerStatus } from "./useSchedulerStatus";
+import { useVisibleInterval } from "./useVisibleInterval";
 
 vi.mock("../api", () => ({ api: vi.fn() }));
 const request = vi.mocked(api);
@@ -28,8 +29,12 @@ function WorkspaceHarness() { workspace = useWorkspaceData(notify); return <span
 function PagedWorkspaceHarness({ enabled = true, size = 25 }: { enabled?: boolean; size?: number }) { workspace = useWorkspaceData(notify, enabled, size); return <span>{workspace.subscriptions.map((item) => item.label).join(",")}</span>; }
 function SchedulerHarness({ path = "/" }: { path?: string }) { scheduler = useSchedulerStatus(path); return <span>{scheduler.checking ? "checking" : "idle"}</span>; }
 
+let visibility: DocumentVisibilityState = "visible";
+const setVisibility = (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new Event("visibilitychange")); });
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  visibility = "visible";
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
   vi.useFakeTimers();
   request.mockReset();
   notify.mockReset();
@@ -169,5 +174,67 @@ describe("adaptive scheduler status polling", () => {
     expect(request.mock.calls[0][1]?.signal?.aborted).toBe(true);
     expect(scheduler.intervalMinutes).toBe(30);
     expect(vi.getTimerCount()).toBe(1);
+  });
+});
+
+describe("polling pauses while the page is hidden", () => {
+  function IntervalHarness({ callback, delay }: { callback: () => void; delay: number | null }) { useVisibleInterval(callback, delay); return null; }
+  it("stops the interval while hidden and refreshes once on return, and stays off with a null delay", async () => {
+    const tick = vi.fn();
+    await act(async () => root.render(<IntervalHarness callback={tick} delay={1_000} />));
+    await act(async () => vi.advanceTimersByTime(2_000));
+    expect(tick).toHaveBeenCalledTimes(2);
+    await setVisibility("hidden");
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => vi.advanceTimersByTime(10_000));
+    expect(tick).toHaveBeenCalledTimes(2);
+    await setVisibility("visible");
+    expect(tick).toHaveBeenCalledTimes(3);
+    await setVisibility("visible");
+    expect(tick).toHaveBeenCalledTimes(3);
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(tick).toHaveBeenCalledTimes(4);
+    await act(async () => root.render(<IntervalHarness callback={tick} delay={null} />));
+    await act(async () => vi.advanceTimersByTime(5_000));
+    await setVisibility("hidden"); await setVisibility("visible");
+    expect(tick).toHaveBeenCalledTimes(4);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("starts paused in a hidden tab", async () => {
+    visibility = "hidden";
+    const tick = vi.fn();
+    await act(async () => root.render(<IntervalHarness callback={tick} delay={1_000} />));
+    await act(async () => vi.advanceTimersByTime(5_000));
+    expect(tick).not.toHaveBeenCalled();
+    await setVisibility("visible");
+    expect(tick).toHaveBeenCalledOnce();
+  });
+
+  it("pauses the workspace refresh and reloads collections and subscriptions when the tab returns", async () => {
+    request.mockImplementation(async (path) => path === "/api/collections" ? { collections } : { subscriptions: [subscription("entry")] });
+    await act(async () => root.render(<WorkspaceHarness />));
+    const calls = () => ({ collections: request.mock.calls.filter(([path]) => path === "/api/collections").length, subscriptions: request.mock.calls.filter(([path]) => path.startsWith("/api/subscriptions?")).length });
+    expect(calls()).toEqual({ collections: 1, subscriptions: 1 });
+    await setVisibility("hidden");
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(calls()).toEqual({ collections: 1, subscriptions: 1 });
+    await setVisibility("visible");
+    expect(calls()).toEqual({ collections: 2, subscriptions: 2 });
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(calls()).toEqual({ collections: 3, subscriptions: 3 });
+  });
+
+  it("pauses scheduler status polling, including the scheduled next-run refresh, and refreshes on return", async () => {
+    request.mockResolvedValue({ ...statusResponse, scheduler: { ...statusResponse.scheduler, nextRunAt: new Date(Date.now() + 60_000).toISOString() } });
+    await act(async () => root.render(<SchedulerHarness />));
+    expect(request).toHaveBeenCalledTimes(1);
+    await setVisibility("hidden");
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(request).toHaveBeenCalledTimes(1);
+    await setVisibility("visible");
+    expect(request).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(request).toHaveBeenCalledTimes(3);
   });
 });
