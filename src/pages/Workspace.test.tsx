@@ -113,6 +113,7 @@ it("shows the last change with the last check as a tooltip, keeps the type icon 
     // Russian labels stay short enough for the phone toolbar; the column shares the date label.
     await act(async () => setLanguage("ru"));
     expect([...sort.options].map((option) => option.textContent)).toEqual(["Дата изменения", "Название (А–Я)", "Сначала ошибки"]);
+    expect(container.querySelector<HTMLInputElement>(".search-box input")?.placeholder).toBe("Поиск");
     expect(container.querySelectorAll(".subscription-head span")[2]?.textContent).toBe("Дата изменения");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

@@ -33,6 +33,7 @@ All notable changes to Torrentinel are documented in this file.
 - When a session expires or becomes invalid while the app is open, the interface returns to the sign-in form with a single "Your session has expired" message and the username pre-filled, instead of repeatedly showing "Authentication required" errors.
 - Members asked to change a temporary password (new accounts and administrator resets) no longer see the first-run "Secure the admin account" wording; the form asks for the temporary password. The password change screen also offers Sign out.
 - A request that reports a required password change now opens the password change form instead of showing repeated errors.
+- The Russian search field in the collection toolbar reads "Поиск" instead of "Поиск в коллекции", which was cut off on phones.
 
 ### Upgrade notes
 
