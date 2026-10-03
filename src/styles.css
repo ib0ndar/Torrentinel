@@ -298,8 +298,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .segmented button.active .icon { color: var(--accent); }
 .info-line { display: flex; align-items: flex-start; gap: 11px; margin: 26px 0; padding: 14px; border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 4%, transparent); color: var(--muted); font-size: 13px; line-height: 1.55; }
 .info-line .icon { color: var(--accent); }
-.tracker-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.tracker-choice { min-height: 60px; display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); cursor: pointer; }
+.tracker-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.tracker-choice { min-width: 0; min-height: 60px; display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); cursor: pointer; }
 .tracker-choice input { display: none; }
 .tracker-choice > span:nth-of-type(2) { font-size: 13px; font-weight: 650; }
 .tracker-choice small { grid-column: 1 / -1; color: var(--danger); font-size: 10px; }
@@ -447,7 +447,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .theme-option__copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .theme-option__copy small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .theme-option__check { position: absolute; top: 13px; right: 13px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--base); color: var(--accent); box-shadow: 0 2px 8px color-mix(in srgb, var(--shade) 35%, transparent); }
-@media (max-width: 520px) { .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tracker-picker { grid-template-columns: minmax(0, 1fr); } }
 .notice, .linked-account { min-height: 66px; display: flex; align-items: center; gap: 13px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 8px; }
 .notice .icon { color: var(--warning); }
 .notice span, .linked-account > span:nth-child(2) { display: grid; gap: 4px; }

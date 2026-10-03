@@ -31,6 +31,7 @@ All notable changes to Torrentinel are documented in this file.
 - A member who reaches an old `/admin` address with Back/Forward now also gets the Monitor address in the address bar.
 - Long outcome badges such as `temporarily-unavailable` wrap inside their column in the Diagnostics tracker logs instead of overflowing it.
 - The Activity page no longer scrolls sideways on phones (and by a few pixels on tablets) when an entry shows a title change.
+- On phones, the tracker choices in Add subscription and in a rule's edit form stack in one column instead of spilling past the panel's edge.
 
 ### Development
 
