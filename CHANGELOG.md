@@ -2,7 +2,7 @@
 
 All notable changes to Torrentinel are documented in this file.
 
-## [Unreleased]
+## [0.9.0] - 2026-10-04
 
 ### Added
 
@@ -39,6 +39,12 @@ All notable changes to Torrentinel are documented in this file.
 - The Settings and Administration pages are split into smaller section and tab components without changing their behavior.
 - The web interface takes tracker choices, names, and capabilities from `GET /api/trackers` (loaded once per session, refreshed after tracker access or global mirrors are saved) instead of hard-coded lists; a tracker without marker assets gets a neutral letter badge.
 - Tests no longer print Node's "localStorage is not available" warning: test workers run without Node's experimental Web Storage, so jsdom tests use jsdom's storage, which is cleared after each test.
+
+### Upgrade notes
+
+- No database changes; 0.8.0 runs unchanged against the same database. Back up the database and application-data directory together before updating, as usual.
+- Changing your own password now signs out your other sessions, including after the forced first sign-in change.
+- New administrator API endpoints: `GET /api/admin/diagnostics/observations` and `GET /api/admin/diagnostics/deliveries` (paged with `page` and `pageSize`) and `GET /api/admin/diagnostics/queue`. `GET /api/admin/diagnostics` is unchanged for other clients. `GET /api/collections` adds `errorCount` per collection.
 
 ## [0.8.0] - 2026-10-02
 
@@ -471,6 +477,7 @@ All notable changes to Torrentinel are documented in this file.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
 [Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.8.0...HEAD
+[0.9.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.7.0
 [0.6.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.6.1
