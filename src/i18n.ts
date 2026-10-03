@@ -48,7 +48,7 @@ export const russian: Record<string, string> = {
   "Collection renamed": "Коллекция переименована", "Delete collection": "Удалить коллекцию", "Delete “{name}”?": "Удалить «{name}»?",
   "This permanently removes the collection and every subscription inside it. This action cannot be undone.": "Коллекция и все её подписки будут удалены без возможности восстановления.",
   "Collection deleted": "Коллекция удалена", "Add subscription": "Добавить подписку", "All": "Все", "Unread": "Непрочитанные", "Errors": "Ошибки",
-  "Filter this collection": "Поиск", "Subscription": "Подписка", "Source": "Источник", "Last check": "Последняя проверка", "Status": "Статус",
+  "Filter this collection": "Поиск в коллекции", "Search": "Поиск", "Subscription": "Подписка", "Source": "Источник", "Last check": "Последняя проверка", "Status": "Статус",
   "Nothing matches this view": "Ничего не найдено", "No subscriptions yet": "Подписок пока нет", "Try a different status filter or search.": "Попробуйте другой фильтр или поисковый запрос.",
   "Add a direct tracker link or a rule to begin monitoring.": "Добавьте ссылку на трекер или правило для отслеживания.", "Create your first collection": "Создайте первую коллекцию",
   "Collections keep each user’s subscriptions separate and organized.": "Коллекции помогают организовать личные подписки каждого пользователя.",

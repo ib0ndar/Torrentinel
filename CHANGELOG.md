@@ -21,6 +21,7 @@ All notable changes to Torrentinel are documented in this file.
 - Detail panels and forms that slide in from the side keep keyboard focus inside while open, start on the close button (or the first field), lock page scrolling, and return focus to where you were when closed.
 - Background refreshes (collections, Activity, open details, scheduler status and the Telegram link check) pause while the browser tab is hidden and refresh once when you return.
 - Filter buttons report which one is selected to assistive technology, and icon-only buttons have accessible names.
+- The collection search field shows the short placeholder **Search** (Russian: «Поиск»), which fits on phones in both languages; screen readers still announce it as "Filter this collection" («Поиск в коллекции»).
 
 ### Fixed
 
@@ -29,6 +30,14 @@ All notable changes to Torrentinel are documented in this file.
 - Opening another page now starts at the top instead of keeping the previous page's scroll position; filter, sort and page changes keep the position.
 - A member who reaches an old `/admin` address with Back/Forward now also gets the Monitor address in the address bar.
 - Long outcome badges such as `temporarily-unavailable` wrap inside their column in the Diagnostics tracker logs instead of overflowing it.
+- The Activity page no longer scrolls sideways on phones (and by a few pixels on tablets) when an entry shows a title change.
+
+### Development
+
+- `npm run check:ui` checks the main pages for layout problems at phone, tablet, and desktop widths and in Russian against an isolated fixture with fictional data, and saves screenshots to `output/ui-check/` (see CONTRIBUTING.md; needs Chromium or Chrome, not run in CI).
+- The Settings and Administration pages are split into smaller section and tab components without changing their behavior.
+- The web interface takes tracker choices, names, and capabilities from `GET /api/trackers` (loaded once per session, refreshed after tracker access or global mirrors are saved) instead of hard-coded lists; a tracker without marker assets gets a neutral letter badge.
+- Tests no longer print Node's "localStorage is not available" warning: test workers run without Node's experimental Web Storage, so jsdom tests use jsdom's storage, which is cleared after each test.
 
 ## [0.8.0] - 2026-10-02
 

@@ -12,6 +12,7 @@
     "dev:web": "vite",
     "build": "npm run typecheck && tsc -p tsconfig.server.json && vite build",
     "check:release": "node scripts/check-release-version.mjs",
+    "check:ui": "node scripts/ui-check.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "start": "node dist/server/index.js",
     "test": "vitest run",

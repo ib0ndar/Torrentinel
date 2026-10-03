@@ -81,7 +81,7 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
         <MenuButton className="icon-button header-more" triggerLabel={t("Collection actions")} menuLabel={t("Collection actions")} items={collectionActions}><Icon name="more" /></MenuButton></div></header>
       <div className="list-toolbar"><FilterTabs label={t("Filter subscriptions")} options={MONITOR_FILTERS.map((name) => ({ value: name, label: t(capitalize(name)), count: FILTER_COUNTS[name](selected), alert: name === "errors" }))} value={filter} onChange={setFilter} />
         <div className="list-toolbar__controls"><label className="sort-picker" title={t("Sort")}><Icon name="sort" size={15} /><select aria-label={t("Sort")} value={sort} onChange={(event) => setSort(event.target.value as MonitorSort)}>{MONITOR_SORTS.map((value) => <option key={value} value={value}>{t(SORT_LABELS[value])}</option>)}</select></label>
-          <label className="search-box"><Icon name="search" size={16} /><input ref={searchRef} aria-label={t("Filter this collection")} placeholder={t("Filter this collection")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div></div>
+          <label className="search-box"><Icon name="search" size={16} /><input ref={searchRef} aria-label={t("Filter this collection")} placeholder={t("Search")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div></div>
       {paged && <nav className="pagination pagination--top" aria-label={t("Pagination")}>
         <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} />
       </nav>}

@@ -110,10 +110,15 @@ it("shows the last change with the last check as a tooltip, keeps the type icon 
     expect(vi.mocked(api).mock.calls.at(-1)![0]).not.toContain("sort=");
     await act(async () => { sort.value = "attention"; sort.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(vi.mocked(api).mock.calls.at(-1)![0]).toContain("sort=attention");
+    // The visible placeholder is short enough for the phone toolbar; the accessible name stays descriptive.
+    const searchInput = () => container.querySelector<HTMLInputElement>(".search-box input")!;
+    expect(searchInput().placeholder).toBe("Search");
+    expect(searchInput().getAttribute("aria-label")).toBe("Filter this collection");
     // Russian labels stay short enough for the phone toolbar; the column shares the date label.
     await act(async () => setLanguage("ru"));
     expect([...sort.options].map((option) => option.textContent)).toEqual(["Дата изменения", "Название (А–Я)", "Сначала ошибки"]);
-    expect(container.querySelector<HTMLInputElement>(".search-box input")?.placeholder).toBe("Поиск");
+    expect(searchInput().placeholder).toBe("Поиск");
+    expect(searchInput().getAttribute("aria-label")).toBe("Поиск в коллекции");
     expect(container.querySelectorAll(".subscription-head span")[2]?.textContent).toBe("Дата изменения");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

@@ -32,6 +32,14 @@ npm run build
 docker compose --env-file .env.example config --quiet
 ```
 
+For changes to the web interface, also run the layout check:
+
+```sh
+npm run check:ui
+```
+
+It rebuilds `dist/public` when the sources are newer (or with `npm run check:ui -- --build`), starts an isolated fixture with fictional data (`scripts/ui-fixture.ts`; temporary database in the OS temp directory, sign-in `admin` / `admin`, port 9878 or `--port=<port>`), and checks every main page at 320, 390, 768, 1024, and 1440 px and in Russian at 390 px: no horizontal page overflow, a visible page heading, the mobile bottom bar clear of the last control, a collection search placeholder that fits, and no page errors, failed requests, or error notifications. Screenshots are saved to `output/ui-check/`, and the command exits non-zero when a check fails. It needs a Chromium for patchright (`npx patchright install chromium`) or an installed Chrome with `UI_CHECK_CHANNEL=chrome`; CI does not run it. Run the fixture alone with `node --import tsx scripts/ui-fixture.ts` after `npm run build`.
+
 The test suite includes backend/database regressions and React request, timer, and dialog lifecycle tests. Container builds run release validation, tests, and typechecked production builds on the target Linux architecture. Use `npm run benchmark:refactoring` for reproducible, synthetic rule-matching and administration-query measurements; these are not end-to-end tracker timings.
 
 ## Tracker adapters

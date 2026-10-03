@@ -394,7 +394,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .activity-entry__label strong { display: block; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .activity-entry .phrase-chip--display { min-height: 26px; font-size: 12px; font-weight: 650; }
 .activity-entry--unread .activity-entry__label strong, .activity-entry--unread .phrase-chip--display { font-weight: 760; }
-.change-summary { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.change-summary { position: relative; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .change-summary .change-title { display: inline; font-size: inherit; }
 .change-summary .change-title__arrow { margin: 0 5px; }
 .activity-entry__meta { min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 12px; }
