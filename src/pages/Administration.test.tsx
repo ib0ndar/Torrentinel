@@ -10,6 +10,7 @@ vi.mock("../api", async (original) => ({ ...await original<object>(), api: vi.fn
 afterEach(() => { vi.resetAllMocks(); setLanguage("en"); window.history.replaceState({}, "", "/"); });
 
 const TRACKERS = ["kinozal", "rutor", "rutracker"] as const;
+const TRACKER_NAMES = { kinozal: "Kinozal", rutor: "Rutor", rutracker: "RuTracker" };
 const observations = Array.from({ length: 45 }, (_, index) => ({ id: `o${index}`, runId: "run", subscriptionId: index % 2 ? "r1" : null, subscriptionName: index % 2 ? "Dune + 2160p" : null, username: "admin",
   trackerKey: TRACKERS[index % 3], operation: "direct", outcome: index % 2 ? "error" : "unchanged", durationMs: 10, details: {}, title: `Observation ${index}`, observedAt: new Date(Date.now() - index * 60_000).toISOString() }));
 const deliveries = Array.from({ length: 25 }, (_, index) => ({ id: `t${index}`, subscriptionId: "d1", subscriptionName: "Current release", username: "admin", trackerKey: "rutor", externalId: String(index),
@@ -31,6 +32,7 @@ function mockAdmin(options: { isAdmin?: boolean } = {}) {
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
     if (path === "/api/admin/users") return { users: [{ id: "admin", username: "admin", isAdmin: true, disabled: false, mustChangePassword: false, collectionCount: 1, subscriptionCount: 3, createdAt: "2026-09-01T00:00:00.000Z" },
       { id: "member", username: "member", isAdmin: false, disabled: false, mustChangePassword: true, collectionCount: 1, subscriptionCount: 0, createdAt: "2026-09-02T00:00:00.000Z" }] };
+    if (path === "/api/trackers") return { trackers: TRACKERS.map((key) => ({ key, displayName: TRACKER_NAMES[key], hosts: [], snapshotVersion: 1, capabilities: { authentication: "none", customMirrors: true, direct: true, rules: true, covers: true } })) };
     if (path === "/api/admin/mirrors") return { mirrors };
     if (url.pathname.startsWith("/api/admin/mirrors/") && init?.method === "PUT") {
       const body = JSON.parse(String(init.body)) as { baseUrl: string; enabled: boolean }, key = url.pathname.split("/").at(-1);
@@ -132,6 +134,10 @@ it("pages tracker logs and Telegram deliveries on the server and keeps filters a
     expect(currentUrl()).toBe("/admin/diagnostics?outcome=error&page=2");
     expect(Object.fromEntries(lastQuery("/api/admin/diagnostics/observations"))).toEqual({ page: "2", pageSize: "20", outcome: "error" });
     expect(select("Filter logs by tracker").value).toBe("");
+    // Tracker choices and names come from GET /api/trackers.
+    expect([...select("Filter logs by tracker").options].map((option) => [option.value, option.textContent])).toEqual([["", "All trackers"], ["kinozal", "Kinozal"], ["rutor", "Rutor"], ["rutracker", "RuTracker"]]);
+    expect(logs().querySelector(".diagnostic-row .diagnostic-source strong")?.textContent).toBe("RuTracker");
+    expect(app.container.querySelector(".toast")).toBeNull();
     expect(select("Filter logs by outcome").value).toBe("error");
     expect([...select("Filter logs by outcome").options].map((option) => option.value)).toEqual(["", "error", "unchanged"]);
     expect(logs().querySelectorAll(".diagnostic-row")).toHaveLength(2);

@@ -117,3 +117,18 @@ it("refreshes the open details every 30 seconds only while the tab is visible", 
     expect(last[1]?.signal?.aborted).toBe(true);
   } finally { vi.useRealTimers(); Reflect.deleteProperty(document, "visibilityState"); }
 });
+
+it("offers the rule-capable trackers from the API when editing a rule", async () => {
+  const capabilities = (rules: boolean) => ({ authentication: "none" as const, customMirrors: true, direct: true, rules, covers: true });
+  const trackers = [{ key: "kinozal", displayName: "Kinozal", capabilities: capabilities(true) }, { key: "rutor", displayName: "Rutor", capabilities: capabilities(false) }, { key: "rutracker", displayName: "RuTracker", capabilities: capabilities(true) }];
+  const { root, drawer } = await open({ subscription: subscription({ type: "rule", label: "Dune", requiredTerms: ["Dune"], trackerKeys: ["rutracker"] }), events: [], matches: [] });
+  vi.mocked(api).mockImplementation(async (path) => path === "/api/trackers" ? { trackers } : { subscription: subscription({ type: "rule", label: "Dune", requiredTerms: ["Dune"], trackerKeys: ["rutracker"] }), events: [], matches: [] });
+  try {
+    await act(async () => [...drawer.querySelectorAll<HTMLButtonElement>(".section-heading .text-button")].find((button) => button.textContent === "Edit")!.click());
+    const choices = [...drawer.querySelectorAll<HTMLLabelElement>(".edit-subscription .tracker-choice")];
+    expect(choices.map((choice) => [choice.textContent, choice.querySelector("input")!.checked])).toEqual([["Kinozal", false], ["RuTracker", true]]);
+    await act(async () => choices[0].querySelector("input")!.click());
+    await act(async () => drawer.querySelector<HTMLFormElement>(".edit-subscription")!.requestSubmit());
+    expect(api).toHaveBeenCalledWith("/api/subscriptions/1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ requiredTerms: ["Dune"], ignoredTerms: [], trackerKeys: ["rutracker", "kinozal"] }) }));
+  } finally { await act(async () => root.unmount()); }
+});

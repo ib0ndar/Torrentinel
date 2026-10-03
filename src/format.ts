@@ -1,10 +1,8 @@
 import { getLanguage, translate as t } from "./i18n";
-import type { TrackerKey } from "./types";
 
 export const POLL_INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 360] as const;
 export const POLL_INTERVAL_MARKERS = [5, 60, 180, 360] as const;
 export function capitalize(value: string): string { return value[0].toUpperCase() + value.slice(1); }
-export function trackerName(key: TrackerKey): string { return key === "rutracker" ? "RuTracker" : key === "kinozal" ? "Kinozal" : "Rutor"; }
 export function errorMessage(error: unknown): string { return t(error instanceof Error ? error.message : String(error)); }
 export function isHttpUrl(value: string): boolean {
   try { return ["http:", "https:"].includes(new URL(value).protocol); } catch { return false; }

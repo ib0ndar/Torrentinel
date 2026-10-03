@@ -297,3 +297,35 @@ it("supports /, j, k, a and ? on the Monitor and ignores them while typing, with
     expect(document.querySelector(".drawer")).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it("lists the trackers from the API when adding a subscription and selects every rule tracker by default", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  const tracker = (key: TrackerKey, displayName: string, authentication: "none" | "optional" | "required", ruleDiscovery: "feed" | "recent-list" | "search") => ({ key, displayName, hosts: [], snapshotVersion: 1,
+    capabilities: { authentication, customMirrors: true, direct: true, rules: true, covers: true, ruleDiscovery }, baseUrl: "", globalBaseUrl: "", hasOverride: false, enabled: true, credentialsConfigured: false });
+  const trackers = [tracker("kinozal", "Kinozal", "required", "search"), tracker("rutor", "Rutor", "none", "recent-list"), tracker("rutracker", "RuTracker", "optional", "feed")];
+  vi.mocked(api).mockImplementation(async (path) => path === "/api/collections" ? { collections: [{ id: "inbox", name: "Inbox", subscriptionCount: 0, unreadCount: 0, activityCount: 0, errorCount: 0 }] }
+    : path === "/api/trackers" ? { trackers } : path === "/api/subscriptions" ? { subscription: {} } : { subscriptions: [], total: 0, page: 1, pageCount: 1 });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), notify = vi.fn();
+  function Harness() { const data = useWorkspaceData(notify, false, 20); return <DialogProvider><Workspace user={user} onUserChange={vi.fn()} notify={notify} data={data} onNewCollection={() => undefined} /></DialogProvider>; }
+  try {
+    await act(async () => root.render(<Harness />));
+    await act(async () => container.querySelector<HTMLButtonElement>(".header-actions .button--primary")!.click());
+    const drawer = document.querySelector<HTMLElement>(".drawer")!;
+    expect(drawer.querySelector(".field small")?.textContent).toBe("Kinozal, Rutor, or RuTracker");
+    await act(async () => setLanguage("ru"));
+    expect(drawer.querySelector(".field small")?.textContent).toBe("Kinozal, Rutor или RuTracker");
+    await act(async () => setLanguage("en"));
+    await act(async () => [...drawer.querySelectorAll<HTMLButtonElement>(".segmented button")][1].click());
+    const choices = () => [...drawer.querySelectorAll<HTMLLabelElement>(".tracker-choice")];
+    expect(choices().map((choice) => [choice.querySelector("span:not(.tracker-tag)")?.textContent, choice.querySelector("small")?.textContent ?? null, choice.querySelector("input")!.checked]))
+      .toEqual([["Kinozal", "credentials missing", true], ["Rutor", null, true], ["RuTracker", "gap recovery unavailable", true]]);
+    await act(async () => choices()[1].querySelector("input")!.click());
+    const phrase = drawer.querySelector<HTMLInputElement>('input[aria-label="Required phrases"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(phrase, "Dune"); phrase.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { phrase.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
+    await act(async () => drawer.querySelector<HTMLFormElement>("form")!.requestSubmit());
+    expect(api).toHaveBeenCalledWith("/api/subscriptions", expect.objectContaining({ method: "POST", body: expect.stringContaining('"trackerKeys":["kinozal","rutracker"]') }));
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});

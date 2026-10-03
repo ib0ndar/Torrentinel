@@ -1,4 +1,6 @@
-export type TrackerKey = "kinozal" | "rutor" | "rutracker";
+// Keys the server accepts; display names, capabilities and order come from GET /api/trackers.
+export const TRACKER_KEYS = ["kinozal", "rutor", "rutracker"] as const;
+export type TrackerKey = (typeof TRACKER_KEYS)[number];
 export type SubscriptionType = "direct" | "rule";
 export type TrackerMarkerStyle = "icons" | "abbreviations";
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;

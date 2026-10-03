@@ -4,9 +4,10 @@ import { ChangeDetails } from "../components/ChangeDetails";
 import { useDialog } from "../components/Dialogs";
 import { CheckActivityContext } from "../components/contexts";
 import { Icon } from "../components/Icon";
+import { useTrackers } from "../hooks/useTrackers";
 import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { Drawer, EmptyCompact, Field, ListSkeleton, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
-import { absoluteTime, errorMessage, relativeTime, trackerName } from "../format";
+import { absoluteTime, errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
 import type { Collection, Notify, RuleMatch, Subscription, SubscriptionEvent, TrackerKey } from "../types";
 
@@ -57,7 +58,7 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
     {!item ? <ListSkeleton /> : <div className="inspector">
       <div className="inspector-status"><span className={`status-dot ${item.enabled && !item.lastError ? "status-dot--live" : ""}`} /><div><strong>{t(item.lastError ? "Check failed" : item.enabled ? "Monitoring" : "Paused")}</strong><span>{item.lastCheckedAt ? t("Last checked {time}", { time: relativeTime(item.lastCheckedAt) }) : t("Waiting for first check")}</span></div><button className="button button--quiet" disabled={busy} onClick={checkNow}><Icon name="refresh" />{t("Check now")}</button></div>
       {item.lastError && <div className="error-strip"><Icon name="alert" />{item.lastError}</div>}
-      <section className="detail-section"><div className="section-heading"><h3>{t("Configuration")}</h3><button className="text-button" onClick={() => setEditing((value) => !value)}>{t(editing ? "Cancel" : "Edit")}</button></div>{editing ? <EditSubscriptionForm item={item} busy={busy} onCancel={() => setEditing(false)} onSave={async (payload) => { if (await update(payload, t("Subscription configuration saved"))) setEditing(false); }} /> : <dl className="detail-grid">
+      <section className="detail-section"><div className="section-heading"><h3>{t("Configuration")}</h3><button className="text-button" onClick={() => setEditing((value) => !value)}>{t(editing ? "Cancel" : "Edit")}</button></div>{editing ? <EditSubscriptionForm item={item} busy={busy} notify={notify} onCancel={() => setEditing(false)} onSave={async (payload) => { if (await update(payload, t("Subscription configuration saved"))) setEditing(false); }} /> : <dl className="detail-grid">
         <div><dt>{t("Collection")}</dt><dd><select aria-label={t("Collection")} disabled={busy} value={item.collectionId} onChange={(event) => void update({ collectionId: event.target.value }, t("Subscription moved"))}>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></dd></div>
         <div><dt>{t("Sources")}</dt><dd className="tracker-stack">{item.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</dd></div>
         {item.type === "rule" && <><div><dt>{t("Required")}</dt><dd>{item.requiredTerms.join(" · ")}</dd></div><div><dt>{t("Ignored")}</dt><dd>{item.ignoredTerms.join(" · ") || t("None")}</dd></div></>}
@@ -71,12 +72,13 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
     </div>}
   </Drawer>;
 }
-function EditSubscriptionForm({ item, busy, onCancel, onSave }: { item: Subscription; busy: boolean; onCancel: () => void; onSave: (payload: Record<string, unknown>) => Promise<void> }) {
+function EditSubscriptionForm({ item, busy, notify, onCancel, onSave }: { item: Subscription; busy: boolean; notify: Notify; onCancel: () => void; onSave: (payload: Record<string, unknown>) => Promise<void> }) {
   const { t } = useI18n();
+  const { trackers } = useTrackers((error) => notify(errorMessage(error), "bad"));
   const [url, setUrl] = useState(item.directUrl || ""), [required, setRequired] = useState<string[]>(item.requiredTerms), [ignored, setIgnored] = useState<string[]>(item.ignoredTerms), [trackerKeys, setTrackerKeys] = useState<TrackerKey[]>(item.trackerKeys);
   async function submit(event: FormEvent) { event.preventDefault(); await onSave(item.type === "direct" ? { url } : { requiredTerms: required, ignoredTerms: ignored, trackerKeys }); }
   return <form className="edit-subscription" onSubmit={submit}>{item.type === "direct" ? <Field label={t("Tracker page URL")}><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required /></Field> : <>
-    <Field label={t("Trackers")}><div className="tracker-picker">{(["kinozal", "rutor", "rutracker"] as TrackerKey[]).map((tracker) => <label key={tracker} className={trackerKeys.includes(tracker) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={trackerKeys.includes(tracker)} onChange={() => setTrackerKeys((current) => current.includes(tracker) ? current.filter((key) => key !== tracker) : [...current, tracker])} /><TrackerTag tracker={tracker} /><span>{trackerName(tracker)}</span></label>)}</div></Field>
+    <Field label={t("Trackers")}><div className="tracker-picker">{trackers?.filter((tracker) => tracker.capabilities.rules).map(({ key, displayName }) => <label key={key} className={trackerKeys.includes(key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={trackerKeys.includes(key)} onChange={() => setTrackerKeys((current) => current.includes(key) ? current.filter((selected) => selected !== key) : [...current, key])} /><TrackerTag tracker={key} /><span>{displayName}</span></label>)}</div></Field>
     <Field label={t("Required phrases")} hint={t("Press Enter to add")}><PhraseInput ariaLabel={t("Required phrases")} value={required} onChange={setRequired} placeholder={t("Type a phrase and press Enter")} /></Field><Field label={t("Ignored phrases")} hint={t("Press Enter to add")}><PhraseInput ariaLabel={t("Ignored phrases")} value={ignored} onChange={setIgnored} placeholder={t("Type a phrase and press Enter")} /></Field>
   </>}<div className="inline-actions"><button type="button" className="button button--quiet" onClick={onCancel}>{t("Cancel")}</button><button className="button button--primary" disabled={busy || (item.type === "rule" && (!required.length || !trackerKeys.length))}>{t("Save changes")}</button></div></form>;
 }

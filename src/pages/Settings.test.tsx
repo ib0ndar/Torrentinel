@@ -80,7 +80,7 @@ const member: User = { id: "user", username: "test", isAdmin: false, mustChangeP
 const type = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
 function tracker(key: "kinozal" | "rutracker", options: Partial<Tracker> = {}): Tracker {
   const globalBaseUrl = key === "kinozal" ? "https://kinozal.tv" : "https://rutracker.org";
-  return { key, displayName: key === "kinozal" ? "Kinozal" : "RuTracker", hosts: [], snapshotVersion: 1, capabilities: { authentication: key === "kinozal" ? "required" : "optional", customMirrors: true, direct: true, rules: true, covers: true },
+  return { key, displayName: key === "kinozal" ? "Kinozal" : "RuTracker", hosts: [], snapshotVersion: 1, capabilities: { authentication: key === "kinozal" ? "required" : "optional", customMirrors: true, direct: true, rules: true, covers: true, ruleDiscovery: key === "kinozal" ? "search" : "feed" },
     baseUrl: globalBaseUrl, globalBaseUrl, hasOverride: false, enabled: true, credentialsConfigured: false, ...options };
 }
 async function renderSettings(trackers: () => Tracker[] = () => [], extra: (path: string, init?: RequestInit) => unknown = () => undefined) {
@@ -180,6 +180,11 @@ it("enables tracker Save only for valid unsaved changes, discards them, and subm
       expect([field(name, "Mirror override"), field(name, "Username"), field(name, "Password")].every((input) => input.form === row(name))).toBe(true);
       expect(row(name).querySelectorAll('button[type="submit"]')).toHaveLength(1);
     }
+    // Status follows the capabilities: Kinozal needs a login; RuTracker polls a feed and uses the login for gap recovery.
+    expect([row("Kinozal"), row("RuTracker")].map((form) => [form.querySelector(".integration-heading small")?.textContent, form.querySelector(".state")?.className, form.querySelector(".state")?.textContent])).toEqual([
+      ["Login required for polling", "state state--pending", "Login missing"], ["Public feed + authenticated gap recovery; login stored for keeper", "state state--good", "Recovery ready"]]);
+    // The source marker previews show the trackers from the same list.
+    expect([...container.querySelectorAll(".marker-preview")].map((preview) => [...preview.querySelectorAll(".tracker-tag")].map((tag) => tag.classList[2]))).toEqual([["tracker-tag--kinozal", "tracker-tag--rutracker"], ["tracker-tag--kinozal", "tracker-tag--rutracker"]]);
     expect(field("RuTracker", "Mirror override").value).toBe("https://rutracker.net");
     await act(async () => type(field("RuTracker", "Mirror override"), "https://rutracker.nl"));
     expect(save("RuTracker").disabled).toBe(false);

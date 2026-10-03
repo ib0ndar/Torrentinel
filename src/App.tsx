@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import packageManifest from "../package.json";
 import { api, ApiError, onPasswordChangeRequired, onSessionExpired, PASSWORD_CHANGE_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./api";
 import { useSchedulerStatus } from "./hooks/useSchedulerStatus";
+import { TrackersProvider } from "./hooks/useTrackers";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
 import { CollectionsNavigation, NewCollection } from "./components/CollectionsNavigation";
 import { DialogProvider } from "./components/Dialogs";
@@ -62,7 +63,7 @@ export default function App() {
   const content = user === undefined ? <BootScreen />
     : !user ? <Login onLogin={(value) => { setLastUsername(""); updateUser(value); }} notify={notify} initialUsername={lastUsername} />
     : user.mustChangePassword ? <ChangePassword user={user} onChanged={updateUser} onSignOut={() => void signOut()} notify={notify} />
-    : <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}><DialogProvider><AppShell key={user.id} user={user} setUser={updateUser} notify={notify} location={location} navigate={navigate} /></DialogProvider></TrackerMarkerStyleContext.Provider>;
+    : <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}><TrackersProvider key={user.id}><DialogProvider><AppShell key={user.id} user={user} setUser={updateUser} notify={notify} location={location} navigate={navigate} /></DialogProvider></TrackersProvider></TrackerMarkerStyleContext.Provider>;
   // The region keeps its place (and its toasts) when sign-in, password change and the app replace each other.
   return <>{content}<ToastRegion toasts={toasts} onDismiss={dismiss} aboveNavigation={shell} /></>;
 }

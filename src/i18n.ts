@@ -57,7 +57,7 @@ export const russian: Record<string, string> = {
   "Collection created": "Коллекция создана", "Create an isolated place for related subscriptions.": "Создайте отдельную коллекцию для связанных подписок.", "Create collection": "Создать коллекцию",
   "Direct subscription added": "Подписка по ссылке добавлена", "Rule added and baseline scan started": "Правило добавлено, начата первоначальная проверка",
   "New monitor in {name}": "Новая подписка в коллекции {name}", "Direct link": "Прямая ссылка", "Rule": "Правило", "Tracker page URL": "Адрес страницы трекера",
-  "Kinozal, Rutor, or RuTracker": "Kinozal, Rutor или RuTracker", "The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.": "Первая проверка создаёт базу сравнения. Последующие изменения названия, magnet-ссылки, торрент-файла и метаданных создают события.",
+  "The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.": "Первая проверка создаёт базу сравнения. Последующие изменения названия, magnet-ссылки, торрент-файла и метаданных создают события.",
   "Trackers": "Трекеры", "gap recovery unavailable": "восстановление пропусков недоступно", "credentials missing": "нет данных для входа",
   "Required phrases": "Обязательные фразы", "Ignored phrases": "Исключаемые фразы", "Press Enter after each phrase. Every phrase must appear.": "Нажмите Enter после каждой фразы. Релиз должен содержать все фразы.",
   "Press Enter after each phrase. Any match is rejected.": "Нажмите Enter после каждой фразы. Любое совпадение исключает релиз.", "Type a phrase and press Enter": "Введите фразу и нажмите Enter",

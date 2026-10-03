@@ -2,8 +2,8 @@ import { type ReactNode, useContext, useEffect, useId, useRef, useState } from "
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { TrackerMarkerStyleContext } from "./contexts";
-import { trackerName } from "../format";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useTrackerName } from "../hooks/useTrackers";
 import { useI18n } from "../i18n";
 import type { SubscriptionType, TrackerKey, TrackerMarkerStyle } from "../types";
 
@@ -74,9 +74,17 @@ export function SubscriptionTypeIcon({ type, unread }: { type: SubscriptionType;
     <Icon name={type === "direct" ? "link" : "rule"} size={17} />{unread && <span className="unread-dot" />}
   </span>;
 }
+// Presentation only (favicon, letters; colours in styles.css by key). Names come from GET /api/trackers.
+const TRACKER_MARKERS: Partial<Record<string, { abbreviation: string; favicon: string }>> = {
+  kinozal: { abbreviation: "KZ", favicon: "/tracker-favicons/kinozal.ico" },
+  rutor: { abbreviation: "RU", favicon: "/tracker-favicons/rutor.ico" },
+  rutracker: { abbreviation: "RT", favicon: "/tracker-favicons/rutracker.ico" },
+};
 export function TrackerTag({ tracker, variant: forcedVariant, decorative = false }: { tracker: TrackerKey; variant?: TrackerMarkerStyle; decorative?: boolean }) {
-  const preferredVariant = useContext(TrackerMarkerStyleContext), variant = forcedVariant || preferredVariant, name = trackerName(tracker);
-  const marker = variant === "icons" ? <img src={`/tracker-favicons/${tracker}.ico`} alt="" width="20" height="20" /> : tracker === "rutracker" ? "RT" : tracker === "kinozal" ? "KZ" : "RU";
+  const preferredVariant = useContext(TrackerMarkerStyleContext), name = useTrackerName()(tracker), known = TRACKER_MARKERS[tracker];
+  // A tracker without marker assets gets a neutral letter badge in either style.
+  const variant = known ? forcedVariant || preferredVariant : "abbreviations";
+  const marker = !known ? name.slice(0, 2).toUpperCase() : variant === "icons" ? <img src={known.favicon} alt="" width="20" height="20" /> : known.abbreviation;
   return <span className={`tracker-tag tracker-tag--${variant} tracker-tag--${tracker}`} title={decorative ? undefined : name} role={decorative ? undefined : "img"} aria-label={decorative ? undefined : name}>{marker}</span>;
 }
 const BRAND_HEAD_PATH = "M123.5 20.21A9 9 0 0 1 132.5 20.21L219.1 70.21A9 9 0 0 1 223.6 78V178A9 9 0 0 1 219.1 185.79L132.5 235.79A9 9 0 0 1 123.5 235.79L36.9 185.79A9 9 0 0 1 32.4 178V78A9 9 0 0 1 36.9 70.21Z";

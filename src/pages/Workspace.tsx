@@ -1,6 +1,7 @@
 import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
 import { api, jsonBody } from "../api";
 import { moveRowFocus, useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useTrackers } from "../hooks/useTrackers";
 import type { WorkspaceData } from "../hooks/useWorkspaceData";
 import { useDialog } from "../components/Dialogs";
 import { Icon } from "../components/Icon";
@@ -10,7 +11,7 @@ import { capitalize, errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
 import { MONITOR_FILTERS, type MonitorFilter, MONITOR_SORTS, type MonitorSort } from "../routing";
 import { SubscriptionInspector } from "./SubscriptionInspector";
-import type { Collection, Notify, SubscriptionSummary, Tracker, TrackerKey, User } from "../types";
+import type { Collection, Notify, SubscriptionSummary, TrackerKey, User } from "../types";
 import { PAGE_SIZE_OPTIONS } from "../types";
 import { PageNavigation } from "../components/Pagination";
 
@@ -103,11 +104,16 @@ function SubscriptionRow({ item, index, onOpen }: { item: SubscriptionSummary; i
   return <div className={`subscription-row ${item.isUnread ? "subscription-row--unread" : ""}`} style={{ "--row-index": Math.min(index, 20) } as CSSProperties}><button type="button" className="subscription-open" onClick={onOpen}><span className="subscription-main"><SubscriptionTypeIcon type={item.type} unread={item.isUnread} /><span>{item.type === "rule" ? <PhraseDisplay phrases={item.requiredTerms} /> : <strong>{item.label === "Direct subscription" ? t(item.label) : item.label}</strong>}<small>{item.type === "rule" ? item.ignoredTerms.length ? t("Excludes {terms}", { terms: item.ignoredTerms.join(", ") }) : t("Matches every required phrase") : item.directUrl}</small></span></span><span className="tracker-stack">{item.trackerKeys.map((key) => <TrackerTag key={key} tracker={key} />)}</span><span className="time-cell" title={checked}>{item.lastChangedAt ? relativeTime(item.lastChangedAt) : <span className="time-cell__none">{t("No changes yet")}</span>}</span><span className="row-status">{item.lastError ? <span className="state state--error">{t("Needs attention")}</span> : !item.enabled ? <span className="state">{t("Paused")}</span> : !item.initialized ? <span className="state state--pending">{t("Learning")}</span> : <span className="state state--good">{t("Watching")}</span>}</span></button></div>;
 }
 function CreateSubscription({ collection, onClose, onCreated, notify }: { collection: Collection; onClose: () => void; onCreated: () => Promise<void>; notify: Notify }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [type, setType] = useState<"direct" | "rule">("direct"), [url, setUrl] = useState("");
   const [required, setRequired] = useState<string[]>([]), [ignored, setIgnored] = useState<string[]>([...DEFAULT_IGNORED_PHRASES]);
-  const [selectedTrackers, setSelectedTrackers] = useState<TrackerKey[]>(["kinozal", "rutor", "rutracker"]), [trackers, setTrackers] = useState<Tracker[]>([]), [busy, setBusy] = useState(false);
-  useEffect(() => { const controller = new AbortController(); api<{ trackers: Tracker[] }>("/api/trackers", { signal: controller.signal }).then((result) => { if (!controller.signal.aborted) setTrackers(result.trackers); }).catch((error) => { if (!controller.signal.aborted) notify(errorMessage(error), "bad"); }); return () => controller.abort(); }, [notify]);
+  const [chosenTrackers, setChosenTrackers] = useState<TrackerKey[] | null>(null), [busy, setBusy] = useState(false);
+  const { trackers } = useTrackers((error) => notify(errorMessage(error), "bad"));
+  const ruleTrackers = trackers?.filter((tracker) => tracker.capabilities.rules) ?? [];
+  // Every rule-capable tracker is selected until the choice is changed.
+  const selectedTrackers = chosenTrackers ?? ruleTrackers.map((tracker) => tracker.key);
+  const toggleTracker = (key: TrackerKey) => setChosenTrackers((current) => { const selection = current ?? ruleTrackers.map((tracker) => tracker.key); return selection.includes(key) ? selection.filter((item) => item !== key) : [...selection, key]; });
+  const directSources = trackers ? new Intl.ListFormat(language, { type: "disjunction" }).format(trackers.filter((tracker) => tracker.capabilities.direct).map((tracker) => tracker.displayName)) : undefined;
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true);
     const payload = type === "direct" ? { type, collectionId: collection.id, url } : { type, collectionId: collection.id, trackerKeys: selectedTrackers, requiredTerms: required, ignoredTerms: ignored };
@@ -115,9 +121,9 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
   return <Drawer title={t("Add subscription")} subtitle={t("New monitor in {name}", { name: collection.name })} onClose={onClose} wide><div className="segmented"><button className={type === "direct" ? "active" : ""} aria-pressed={type === "direct"} onClick={() => setType("direct")} type="button"><Icon name="link" />{t("Direct link")}</button><button className={type === "rule" ? "active" : ""} aria-pressed={type === "rule"} onClick={() => setType("rule")} type="button"><Icon name="rule" />{t("Rule")}</button></div><form onSubmit={submit}>{type === "direct" ? <>
-    <Field label={t("Tracker page URL")} hint={t("Kinozal, Rutor, or RuTracker")}><input type="url" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} autoFocus required /></Field><InfoLine icon="clock">{t("The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.")}</InfoLine>
+    <Field label={t("Tracker page URL")} hint={directSources}><input type="url" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} autoFocus required /></Field><InfoLine icon="clock">{t("The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.")}</InfoLine>
   </> : <>
-    <Field label={t("Trackers")}><div className="tracker-picker">{trackers.map((tracker) => <label key={tracker.key} className={selectedTrackers.includes(tracker.key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={selectedTrackers.includes(tracker.key)} onChange={() => setSelectedTrackers((current) => current.includes(tracker.key) ? current.filter((key) => key !== tracker.key) : [...current, tracker.key])} /><TrackerTag tracker={tracker.key} /><span>{tracker.displayName}</span>{!tracker.credentialsConfigured && tracker.key !== "rutor" && <small>{t(tracker.key === "rutracker" ? "gap recovery unavailable" : "credentials missing")}</small>}</label>)}</div></Field>
+    <Field label={t("Trackers")}><div className="tracker-picker">{ruleTrackers.map((tracker) => <label key={tracker.key} className={selectedTrackers.includes(tracker.key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={selectedTrackers.includes(tracker.key)} onChange={() => toggleTracker(tracker.key)} /><TrackerTag tracker={tracker.key} /><span>{tracker.displayName}</span>{!tracker.credentialsConfigured && tracker.capabilities.authentication !== "none" && <small>{t(tracker.capabilities.ruleDiscovery === "feed" ? "gap recovery unavailable" : "credentials missing")}</small>}</label>)}</div></Field>
     <Field label={t("Required phrases")} hint={t("Press Enter after each phrase. Every phrase must appear.")}><PhraseInput ariaLabel={t("Required phrases")} value={required} onChange={setRequired} placeholder={t("Type a phrase and press Enter")} /></Field>
     <Field label={t("Ignored phrases")} hint={t("Press Enter after each phrase. Any match is rejected.")}><PhraseInput ariaLabel={t("Ignored phrases")} value={ignored} onChange={setIgnored} placeholder={t("Type a phrase and press Enter")} /></Field>
     <InfoLine icon="monitor">{t("The first successful poll is a silent baseline. Only releases discovered afterward produce events.")}</InfoLine>

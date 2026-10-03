@@ -1,4 +1,4 @@
-import type { TrackerKey } from "./types";
+import { TRACKER_KEYS, type TrackerKey } from "./types";
 
 export type MonitorFilter = "all" | "unread" | "errors";
 export type MonitorSort = "changed" | "name" | "attention";
@@ -19,7 +19,6 @@ export type Navigate = (path: string, options?: { replace?: boolean }) => void;
 
 export type AdminTab = "overview" | "users" | "mirrors" | "diagnostics";
 export const ADMIN_TABS: readonly AdminTab[] = ["overview", "users", "mirrors", "diagnostics"];
-const DIAGNOSTICS_TRACKERS: readonly TrackerKey[] = ["kinozal", "rutor", "rutracker"];
 /** Tracker log filters and page, and the Telegram deliveries page. */
 export interface DiagnosticsView { tracker: TrackerKey | ""; outcome: string; page: number; deliveriesPage: number }
 export type DiagnosticsViewChange = (change: Partial<DiagnosticsView>, options?: { replace?: boolean }) => void;
@@ -37,7 +36,7 @@ export function parseRoute(pathname: string, search: string): Route {
     if (!ADMIN_TABS.includes(tab)) return { name: "admin", tab: "overview", explicit: false, diagnostics: DEFAULT_DIAGNOSTICS_VIEW };
     if (tab !== "diagnostics") return { name: "admin", tab, explicit: true, diagnostics: DEFAULT_DIAGNOSTICS_VIEW };
     const tracker = query.get("tracker") as TrackerKey, outcome = query.get("outcome") ?? "";
-    return { name: "admin", tab, explicit: true, diagnostics: { tracker: DIAGNOSTICS_TRACKERS.includes(tracker) ? tracker : "",
+    return { name: "admin", tab, explicit: true, diagnostics: { tracker: TRACKER_KEYS.includes(tracker) ? tracker : "",
       outcome: /^[a-z0-9][a-z0-9-]{0,39}$/i.test(outcome) ? outcome : "", page: pageParameter(query.get("page")), deliveriesPage: pageParameter(query.get("deliveriesPage")) } };
   }
   if (pathname === "/activity") return { name: "activity", filter: query.get("filter") === "all" ? "all" : "unread" };
