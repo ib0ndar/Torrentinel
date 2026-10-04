@@ -42,6 +42,26 @@ function trustProxy(): boolean | string {
   return raw;
 }
 
+function initialAdminPassword(): string | undefined {
+  const value = process.env.INITIAL_ADMIN_PASSWORD;
+  if (!value) return undefined;
+  if (value.length < 8) throw new Error("INITIAL_ADMIN_PASSWORD must contain at least 8 characters");
+  return value;
+}
+
+// Host names besides PUBLIC_URL that requests may be addressed to, for example a reverse proxy's domain.
+function allowedHosts(): string[] {
+  return (process.env.ALLOWED_HOSTS || "").split(",").map((entry) => entry.trim().toLowerCase()).filter(Boolean).map((entry) => {
+    const hostname = entry.startsWith(".") ? entry.slice(1) : entry;
+    try {
+      const parsed = new URL(`http://${hostname}`).hostname;
+      return entry.startsWith(".") ? `.${parsed}` : parsed;
+    } catch {
+      throw new Error(`ALLOWED_HOSTS contains an invalid host name: ${entry}`);
+    }
+  });
+}
+
 export const config = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: integer("PORT", process.env.NODE_ENV === "production" ? 8080 : 8787),
@@ -63,6 +83,8 @@ export const config = {
   sessionDays: integer("SESSION_DAYS", 30),
   sessionCookieSecure: process.env.SESSION_COOKIE_SECURE === "true",
   trustProxy: trustProxy(),
+  initialAdminPassword: initialAdminPassword(),
+  allowedHosts: allowedHosts(),
 };
 
 export type AppConfig = typeof config;

@@ -8,7 +8,7 @@ import { createApplication } from "./app.js";
 let services: Awaited<ReturnType<typeof createApplication>>, path: string;
 beforeEach(async () => {
   path = mkdtempSync(join(tmpdir(), "torrentinel-password-"));
-  services = await createApplication({ databasePath: join(path, "db"), encryptionKeyPath: join(path, "key"), logger: false, staticAssets: false });
+  services = await createApplication({ initialAdminPassword: "admin", databasePath: join(path, "db"), encryptionKeyPath: join(path, "key"), logger: false, staticAssets: false });
   services.db.prepare("INSERT INTO users (id, username, password_hash, created_at, updated_at) VALUES ('member', 'member', ?, ?, ?)").run(hashSync("Member-Password-1", 4), new Date().toISOString(), new Date().toISOString());
 });
 afterEach(async () => { await services.app.close(); rmSync(path, { recursive: true, force: true }); });

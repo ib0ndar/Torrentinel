@@ -12,8 +12,8 @@ import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerSystemRoutes } from "./routes/system.js";
 
-export function registerRoutes(app: FastifyInstance, db: SqliteDatabase, scheduler: Scheduler, telegram: TelegramService, vault: SecretVault, coverCache: CoverCacheStore): void {
-  const services = { app, db, scheduler, telegram, vault, coverCache };
+export function registerRoutes(app: FastifyInstance, db: SqliteDatabase, scheduler: Scheduler, telegram: TelegramService, vault: SecretVault, coverCache: CoverCacheStore, initialAdminFile: string): void {
+  const services = { app, db, scheduler, telegram, vault, coverCache, initialAdminFile };
   registerAuthRoutes(services);
   registerCollectionRoutes(services);
   registerSubscriptionRoutes(services);

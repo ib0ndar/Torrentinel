@@ -19,7 +19,7 @@ describe("authenticated API", () => {
       ok: true,
       result: { id: 123456789, username: "torrentinel_test_bot" },
     }), { status: 200, headers: { "content-type": "application/json" } });
-    const { app, db, scheduler } = await createApplication({
+    const { app, db, scheduler } = await createApplication({ initialAdminPassword: "admin",
       databasePath: join(dataDir, "test.db"),
       encryptionKeyPath: join(dataDir, "master.key"),
       telegramFetch,

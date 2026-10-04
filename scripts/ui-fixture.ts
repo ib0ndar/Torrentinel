@@ -22,7 +22,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error(`Inval
 if (!existsSync(resolve(publicDir, "index.html"))) throw new Error("dist/public/index.html is missing; run npm run build first");
 
 const dataDir = mkdtempSync(join(tmpdir(), "torrentinel-ui-fixture-"));
-const { app, db, vault } = await createApplication({ databasePath: join(dataDir, "fixture.db"), encryptionKeyPath: join(dataDir, "master.key"), staticAssets: false, logger: false });
+const { app, db, vault } = await createApplication({ initialAdminPassword: "admin", databasePath: join(dataDir, "fixture.db"), encryptionKeyPath: join(dataDir, "master.key"), staticAssets: false, logger: false });
 const userId = (db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string }).id;
 const inboxId = (db.prepare("SELECT id FROM collections WHERE user_id = ?").get(userId) as { id: string }).id;
 db.prepare("UPDATE users SET must_change_password = 0, page_size = 20 WHERE id = ?").run(userId);

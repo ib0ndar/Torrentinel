@@ -180,6 +180,9 @@ Podman volume archives created above can be loaded into empty replacement volume
 ## Troubleshooting
 
 - If the health request fails, run the status and log commands for the selected deployment method.
+- If the browser shows `Torrentinel does not serve this host name`, the address you opened uses a domain Torrentinel does not know. Set it as `PUBLIC_URL` or add it to `ALLOWED_HOSTS`, then restart. The log names the refused host.
+- If the first-run password file was lost before anyone signed in, restart Torrentinel: it generates a new password while the first account still waits for its first password change.
+- If the other devices on your network cannot reach a container installation, the port listens on `127.0.0.1` by default; set `TORRENTINEL_BIND_ADDRESS` (Compose) or `PublishPort` (Quadlet) as described in the README.
 - If native startup reports a permission failure, confirm the `torrentinel` account can write to both `/var/lib/torrentinel/database` and `/var/lib/torrentinel/application`.
 - If saved integrations cannot be decrypted, restore the database and application-data directory from the same backup.
 - If Kinozal or RuTracker browser-backed requests fail, inspect the Torrentinel log for an integrated-browser error. Confirm the application-data directory is writable, the container has at least 512 MiB of shared memory, and `BROWSER_CHANNEL` remains `auto` unless a compatible browser was deliberately installed. Kinozal pauses browser retries for 15 minutes after a failed login or challenge attempt so one outage does not repeat the same request for every rule.

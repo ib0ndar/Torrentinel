@@ -15,6 +15,8 @@ The maintainer will acknowledge a complete report when practical, investigate it
 ## Deployment responsibilities
 
 - Keep Torrentinel and its reverse proxy updated.
+- Sign in with the generated first-run password (or `INITIAL_ADMIN_PASSWORD`) and change it before giving others access; keep the application-data directory, which holds that file until then, private.
+- Set `PUBLIC_URL` or `ALLOWED_HOSTS` to the domain names you use instead of disabling the host-name check, which protects against DNS rebinding.
 - Use HTTPS for any deployment reachable beyond a trusted local network.
 - Restrict access to the SQLite database, application-data directory, integrated-browser profile, backups, and environment files. Browser profiles can contain reusable challenge-clearance cookies.
 - Do not add a public debugging or browser-control port; the integrated browser requires no inbound network access.

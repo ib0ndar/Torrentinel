@@ -49,7 +49,7 @@ RELEASE="${release_url##*/}"
 git clone --branch "$RELEASE" --depth 1 https://github.com/ib0ndar/Torrentinel.git
 cd Torrentinel
 cp .env.example .env
-# Edit .env now if the public URL or host port will differ.
+# Edit .env now if the public URL or host port will differ, or to open Torrentinel from other devices.
 docker compose config
 docker compose pull
 docker compose up -d
@@ -204,7 +204,7 @@ cd Torrentinel
 cp .env.example .env
 ```
 
-Edit `.env`, especially `PUBLIC_URL`, `TORRENTINEL_PORT`, and `SESSION_COOKIE_SECURE`. Then validate and start the deployment:
+Edit `.env`, especially `PUBLIC_URL`, `TORRENTINEL_PORT`, and `SESSION_COOKIE_SECURE`. Torrentinel listens on `127.0.0.1` by default, so it is reachable from this machine and from a reverse proxy here; set `TORRENTINEL_BIND_ADDRESS=0.0.0.0` (or the host's LAN address) to open it to other devices. Then validate and start the deployment:
 
 ```sh
 docker compose config
@@ -246,7 +246,7 @@ install -m 0600 \
   "$HOME/.config/containers/systemd/torrentinel.env"
 ```
 
-Edit `~/.config/containers/systemd/torrentinel.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied Quadlet publishes TCP port `8999`. Enable the user manager at boot and start Torrentinel:
+Edit `~/.config/containers/systemd/torrentinel.env`, particularly `PUBLIC_URL` and `SESSION_COOKIE_SECURE`. The supplied Quadlet publishes TCP port `8999` on `127.0.0.1`; change `PublishPort` in `torrentinel.container` to `8999:8080/tcp` to open it to other devices. Enable the user manager at boot and start Torrentinel:
 
 ```sh
 sudo loginctl enable-linger "$USER"
@@ -260,16 +260,17 @@ The `.volume` Quadlets create `torrentinel_app` and `torrentinel_db` automatical
 
 ### First sign-in
 
-Open the configured URL and sign in with:
+There is no default password. On first start, Torrentinel creates the account `admin` with a random password, saves it in `initial-admin-password` in the application-data directory (readable only by Torrentinel's user), and prints it in the log line starting `First sign-in:` until it has been changed. Read it with the command for your installation:
 
-```text
-Username: admin
-Password: admin
+```sh
+docker compose exec torrentinel cat /var/lib/torrentinel/initial-admin-password    # Docker Compose
+podman exec torrentinel cat /var/lib/torrentinel/initial-admin-password            # Podman Quadlet
+sudo cat /var/lib/torrentinel/application/initial-admin-password                   # Direct installation
 ```
 
-Torrentinel requires the default password to be changed immediately. Configure tracker accounts, mirrors, and Telegram bots under **Settings**, where each account can also change its password later (**Settings → Account**; this signs out the account's other sessions). Manage users, global mirrors, the polling interval, and diagnostics under **Administration**.
+To choose the first password instead, set `INITIAL_ADMIN_PASSWORD` (at least 8 characters) before the first start. Either way, Torrentinel asks for a new password at the first sign-in and deletes the saved file afterwards.
 
-Do not expose a new installation to an untrusted network until the default administrator password has been changed.
+Configure tracker accounts, mirrors, and Telegram bots under **Settings**, where each account can also change its password later (**Settings → Account**; this signs out the account's other sessions). Manage users, global mirrors, the polling interval, and diagnostics under **Administration**.
 
 ## Configuration
 
@@ -282,7 +283,10 @@ Runtime settings are read from the process environment. The direct systemd insta
 | `HOST` | `127.0.0.1`, editable | Fixed to image default `0.0.0.0` | Fixed to image default `0.0.0.0` | Application listen address |
 | `PORT` | `8080`, editable | Internal port `8080` | Internal port `8080` | Application container/process port |
 | `TORRENTINEL_PORT` | Not used | `8080`, editable | Not used | Docker host port mapped to internal `8080` |
+| `TORRENTINEL_BIND_ADDRESS` | Not used | `127.0.0.1`, editable | `PublishPort` in `torrentinel.container`, default `127.0.0.1` | Host address the published port listens on; `0.0.0.0` opens it to other devices |
 | `PUBLIC_URL` | Editable | Editable | Editable | Externally reachable URL without a trailing slash |
+| `ALLOWED_HOSTS` | Editable, empty | Editable, empty | Editable, empty | Further domain names Torrentinel is opened under, comma-separated (a leading `.` includes subdomains); see [Host names](#host-names) |
+| `INITIAL_ADMIN_PASSWORD` | Optional | Optional | Optional | Password for the first administrator account; generated when empty, see [First sign-in](#first-sign-in) |
 | `DATA_DIR` | `/var/lib/torrentinel/database` | Fixed volume path `/data` | Fixed volume path `/data` | SQLite database directory |
 | `APP_DATA_DIR` | `/var/lib/torrentinel/application` | Fixed volume path `/var/lib/torrentinel` | Fixed volume path `/var/lib/torrentinel` | Encryption key, cached covers, and browser profiles |
 | `POLL_INTERVAL_MINUTES` | Editable, default `60` | Editable, default `60` | Editable, default `60` | Initial interval before an administrator saves a value |
@@ -300,9 +304,13 @@ The standalone container image accepts all runtime variables directly. The suppo
 
 Tracker passwords and Telegram tokens are configured only in the web interface and are never environment variables.
 
+### Host names
+
+Torrentinel answers only requests addressed to a host name that cannot belong to someone else: an IP address, a single-word name such as `nas`, a local-only name ending in `.local`, `.lan`, `.home`, `.home.arpa`, `.internal`, or `.localdomain`, the host of `PUBLIC_URL`, or a name in `ALLOWED_HOSTS`. Other names receive HTTP 403 and a log warning. This stops DNS rebinding, where a web page reaches a server on the visitor's network under the attacker's own domain name. If you open Torrentinel under your own domain, such as one served by a reverse proxy, set it as `PUBLIC_URL` or add it to `ALLOWED_HOSTS`.
+
 ### Reverse proxy and HTTPS
 
-When a reverse proxy terminates HTTPS, point it at Torrentinel's host port, set `PUBLIC_URL` to the final `https://` address, and set `SESSION_COOKIE_SECURE=true`. Set `TRUST_PROXY` to the address the proxy connects from (for example `127.0.0.1` for the native service, or the container network's gateway for containers) so sign-in attempt limits apply to each client rather than to the proxy, and send `Strict-Transport-Security` from the proxy. The native service binds to loopback by default and is ready for this arrangement. Container ports bind on the host, so restrict them with the host firewall when only the reverse proxy should have access. The integrated browser has no listening port.
+When a reverse proxy terminates HTTPS, point it at Torrentinel's host port, set `PUBLIC_URL` to the final `https://` address (or add the proxy's domain to `ALLOWED_HOSTS`), and set `SESSION_COOKIE_SECURE=true`. Set `TRUST_PROXY` to the address the proxy connects from (for example `127.0.0.1` for the native service, or the container network's gateway for containers) so sign-in attempt limits apply to each client rather than to the proxy, and send `Strict-Transport-Security` from the proxy. The native service and the supplied Compose and Quadlet definitions listen on `127.0.0.1` by default and are ready for a proxy on the same host. A proxy in another container that connects through the host's LAN address needs the port opened to that address. The integrated browser has no listening port.
 
 ### Integrated browser sandbox
 

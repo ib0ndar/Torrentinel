@@ -39,7 +39,8 @@ Use the release installation commands from the repository README. Stable images 
 
 ## Important operational notes
 
-- Change the initial administration password immediately after first sign-in.
+- There is no default password. The first start generates one for the account `admin`, prints it in the log line starting `First sign-in:`, and saves it in `/var/lib/torrentinel/initial-admin-password` until it is changed; set `INITIAL_ADMIN_PASSWORD` to choose it instead.
+- Torrentinel answers only IP addresses, local names, the host of `PUBLIC_URL`, and names in `ALLOWED_HOSTS`, which protects it from DNS rebinding. Add any domain you open it under.
 - Do not publish or mount the integrated browser profile separately; protect it as part of the application-data volume.
 - With Docker, run the container with the repository's `deploy/torrentinel-seccomp.json` (`--security-opt seccomp=torrentinel-seccomp.json`), as the supplied Compose file does, so the integrated browser can use Chrome's sandbox; Podman's default profile already allows it. Without it, Chrome runs unsandboxed and Torrentinel logs a warning.
 - Back up the database and application-data volumes together because encrypted integrations require the matching generated key.

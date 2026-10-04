@@ -7,7 +7,7 @@ import { createApplication } from "./app.js";
 describe("subscription unread activity", () => {
   it.each(["direct", "rule"])("opens %s subscriptions as read and preserves later activity and manual reminders", async (type) => {
     const dataDir = mkdtempSync(join(tmpdir(), "torrentinel-unread-test-"));
-    const { app, db } = await createApplication({
+    const { app, db } = await createApplication({ initialAdminPassword: "admin",
       databasePath: join(dataDir, "test.db"),
       encryptionKeyPath: join(dataDir, "master.key"),
       logger: false,

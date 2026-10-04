@@ -5,6 +5,7 @@ import { nowIso } from "../db.js";
 import { createSession, destroyOtherSessions, destroySession, requireUser } from "../auth.js";
 import { parse, type RouteServices } from "./shared.js";
 import { AttemptLimiter, type AttemptRule } from "../attempt-limiter.js";
+import { forgetInitialAdminPassword } from "../initial-admin.js";
 import type { AuthUser } from "../types.js";
 import { passwordChangeReason, themePreference } from "../types.js";
 
@@ -24,7 +25,7 @@ const TIMING_EQUALIZER_HASH = "$2b$12$DuJBLolBSUOuNLDxFp9M8uQ8R6XP0BlY4f8OJDgRKF
 function tooManyAttempts(reply: FastifyReply, retryAfterMs: number, error: string) {
   return reply.code(429).header("retry-after", String(Math.ceil(retryAfterMs / 1_000))).send({ error });
 }
-export function registerAuthRoutes({ app, db }: RouteServices): void {
+export function registerAuthRoutes({ app, db, initialAdminFile }: RouteServices): void {
   const attempts = new AttemptLimiter();
   app.post("/api/auth/login", async (request, reply) => {
     const input = parse(z.object({ username: z.string().trim().min(1).max(80), password: z.string().min(1).max(500) }), request.body, reply);
@@ -70,6 +71,7 @@ export function registerAuthRoutes({ app, db }: RouteServices): void {
       db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?").run(passwordHash, nowIso(), userId);
       destroyOtherSessions(db, request, userId);
     })();
+    forgetInitialAdminPassword(db, initialAdminFile);
     request.user.mustChangePassword = false;
     delete request.user.passwordChangeReason;
     return { user: request.user };

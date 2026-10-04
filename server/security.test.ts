@@ -25,7 +25,7 @@ afterEach(async () => {
 
 async function application() {
   const dataDir = mkdtempSync(join(tmpdir(), "torrentinel-security-"));
-  const created = await createApplication({
+  const created = await createApplication({ initialAdminPassword: "admin",
     databasePath: join(dataDir, "test.db"),
     encryptionKeyPath: join(dataDir, "master.key"),
     logger: false,
@@ -182,11 +182,11 @@ describe("cross-site request protection", () => {
     const login = (headers: Record<string, string>) => app.inject({ method: "POST", url: "/api/auth/login", headers, payload: { username: "admin", password: "admin" } });
     expect((await login({ "sec-fetch-site": "cross-site" })).statusCode).toBe(403);
     expect((await login({ "sec-fetch-site": "same-site" })).statusCode).toBe(403);
-    expect((await login({ origin: "https://evil.example", host: "torrentinel.example" })).statusCode).toBe(403);
-    expect((await login({ origin: "null", host: "torrentinel.example" })).statusCode).toBe(403);
+    expect((await login({ origin: "https://evil.example", host: "torrentinel.lan" })).statusCode).toBe(403);
+    expect((await login({ origin: "null", host: "torrentinel.lan" })).statusCode).toBe(403);
     expect((await login({ "sec-fetch-site": "same-origin" })).statusCode).toBe(200);
-    expect((await login({ origin: "https://torrentinel.example", host: "torrentinel.example" })).statusCode).toBe(200);
-    expect((await login({ origin: "https://torrentinel.example", host: "127.0.0.1:8080", "x-forwarded-host": "torrentinel.example" })).statusCode).toBe(200);
+    expect((await login({ origin: "https://torrentinel.lan", host: "torrentinel.lan" })).statusCode).toBe(200);
+    expect((await login({ origin: "https://torrentinel.lan", host: "127.0.0.1:8080", "x-forwarded-host": "torrentinel.lan" })).statusCode).toBe(200);
     expect((await app.inject({ method: "GET", url: "/api/health", headers: { "sec-fetch-site": "cross-site" } })).statusCode).toBe(200);
   }, PASSWORD_HASHING_TIMEOUT_MS);
 });

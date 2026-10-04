@@ -2,6 +2,20 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.9.6] - 2026-10-04
+
+### Security
+
+- There is no default `admin`/`admin` password any more. A new installation creates `admin` with a random password, saves it in `initial-admin-password` in the application-data directory (readable only by Torrentinel's user), and prints it in the log line starting `First sign-in:` until it is changed; `INITIAL_ADMIN_PASSWORD` chooses it instead. The file is deleted after the first password change. An existing installation that nobody has signed in to yet has its `admin`/`admin` password replaced the same way at startup, and any session that used it ends. Previously whoever reached a new installation first could claim it.
+- Requests are answered only when addressed to an IP address, a single-word or local-only name (`.local`, `.lan`, `.home`, `.home.arpa`, `.internal`, `.localdomain`), the host of `PUBLIC_URL`, or a name in the new `ALLOWED_HOSTS`; other names receive HTTP 403 and a log warning. This stops DNS rebinding, where a web page reaches an installation on the visitor's network, for example to try passwords, under the attacker's own domain.
+- The supplied Docker Compose file (`TORRENTINEL_BIND_ADDRESS`, default `127.0.0.1`) and Podman Quadlet (`PublishPort=127.0.0.1:8999:8080/tcp`) publish Torrentinel on the local machine only unless configured otherwise.
+
+### Upgrade notes
+
+- If you open Torrentinel under a domain name (for example through a reverse proxy) that is not the host of `PUBLIC_URL`, add it to `ALLOWED_HOSTS` before updating, or the browser shows "Torrentinel does not serve this host name". IP addresses and names such as `nas` or `nas.lan` keep working.
+- Docker Compose now publishes on `127.0.0.1`; set `TORRENTINEL_BIND_ADDRESS=0.0.0.0` in `.env` to keep reaching it from other devices. The supplied Quadlet does the same; installations that keep their existing `torrentinel.container` are unaffected.
+- Accounts that have already changed their password are unaffected by the first-run password change.
+
 ## [0.9.5] - 2026-10-04
 
 ### Security
@@ -521,6 +535,7 @@ All notable changes to Torrentinel are documented in this file.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
 [Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.8.0...HEAD
+[0.9.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.6
 [0.9.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.5
 [0.9.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.0

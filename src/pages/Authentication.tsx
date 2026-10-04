@@ -26,7 +26,7 @@ export function ChangePassword({ user, onChanged, onSignOut, notify }: { user: U
   const copy = reason === "reset"
     ? { eyebrow: "Password reset", title: "Choose a new password.", text: "An administrator reset your password. Enter the temporary password you were given, then choose a new one to continue." }
     : firstRun
-      ? { eyebrow: "First sign-in", title: "Secure the admin account.", text: "The default password cannot be used after setup." }
+      ? { eyebrow: "First sign-in", title: "Secure the admin account.", text: "Replace the initial password with one of your own." }
       : { eyebrow: "Password change required", title: "Choose a new password.", text: "Your account uses a temporary password. Enter it, then choose a new one to continue." };
   async function submit(event: FormEvent) {
     event.preventDefault(); if (newPassword !== confirm) return notify(t("New passwords do not match"), "bad"); setBusy(true);

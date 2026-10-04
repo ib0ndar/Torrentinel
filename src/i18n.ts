@@ -25,7 +25,7 @@ export const russian: Record<string, string> = {
   "Track change. Catch the release.": "Следите за изменениями. Не пропускайте релизы.", "Local access": "Локальный доступ",
   "Sign in": "Войти", "Signing in…": "Вход…", "Username": "Имя пользователя", "Password": "Пароль",
   "First sign-in": "Первый вход", "Secure the admin account.": "Защитите учётную запись администратора.",
-  "The default password cannot be used after setup.": "После настройки пароль по умолчанию использовать нельзя.",
+  "Replace the initial password with one of your own.": "Замените начальный пароль своим.",
   "Current password": "Текущий пароль", "New password": "Новый пароль", "Confirm new password": "Повторите новый пароль",
   "Save new password": "Сохранить новый пароль", "New passwords do not match": "Новые пароли не совпадают", "Password changed": "Пароль изменён",
   "Monitor": "Монитор", "Settings": "Настройки", "Administration": "Администрирование", "Polling trackers": "Проверка трекеров",

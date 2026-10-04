@@ -2,6 +2,7 @@ import Fastify, { type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
+import { isIP } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
@@ -15,6 +16,7 @@ import { closeTrackerAdapters } from "./trackers/index.js";
 import { CoverCache } from "./cover-cache.js";
 import { fetchCover, type CoverRetriever } from "./cover-fetch.js";
 import { downloadCoverWithHttp2 } from "./cover-http2.js";
+import { INITIAL_ADMIN_PASSWORD_FILE, prepareInitialAdmin } from "./initial-admin.js";
 
 interface ApplicationOptions {
   databasePath?: string;
@@ -24,9 +26,33 @@ interface ApplicationOptions {
   telegramFetch?: typeof fetch;
   coverCacheDir?: string;
   coverRetriever?: CoverRetriever;
+  /** First-run administrator password; defaults to INITIAL_ADMIN_PASSWORD, otherwise one is generated. */
+  initialAdminPassword?: string;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+// Domains that only exist on local networks, so nobody else can point them at this server.
+const LOCAL_SUFFIXES = [".localhost", ".local", ".lan", ".home", ".home.arpa", ".internal", ".localdomain"];
+
+/**
+ * With DNS rebinding, a web page can reach a server on the visitor's network under the attacker's
+ * own domain name. Requests are therefore only served for host names that cannot belong to someone
+ * else: IP addresses, single-label and local-only names, PUBLIC_URL's host and ALLOWED_HOSTS.
+ */
+export function hostAllowed(value: string | undefined): boolean {
+  if (value === undefined) return true;
+  if (!/^[a-z0-9.:[\]_-]+$/iu.test(value)) return false;
+  let hostname: string;
+  try {
+    hostname = new URL(`http://${value}`).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  const bare = hostname.replace(/^\[(.*)\]$/u, "$1").replace(/\.$/u, "");
+  if (isIP(bare) || !bare.includes(".") || LOCAL_SUFFIXES.some((suffix) => bare.endsWith(suffix))) return true;
+  if (config.publicUrl && new URL(config.publicUrl).hostname.toLowerCase() === bare) return true;
+  return config.allowedHosts.some((entry) => (entry.startsWith(".") ? bare === entry.slice(1) || bare.endsWith(entry) : bare === entry));
+}
 
 /**
  * Session cookies are SameSite=Strict, which still treats sibling subdomains as the same site.
@@ -66,6 +92,12 @@ export async function createApplication(options: ApplicationOptions = {}) {
   const db = createDatabase(options.databasePath);
   const vault = createSecretVault(options.encryptionKeyPath || config.encryptionKeyPath);
   ensureVaultKey(db, vault);
+  const initialAdminFile = resolve(dirname(options.encryptionKeyPath || config.encryptionKeyPath), INITIAL_ADMIN_PASSWORD_FILE);
+  await prepareInitialAdmin(db, {
+    file: initialAdminFile,
+    configuredPassword: options.initialAdminPassword ?? config.initialAdminPassword,
+    log: (message) => app.log.warn(message),
+  });
   const coverCacheDir = options.coverCacheDir
     || (options.databasePath ? resolve(dirname(options.databasePath), "covers") : config.coverCacheDir);
   const coverCache = new CoverCache(db, coverCacheDir, options.coverRetriever);
@@ -81,6 +113,17 @@ export async function createApplication(options: ApplicationOptions = {}) {
   const scheduler = new Scheduler(db, telegram, vault, coverCache);
 
   await app.register(cookie);
+  const refusedHosts = new Set<string>();
+  app.addHook("onRequest", async (request, reply) => {
+    const host = request.headers.host;
+    if (hostAllowed(host) && hostAllowed(request.host)) return;
+    const name = String(host).slice(0, 100);
+    if (!refusedHosts.has(name) && refusedHosts.size < 100) {
+      refusedHosts.add(name);
+      request.log.warn({ host: name }, "Refused a request for a host name that is not configured; add it to ALLOWED_HOSTS if it is yours");
+    }
+    await reply.code(403).send({ error: "Torrentinel does not serve this host name. Add it to ALLOWED_HOSTS or PUBLIC_URL." });
+  });
   app.addHook("onRequest", async (request, reply) => {
     if (!crossSiteRequest(request)) return;
     await reply.code(403).send({ error: "Cross-site request blocked" });
@@ -93,7 +136,7 @@ export async function createApplication(options: ApplicationOptions = {}) {
     reply.header("content-security-policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
   });
   registerAuth(app, db);
-  registerRoutes(app, db, scheduler, telegram, vault, coverCache);
+  registerRoutes(app, db, scheduler, telegram, vault, coverCache, initialAdminFile);
 
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const publicDir = resolve(currentDir, "../public");

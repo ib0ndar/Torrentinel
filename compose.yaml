@@ -2,23 +2,26 @@ name: torrentinel
 
 services:
   torrentinel:
-    image: bah0/torrentinel:v0.9.5
+    image: bah0/torrentinel:v0.9.6
     build:
       context: .
       dockerfile: Containerfile
       args:
-        VERSION: "0.9.5"
-        VCS_REF: "v0.9.5"
+        VERSION: "0.9.6"
+        VCS_REF: "v0.9.6"
     container_name: torrentinel
     restart: unless-stopped
     shm_size: 512m
     # Docker's default seccomp profile plus user namespaces, so the integrated Chrome can use its sandbox.
     security_opt:
       - seccomp=./deploy/torrentinel-seccomp.json
+    # Published on this machine only unless TORRENTINEL_BIND_ADDRESS says otherwise (see .env.example).
     ports:
-      - "${TORRENTINEL_PORT:-8080}:8080"
+      - "${TORRENTINEL_BIND_ADDRESS:-127.0.0.1}:${TORRENTINEL_PORT:-8080}:8080"
     environment:
       PUBLIC_URL: "${PUBLIC_URL:-http://localhost:8080}"
+      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-}"
+      INITIAL_ADMIN_PASSWORD: "${INITIAL_ADMIN_PASSWORD:-}"
       POLL_INTERVAL_MINUTES: "${POLL_INTERVAL_MINUTES:-60}"
       POLL_STARTUP_DELAY_SECONDS: "${POLL_STARTUP_DELAY_SECONDS:-20}"
       TRACKER_REQUEST_TIMEOUT_MS: "${TRACKER_REQUEST_TIMEOUT_MS:-30000}"

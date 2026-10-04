@@ -15,7 +15,7 @@ async function login(username: string, password: string): Promise<string> {
 }
 beforeEach(async () => {
   path = mkdtempSync(join(tmpdir(), "torrentinel-admin-diagnostics-"));
-  services = await createApplication({ databasePath: join(path, "db"), encryptionKeyPath: join(path, "key"), logger: false, staticAssets: false });
+  services = await createApplication({ initialAdminPassword: "admin", databasePath: join(path, "db"), encryptionKeyPath: join(path, "key"), logger: false, staticAssets: false });
   const { db } = services;
   db.prepare("UPDATE users SET must_change_password = 0, page_size = 10").run();
   adminId = (db.prepare("SELECT id FROM users").get() as { id: string }).id;

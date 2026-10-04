@@ -8,7 +8,7 @@ import { nowIso } from "./db.js";
 let services: Awaited<ReturnType<typeof createApplication>>, path: string, cookie: string, userId: string, collectionId: string;
 beforeEach(async () => {
   path = mkdtempSync(join(tmpdir(), "torrentinel-pagination-"));
-  services = await createApplication({ databasePath: join(path, "db"), encryptionKeyPath: join(path, "key"), logger: false, staticAssets: false });
+  services = await createApplication({ initialAdminPassword: "admin", databasePath: join(path, "db"), encryptionKeyPath: join(path, "key"), logger: false, staticAssets: false });
   const { app, db } = services;
   db.prepare("UPDATE users SET must_change_password = 0").run();
   userId = (db.prepare("SELECT id FROM users").get() as { id: string }).id;

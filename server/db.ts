@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { hashSync } from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { nanoid } from "nanoid";
 import { dirname } from "node:path";
@@ -412,12 +413,14 @@ function seed(db: SqliteDatabase): void {
 
   const userCount = db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number };
   if (userCount.count === 0) {
+    // The first account starts with an unguessable password; the application replaces it with the
+    // one it reports to the operator (server/initial-admin.ts). There is no default password.
     const userId = nanoid();
     db.prepare(`
       INSERT INTO users (
         id, username, password_hash, is_admin, disabled, must_change_password, created_at, updated_at
       ) VALUES (?, 'admin', ?, 1, 0, ${PASSWORD_CHANGE.initial}, ?, ?)
-    `).run(userId, hashSync("admin", 12), timestamp, timestamp);
+    `).run(userId, hashSync(randomBytes(32).toString("base64url"), 12), timestamp, timestamp);
     db.prepare(`
       INSERT INTO collections (id, user_id, name, created_at, updated_at)
       VALUES (?, ?, 'Inbox', ?, ?)

@@ -12,6 +12,8 @@ import { personalMirrorAllowed } from "../mirrors.js";
 export interface RouteServices {
   app: FastifyInstance; db: SqliteDatabase; scheduler: Scheduler;
   telegram: TelegramService; vault: SecretVault; coverCache: CoverCacheStore;
+  /** The saved first-run administrator password, deleted after the first password change. */
+  initialAdminFile: string;
 }
 export const idParams = z.object({ id: z.string().min(1).max(100) });
 export const trackerKeySchema = z.enum(TRACKER_KEYS);
