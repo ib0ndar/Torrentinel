@@ -121,10 +121,31 @@ describe("database migrations", () => {
       expect(db.prepare("SELECT language, pagination_enabled, page_size FROM users WHERE username = 'admin'").get())
         .toEqual({ language: "en", pagination_enabled: 1, page_size: 50 });
       expect(db.prepare("SELECT theme FROM users WHERE username = 'admin'").get()).toEqual({ theme: "sentinel" });
+      expect(db.prepare("SELECT start_page FROM users WHERE username = 'admin'").get()).toEqual({ start_page: "monitor" });
       expect(() => db.prepare("UPDATE users SET language = 'invalid'").run()).toThrow(/CHECK/);
       expect(() => db.prepare("UPDATE users SET page_size = 0").run()).toThrow(/CHECK/);
     } finally {
       db.close();
+    }
+  });
+
+  it("adds the start page to existing users and the default filter to existing collections", () => {
+    const directory = mkdtempSync(join(tmpdir(), "torrentinel-view-preferences-")); cleanup.push(directory);
+    const path = join(directory, "legacy.db");
+    const legacy = createDatabase(path);
+    legacy.exec("ALTER TABLE users DROP COLUMN start_page; ALTER TABLE collections DROP COLUMN default_filter;");
+    const admin = legacy.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    legacy.prepare("INSERT INTO collections (id, user_id, name, created_at, updated_at) VALUES ('films', ?, 'Films', '2026-09-30', '2026-09-30')").run(admin.id);
+    const users = legacy.prepare("SELECT * FROM users ORDER BY id").all() as Array<Record<string, unknown>>;
+    const collections = legacy.prepare("SELECT * FROM collections ORDER BY id").all() as Array<Record<string, unknown>>;
+    legacy.close();
+    for (let pass = 0; pass < 2; pass += 1) {
+      const db = createDatabase(path);
+      try {
+        expect(db.prepare("SELECT * FROM users ORDER BY id").all()).toEqual(users.map((row) => ({ ...row, start_page: "monitor" })));
+        expect(db.prepare("SELECT * FROM collections ORDER BY id").all()).toEqual(collections.map((row) => ({ ...row, default_filter: "all" })));
+        expect(db.pragma("foreign_key_check")).toEqual([]);
+      } finally { db.close(); }
     }
   });
 });

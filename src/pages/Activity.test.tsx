@@ -12,7 +12,7 @@ import { Activity } from "./Activity";
 vi.mock("../api", async (original) => ({ ...await original<object>(), api: vi.fn() }));
 afterEach(() => { vi.resetAllMocks(); setLanguage("en"); document.body.innerHTML = ""; });
 
-const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 2, theme: "sentinel" };
+const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 2, theme: "sentinel", startPage: "monitor" };
 const today = new Date(), dayAt = (offset: number, hour = 12) => new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset, hour).toISOString();
 const direct = { type: "direct" as const, directUrl: "https://rutor.info/torrent/1", requiredTerms: [], ignoredTerms: [], trackerKeys: ["rutor" as const] };
 const events: ActivityEvent[] = [
@@ -30,7 +30,7 @@ function render(filter: ActivityFilter, collections: Collection[]) {
   const root = createRoot(container), notify = vi.fn(), onCollectionsChanged = vi.fn(async () => undefined), onFilterChange = vi.fn(), onShowShortcuts = vi.fn();
   return { container, root, notify, onCollectionsChanged, onFilterChange, onShowShortcuts, mount: () => act(async () => root.render(<DialogProvider><Activity user={user} notify={notify} filter={filter} onFilterChange={onFilterChange} collections={collections} onCollectionsChanged={onCollectionsChanged} onShowShortcuts={onShowShortcuts} /></DialogProvider>)) };
 }
-const collections: Collection[] = [{ id: "films", name: "Films", subscriptionCount: 4, unreadCount: 2, activityCount: 2, errorCount: 0 }, { id: "series", name: "Series", subscriptionCount: 1, unreadCount: 1, activityCount: 1, errorCount: 0 }];
+const collections: Collection[] = [{ id: "films", name: "Films", defaultFilter: "all", subscriptionCount: 4, unreadCount: 2, activityCount: 2, errorCount: 0 }, { id: "series", name: "Series", defaultFilter: "all", subscriptionCount: 1, unreadCount: 1, activityCount: 1, errorCount: 0 }];
 
 it("groups unread changes by day, loads more pages, and opens an entry in the inspector", async () => {
   let unread = [...events];

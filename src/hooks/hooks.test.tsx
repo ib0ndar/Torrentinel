@@ -49,6 +49,31 @@ afterEach(async () => {
 });
 
 describe("workspace request lifecycle", () => {
+  it("opens the picked collection in its default filter, keeps the view when a default changes, and opens another collection in its own default", async () => {
+    let defaults: Record<string, string> = { one: "unread", two: "errors" };
+    const list = deferred<{ collections: Collection[] }>(), withDefaults = () => collections.map((collection) => ({ ...collection, defaultFilter: defaults[collection.id] }) as Collection);
+    let first = true;
+    request.mockImplementation(async (path) => {
+      if (path === "/api/collections") { if (!first) return { collections: withDefaults() }; first = false; return list.promise; }
+      return { subscriptions: [subscription(new URL(path, "http://test").searchParams.get("filter")!)] };
+    });
+    const filtersRequested = () => request.mock.calls.filter(([path]) => path.startsWith("/api/subscriptions?")).map(([path]) => new URL(path, "http://test").searchParams.get("filter"));
+    await act(async () => root.render(<WorkspaceHarness />));
+    expect(filtersRequested()).toEqual([]);
+    await act(async () => list.resolve({ collections: withDefaults() }));
+    expect(workspace.view).toMatchObject({ collectionId: "one", filter: "unread", page: 1 });
+    expect(filtersRequested()).toEqual(["unread"]);
+    expect(container.textContent).toBe("unread");
+    defaults = { one: "errors", two: "all" };
+    await act(async () => workspace.loadCollections());
+    expect(workspace.view).toMatchObject({ collectionId: "one", filter: "unread" });
+    await act(async () => workspace.setSelectedId("two"));
+    expect(workspace.view).toMatchObject({ collectionId: "two", filter: "all" });
+    await act(async () => workspace.setFilter("unread"));
+    await act(async () => workspace.setSelectedId("one"));
+    expect(workspace.view).toMatchObject({ collectionId: "one", filter: "errors" });
+    expect(filtersRequested().at(-1)).toBe("errors");
+  });
   it("requests server pages and resets search, status and collection changes to page one", async () => {
     request.mockImplementation(async (path) => path === "/api/collections" ? { collections } : {
       subscriptions: [subscription("entry")], total: 100, page: Number(new URL(path, "http://test").searchParams.get("page") || "1"), pageCount: 4,

@@ -22,6 +22,7 @@ const HEIGHTS = { 320: 640, 390: 844, 768: 1024, 1024: 768, 1440: 900 };
 const ROUTES = [
   { name: "monitor", path: "/collections/series", heading: "Series 2026" },
   { name: "monitor-paged", path: "/collections/archive", heading: "Archive" },
+  { name: "monitor-empty-view", path: "/collections/films?filter=errors", heading: "Films" },
   { name: "activity", path: "/activity", heading: "Activity" },
   { name: "settings", path: "/settings", heading: "Settings" },
   { name: "admin-overview", path: "/admin/overview", heading: "Administration" },

@@ -26,7 +26,7 @@ function mockAdmin(options: { isAdmin?: boolean } = {}) {
     { trackerKey: "rutor", displayName: "Rutor", baseUrl: "https://rutor.is", enabled: true, updatedAt: "2026-10-01T00:00:00.000Z" }];
   vi.mocked(api).mockImplementation(async (path, init) => {
     const url = new URL(path, "http://test"), query = url.searchParams;
-    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: options.isAdmin ?? true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: options.isAdmin ?? true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" } };
     if (path === "/api/system/status") return { scheduler: { running: false, checked: 4, changed: 1, errors: 0 }, intervalMinutes: 30, discoveryHealth: [] };
     if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0, activityCount: 0 }] };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };

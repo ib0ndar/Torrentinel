@@ -4,7 +4,7 @@ import { requireReadyUser } from "../auth.js";
 import { listTrackers } from "../trackers/index.js";
 import { readTrackerCredentials, writeTrackerCredentials } from "../secrets.js";
 import { globalMirrorUrl, origin, parse, resolvedMirrors, trackerKeySchema, urlSchema, type RouteServices } from "./shared.js";
-import { THEME_PREFERENCES, type TrackerKey } from "../types.js";
+import { START_PAGES, THEME_PREFERENCES, type TrackerKey } from "../types.js";
 import { personalMirrorAllowed } from "../mirrors.js";
 import type { SqliteDatabase } from "../db.js";
 
@@ -17,11 +17,13 @@ function mirrorRejected(db: SqliteDatabase, trackerKey: TrackerKey, baseUrl: str
 export function registerSettingsRoutes({ app, db, vault, telegram }: RouteServices): void {
   app.put("/api/settings/preferences", { preHandler: requireReadyUser }, async (request, reply) => {
     const input = parse(z.object({ language: z.enum(["en", "ru"]).optional(), paginationEnabled: z.boolean().optional(),
-      pageSize: z.union([z.literal(10), z.literal(20), z.literal(50), z.literal(100)]).optional(), theme: z.enum(THEME_PREFERENCES).optional() }), request.body, reply);
+      pageSize: z.union([z.literal(10), z.literal(20), z.literal(50), z.literal(100)]).optional(), theme: z.enum(THEME_PREFERENCES).optional(),
+      startPage: z.enum(START_PAGES).optional() }), request.body, reply);
     if (!input || !request.user) return;
     const user = request.user;
-    db.prepare(`UPDATE users SET language = ?, pagination_enabled = ?, page_size = ?, theme = ?, updated_at = ? WHERE id = ?`)
-      .run(input.language ?? user.language, (input.paginationEnabled ?? user.paginationEnabled) ? 1 : 0, input.pageSize ?? user.pageSize, input.theme ?? user.theme, nowIso(), user.id);
+    db.prepare(`UPDATE users SET language = ?, pagination_enabled = ?, page_size = ?, theme = ?, start_page = ?, updated_at = ? WHERE id = ?`)
+      .run(input.language ?? user.language, (input.paginationEnabled ?? user.paginationEnabled) ? 1 : 0, input.pageSize ?? user.pageSize, input.theme ?? user.theme,
+        input.startPage ?? user.startPage, nowIso(), user.id);
     Object.assign(user, input);
     return { user };
   });

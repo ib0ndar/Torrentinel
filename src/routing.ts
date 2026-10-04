@@ -9,13 +9,17 @@ export interface MonitorView { collectionId: string | null; filter: MonitorFilte
 export type MonitorViewChange = (change: Partial<MonitorView>, options?: { replace?: boolean }) => void;
 export const DEFAULT_MONITOR_VIEW: MonitorView = { collectionId: null, filter: "all", search: "", page: 1, sort: "changed" };
 
-// "/" and unknown paths are an unresolved Monitor view: the app picks the collection and rewrites the URL.
+// "/" and unknown paths open the account's start page. "/collections" is an unresolved Monitor view:
+// the app picks the collection and rewrites the URL.
 export type Route =
+  | { name: "home" }
   | { name: "monitor"; view: MonitorView; explicit: boolean }
   | { name: "activity"; filter: ActivityFilter }
   | { name: "settings" }
   | { name: "admin"; tab: AdminTab; explicit: boolean; diagnostics: DiagnosticsView };
 export type Navigate = (path: string, options?: { replace?: boolean }) => void;
+/** Monitor in the last used collection, whatever the start page is. */
+export const MONITOR_HOME = "/collections";
 
 export type AdminTab = "overview" | "users" | "mirrors" | "diagnostics";
 export const ADMIN_TABS: readonly AdminTab[] = ["overview", "users", "mirrors", "diagnostics"];
@@ -40,9 +44,11 @@ export function parseRoute(pathname: string, search: string): Route {
       outcome: /^[a-z0-9][a-z0-9-]{0,39}$/i.test(outcome) ? outcome : "", page: pageParameter(query.get("page")), deliveriesPage: pageParameter(query.get("deliveriesPage")) } };
   }
   if (pathname === "/activity") return { name: "activity", filter: query.get("filter") === "all" ? "all" : "unread" };
+  if (pathname === MONITOR_HOME || pathname === `${MONITOR_HOME}/`) return { name: "monitor", view: DEFAULT_MONITOR_VIEW, explicit: false };
   const match = /^\/collections\/([^/]+)\/?$/.exec(pathname);
+  if (!match) return { name: "home" };
   let collectionId: string | null = null;
-  if (match) { try { collectionId = decodeURIComponent(match[1]); } catch { collectionId = null; } }
+  try { collectionId = decodeURIComponent(match[1]); } catch { collectionId = null; }
   if (!collectionId) return { name: "monitor", view: DEFAULT_MONITOR_VIEW, explicit: false };
   const filter = query.get("filter") as MonitorFilter, sort = query.get("sort") as MonitorSort;
   return { name: "monitor", explicit: true, view: {
@@ -52,7 +58,7 @@ export function parseRoute(pathname: string, search: string): Route {
 }
 // Defaults are omitted so the plain collection link stays short.
 export function monitorPath(view: MonitorView): string {
-  if (!view.collectionId) return "/";
+  if (!view.collectionId) return MONITOR_HOME;
   const query = new URLSearchParams();
   if (view.filter !== "all") query.set("filter", view.filter);
   if (view.search) query.set("q", view.search);
@@ -62,6 +68,11 @@ export function monitorPath(view: MonitorView): string {
   return `/collections/${encodeURIComponent(view.collectionId)}${search ? `?${search}` : ""}`;
 }
 export function activityPath(filter: ActivityFilter): string { return filter === "all" ? "/activity?filter=all" : "/activity"; }
+/** The status filter a collection opens with; missing or unknown values open All. */
+export function collectionDefaultFilter(collection: { defaultFilter?: string } | undefined): MonitorFilter {
+  const value = collection?.defaultFilter as MonitorFilter;
+  return MONITOR_FILTERS.includes(value) ? value : "all";
+}
 // Only Diagnostics keeps state in the query; defaults are omitted.
 export function adminPath(tab: AdminTab, diagnostics: DiagnosticsView = DEFAULT_DIAGNOSTICS_VIEW): string {
   const query = new URLSearchParams();

@@ -81,6 +81,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - Activity view of changes across all collections, with old and new values, and Mark all read per collection or for everything
 - Reliable Telegram notifications with artwork, release links, a persistent delivery queue, and automatic retries
 - Server-side collection search, status filters, and sorting, optional pagination, and quick page-size controls; the current view is kept in the address
+- A start page per account (Monitor or Activity) and a default view per collection (All, Unread, or Errors)
 - English (default) and Russian interfaces and Telegram release messages, selected per account in Settings
 - Eight color themes, including two light themes and a high-contrast theme, plus Auto, which follows the device's light or dark mode; selected per account in Settings
 - Persistent cover fallback when an image host is temporarily unavailable

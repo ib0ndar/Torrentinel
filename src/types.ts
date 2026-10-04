@@ -1,3 +1,5 @@
+import type { MonitorFilter } from "./routing";
+
 // Keys the server accepts; display names, capabilities and order come from GET /api/trackers.
 export const TRACKER_KEYS = ["kinozal", "rutor", "rutracker"] as const;
 export type TrackerKey = (typeof TRACKER_KEYS)[number];
@@ -6,6 +8,8 @@ export type TrackerMarkerStyle = "icons" | "abbreviations";
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 export const THEME_PREFERENCES = ["auto", "sentinel", "graphite", "frost", "nebula", "ember", "daylight", "paper", "high-contrast"] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
+export const START_PAGES = ["monitor", "activity"] as const;
+export type StartPage = (typeof START_PAGES)[number];
 
 export interface User {
   id: string;
@@ -19,11 +23,15 @@ export interface User {
   paginationEnabled: boolean;
   pageSize: number;
   theme: ThemePreference;
+  /** What "/" and unknown addresses open. */
+  startPage: StartPage;
 }
 
 export interface Collection {
   id: string;
   name: string;
+  /** The status filter the collection opens with when the app picks it (links, "/", a new or fallback collection). */
+  defaultFilter: MonitorFilter;
   subscriptionCount: number;
   unreadCount: number;
   /** Unread changes plus manual "Mark unread" reminders without unread changes; matches the Activity unread view. */

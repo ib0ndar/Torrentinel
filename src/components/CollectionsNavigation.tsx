@@ -1,8 +1,8 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api, jsonBody } from "../api";
-import { errorMessage } from "../format";
+import { capitalize, errorMessage } from "../format";
 import { useI18n } from "../i18n";
-import { isPlainClick } from "../routing";
+import { collectionDefaultFilter, isPlainClick, MONITOR_FILTERS } from "../routing";
 import type { Collection, Notify } from "../types";
 import { Icon } from "./Icon";
 import { Drawer, DrawerActions, EmptyCompact, Field } from "./UI";
@@ -34,13 +34,27 @@ export function CollectionsNavigation({ collections, selectedId, hrefFor, onSele
   </section>;
 }
 
-export function NewCollection({ onClose, onCreated, notify }: { onClose: () => void; onCreated: (id: string) => Promise<void>; notify: Notify }) {
+export function CollectionEditor({ collection, onClose, onSaved, notify }: { collection?: Collection; onClose: () => void; onSaved: (collection: Collection) => Promise<void>; notify: Notify }) {
   const { t } = useI18n();
-  const [name, setName] = useState(""), [busy, setBusy] = useState(false);
+  const [name, setName] = useState(collection?.name ?? ""), [defaultFilter, setDefaultFilter] = useState(collectionDefaultFilter(collection)), [busy, setBusy] = useState(false);
+  const changes = collection ? { ...name.trim() !== collection.name ? { name: name.trim() } : {}, ...defaultFilter !== collectionDefaultFilter(collection) ? { defaultFilter } : {} } : {};
+  const unchanged = Boolean(collection) && Object.keys(changes).length === 0;
   async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true);
-    try { const result = await api<{ collection: Collection }>("/api/collections", { method: "POST", ...jsonBody({ name }) }); await onCreated(result.collection.id); notify(t("Collection created")); }
-    catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
+    event.preventDefault(); if (unchanged) return; setBusy(true);
+    try {
+      if (collection) { await api(`/api/collections/${collection.id}`, { method: "PATCH", ...jsonBody(changes) }); await onSaved({ ...collection, ...changes }); notify(t("Collection updated")); }
+      else { const result = await api<{ collection: Collection }>("/api/collections", { method: "POST", ...jsonBody({ name: name.trim(), defaultFilter }) }); await onSaved(result.collection); notify(t("Collection created")); }
+    } catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
-  return <Drawer title={t("New collection")} subtitle={t("Create an isolated place for related subscriptions.")} onClose={onClose}><form onSubmit={submit}><Field label={t("Collection name")}><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} autoFocus required /></Field><DrawerActions onCancel={onClose} busy={busy} label={t("Create collection")} /></form></Drawer>;
+  return <Drawer title={t(collection ? "Edit collection" : "New collection")} subtitle={t(collection ? "Rename the collection or choose the view it opens with." : "Create an isolated place for related subscriptions.")} onClose={onClose}><form onSubmit={submit}>
+    <Field label={t("Collection name")}><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} autoFocus required /></Field>
+    <fieldset className="choice-field">
+      <legend>{t("Default view")}</legend>
+      <div className="segmented segmented--three">{MONITOR_FILTERS.map((filter) => <label key={filter} className={defaultFilter === filter ? "active" : undefined}>
+        <input type="radio" name="default-filter" value={filter} checked={defaultFilter === filter} onChange={() => setDefaultFilter(filter)} />{t(capitalize(filter))}
+      </label>)}</div>
+      <p className="choice-field__hint">{t("Opening this collection shows this view. You can switch filters at any time.")}</p>
+    </fieldset>
+    <DrawerActions onCancel={onClose} busy={busy} label={t(collection ? "Save changes" : "Create collection")} disabled={unchanged} />
+  </form></Drawer>;
 }

@@ -5,13 +5,17 @@ import { TrackerTag } from "../../components/UI";
 import { errorMessage } from "../../format";
 import { useI18n } from "../../i18n";
 import { applyTheme, THEME_CHOICES, type ThemeId } from "../../theme";
-import type { Notify, ThemePreference, Tracker, TrackerMarkerStyle, User } from "../../types";
+import type { Notify, StartPage, ThemePreference, Tracker, TrackerMarkerStyle, User } from "../../types";
 import { PAGE_SIZE_OPTIONS } from "../../types";
 import { SettingsSection } from "./SettingsSection";
 
-type Preferences = Partial<Pick<User, "language" | "paginationEnabled" | "pageSize" | "theme">>;
+type Preferences = Partial<Pick<User, "language" | "paginationEnabled" | "pageSize" | "theme" | "startPage">>;
+const START_PAGE_CHOICES: ReadonlyArray<{ id: StartPage; label: string; detail: string }> = [
+  { id: "monitor", label: "Monitor", detail: "Your last used collection" },
+  { id: "activity", label: "Activity", detail: "Unread changes across all collections" },
+];
 
-// Language, appearance, pagination and source markers save as soon as they change.
+// Language, appearance, start page, pagination and source markers save as soon as they change.
 export function PreferencesSections({ user, onUserChange, notify, trackers }: { user: User; onUserChange: (user: User) => void; notify: Notify; trackers: Tracker[] | null }) {
   const { t } = useI18n();
   const [preferenceBusy, setPreferenceBusy] = useState(false), [markerBusy, setMarkerBusy] = useState(false);
@@ -51,6 +55,15 @@ export function PreferencesSections({ user, onUserChange, notify, trackers }: { 
           <span className="theme-swatch" aria-hidden="true">{choice.id === "auto" ? <><ThemeSwatch theme="sentinel" /><ThemeSwatch theme="daylight" /></> : <ThemeSwatch theme={choice.id} />}</span>
           <span className="theme-option__copy"><strong>{t(choice.label)}</strong><small>{t(choice.family)}</small></span>
           {user.theme === choice.id && <span className="theme-option__check" aria-hidden="true"><Icon name="check" size={20} /></span>}
+        </label>)}
+      </fieldset>
+    </SettingsSection>
+    <SettingsSection id="start-page" description={t("Choose what opens when you sign in or open Torrentinel’s main address. Links to a specific page still open that page.")}>
+      <fieldset className="marker-options" disabled={preferenceBusy}>
+        <legend className="marker-options__legend">{t("Page to open")}</legend>
+        {START_PAGE_CHOICES.map((choice) => <label key={choice.id} className={user.startPage === choice.id ? "marker-option marker-option--active" : "marker-option"}>
+          <input type="radio" name="start-page" value={choice.id} checked={user.startPage === choice.id} onChange={() => void savePreference({ startPage: choice.id })} />
+          <span className="marker-option__copy"><strong>{t(choice.label)}</strong><small>{t(choice.detail)}</small></span>
         </label>)}
       </fieldset>
     </SettingsSection>

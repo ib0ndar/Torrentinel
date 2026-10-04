@@ -4,6 +4,7 @@ import { moveRowFocus, useKeyboardShortcuts } from "../hooks/useKeyboardShortcut
 import { useTrackers } from "../hooks/useTrackers";
 import type { WorkspaceData } from "../hooks/useWorkspaceData";
 import { useDialog } from "../components/Dialogs";
+import { CollectionEditor } from "../components/CollectionsNavigation";
 import { Icon } from "../components/Icon";
 import { MenuButton, type MenuItem } from "../components/Menu";
 import { Drawer, DrawerActions, EmptyState, Field, FilterTabs, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, SubscriptionTypeIcon, TrackerTag } from "../components/UI";
@@ -23,7 +24,7 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
   const { collections, collectionsLoaded, selectedId, subscriptions, loading, loadCollections, refresh, filter, setFilter, sort, setSort, page, setPage, total, pageCount } = data;
   const [search, setSearch] = useState(data.search);
   const sentSearch = useRef(data.search);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false), [editOpen, setEditOpen] = useState(false);
   const [selectedSubscription, setSelectedSubscription] = useState<string | null>(null);
   const [savingSize, setSavingSize] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -38,14 +39,6 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
   const selected = collections.find((collection) => collection.id === selectedId);
   useKeyboardShortcuts({ "?": onShowShortcuts, j: () => moveRowFocus(".subscription-open", 1), k: () => moveRowFocus(".subscription-open", -1),
     ...selected ? { "/": () => searchRef.current?.focus(), a: () => setCreateOpen(true) } : {} });
-  async function renameCollection() {
-    if (!selected) return;
-    const name = (await dialog.prompt({ eyebrow: t("Edit collection"), title: t("Rename collection"), description: t("Choose a short name that makes this collection easy to find."),
-      inputLabel: t("Collection name"), initialValue: selected.name, maxLength: 80, confirmLabel: t("Rename") }))?.trim();
-    if (!name || name === selected.name) return;
-    try { await api(`/api/collections/${selected.id}`, { method: "PATCH", ...jsonBody({ name }) }); await loadCollections(); notify(t("Collection renamed")); }
-    catch (error) { notify(errorMessage(error), "bad"); }
-  }
   async function deleteCollection() {
     if (!selected) return;
     if (!await dialog.confirm({ eyebrow: t("Delete collection"), title: t("Delete “{name}”?", { name: selected.name }),
@@ -72,12 +65,18 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
   }
   const unread = Boolean(selected?.unreadCount);
   const collectionActions: MenuItem[] = [...unread ? [{ id: "read", label: t("Mark all read"), icon: "check", onSelect: () => void markCollectionRead() } satisfies MenuItem] : [],
-    { id: "rename", label: t("Rename collection"), icon: "edit", onSelect: () => void renameCollection() }, { id: "delete", label: t("Delete collection"), icon: "trash", tone: "danger", onSelect: () => void deleteCollection() }];
+    { id: "edit", label: t("Edit collection"), icon: "edit", onSelect: () => setEditOpen(true) }, { id: "delete", label: t("Delete collection"), icon: "trash", tone: "danger", onSelect: () => void deleteCollection() }];
   // Navigation is only useful with more than one page; the page size stays reachable below the list.
   const paged = user.paginationEnabled && pageCount > 1;
+  const showAll = <button className="button button--quiet" onClick={() => setFilter("all")}>{t("Show all")}</button>;
+  // An empty Unread or Errors view (often the one a collection opens with) is good news rather than a failed search.
+  const empty = !selected?.subscriptionCount ? { icon: "monitor", title: "No subscriptions yet", text: "Add a direct tracker link or a rule to begin monitoring.", action: <button className="button button--primary" onClick={() => setCreateOpen(true)}>{t("Add subscription")}</button> } as const
+    : !data.search && filter === "unread" ? { icon: "check", title: "No unread subscriptions", text: "New changes in this collection will appear here.", action: showAll } as const
+    : !data.search && filter === "errors" ? { icon: "check", title: "No errors", text: "No subscription in this collection needs attention.", action: showAll } as const
+    : { icon: "monitor", title: "Nothing matches this view", text: "Try a different status filter or search.", action: undefined } as const;
   return <div className="workspace">
     <section className="subscription-pane">{selected ? <>
-      <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions">{unread && <button className="button button--quiet header-action header-read" onClick={() => void markCollectionRead()}><Icon name="check" size={16} />{t("Mark all read")}</button>}<button className="icon-button header-action" aria-label={t("Rename collection")} title={t("Rename collection")} onClick={() => void renameCollection()}><Icon name="edit" /></button><button className="icon-button icon-button--danger header-action" aria-label={t("Delete collection")} title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button>
+      <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><h1>{selected.name}</h1></div><div className="header-actions">{unread && <button className="button button--quiet header-action header-read" onClick={() => void markCollectionRead()}><Icon name="check" size={16} />{t("Mark all read")}</button>}<button className="icon-button header-action" aria-label={t("Edit collection")} title={t("Edit collection")} onClick={() => setEditOpen(true)}><Icon name="edit" /></button><button className="icon-button icon-button--danger header-action" aria-label={t("Delete collection")} title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button><button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button>
         <MenuButton className="icon-button header-more" triggerLabel={t("Collection actions")} menuLabel={t("Collection actions")} items={collectionActions}><Icon name="more" /></MenuButton></div></header>
       <div className="list-toolbar"><FilterTabs label={t("Filter subscriptions")} options={MONITOR_FILTERS.map((name) => ({ value: name, label: t(capitalize(name)), count: FILTER_COUNTS[name](selected), alert: name === "errors" }))} value={filter} onChange={setFilter} />
         <div className="list-toolbar__controls"><label className="sort-picker" title={t("Sort")}><Icon name="sort" size={15} /><select aria-label={t("Sort")} value={sort} onChange={(event) => setSort(event.target.value as MonitorSort)}>{MONITOR_SORTS.map((value) => <option key={value} value={value}>{t(SORT_LABELS[value])}</option>)}</select></label>
@@ -87,7 +86,7 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
       </nav>}
       <div className="subscription-head"><span>{t("Subscription")}</span><span>{t("Source")}</span><span>{t("Last change")}</span><span>{t("Status")}</span></div>
       <div className="subscription-list" data-focus-list>{loading ? <ListSkeleton /> : subscriptions.map((item, index) => <SubscriptionRow key={item.id} item={item} index={index} onOpen={() => setSelectedSubscription(item.id)} />)}
-        {!loading && subscriptions.length === 0 && <EmptyState icon="monitor" title={t(selected.subscriptionCount ? "Nothing matches this view" : "No subscriptions yet")} text={t(selected.subscriptionCount ? "Try a different status filter or search." : "Add a direct tracker link or a rule to begin monitoring.")} action={!selected.subscriptionCount ? <button className="button button--primary" onClick={() => setCreateOpen(true)}>{t("Add subscription")}</button> : undefined} />}
+        {!loading && subscriptions.length === 0 && <EmptyState icon={empty.icon} title={t(empty.title)} text={t(empty.text)} action={empty.action} />}
       </div>
       {user.paginationEnabled && total > 0 && <nav className="pagination pagination--bottom" aria-label={t("Bottom pagination")}>
         <label className="pagination-size-picker"><span>{t("Entries per page")}</span><select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
@@ -95,6 +94,7 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
       </nav>}
     </> : !collectionsLoaded || collections.length ? <ListSkeleton /> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={onNewCollection}>{t("New collection")}</button>} />}</section>
     {createOpen && selected && <CreateSubscription collection={selected} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); setPage(1); await refresh(); }} notify={notify} />}
+    {editOpen && selected && <CollectionEditor collection={selected} onClose={() => setEditOpen(false)} onSaved={async () => { await loadCollections(); setEditOpen(false); }} notify={notify} />}
     {selectedSubscription && <SubscriptionInspector key={selectedSubscription} id={selectedSubscription} collections={collections} onClose={() => setSelectedSubscription(null)} onChanged={refresh} notify={notify} />}
   </div>;
 }

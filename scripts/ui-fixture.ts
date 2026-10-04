@@ -30,10 +30,11 @@ const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOSt
 const TRACKERS = ["rutracker", "kinozal", "rutor"] as const;
 const trackerUrl = (tracker: (typeof TRACKERS)[number], id: number) => tracker === "rutracker" ? `https://rutracker.org/forum/viewtopic.php?t=${id}` : tracker === "kinozal" ? `https://kinozal.tv/details.php?id=${id}` : `https://rutor.info/torrent/${id}`;
 
-// Collections "series", "films", "docs" and "archive" (34 entries, two pages) plus the admin's Inbox.
+// Collections "series", "films" (opens on Errors, which is empty), "docs" (opens on Unread) and "archive"
+// (34 entries, two pages) plus the admin's Inbox.
 db.transaction(() => {
-  const collections = [["series", "Series 2026"], ["films", "Films"], ["docs", "Documentaries"], ["archive", "Archive"]];
-  for (const [id, name] of collections) db.prepare("INSERT INTO collections (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(id, userId, name, ago(5000), ago(5000));
+  const collections = [["series", "Series 2026", "all"], ["films", "Films", "errors"], ["docs", "Documentaries", "unread"], ["archive", "Archive", "all"]];
+  for (const [id, name, defaultFilter] of collections) db.prepare("INSERT INTO collections (id, user_id, name, default_filter, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(id, userId, name, defaultFilter, ago(5000), ago(5000));
   const sub = db.prepare(`INSERT INTO subscriptions (id, user_id, collection_id, type, name, direct_url, required_terms, ignored_terms, enabled, initialized, last_checked_at, last_changed_at, last_error, current_fingerprint, current_snapshot, manual_unread, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fp', ?, ?, ?, ?)`);
   const track = db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, ?)");

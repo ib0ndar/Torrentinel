@@ -4,7 +4,7 @@ import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
 import { config } from "./config.js";
 import type { AuthUser, TrackerMarkerStyle } from "./types.js";
-import { passwordChangeReason, themePreference } from "./types.js";
+import { passwordChangeReason, startPagePreference, themePreference } from "./types.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -30,6 +30,7 @@ interface UserRow {
   pagination_enabled: number;
   page_size: number;
   theme: string;
+  start_page: string;
 }
 
 function tokenHash(token: string): string {
@@ -48,6 +49,7 @@ function toAuthUser(row: UserRow): AuthUser {
     paginationEnabled: Boolean(row.pagination_enabled),
     pageSize: row.page_size,
     theme: themePreference(row.theme),
+    startPage: startPagePreference(row.start_page),
   };
 }
 
@@ -60,7 +62,7 @@ export function registerAuth(app: FastifyInstance, db: SqliteDatabase): void {
     if (!token) return;
 
     const row = db.prepare(`
-      SELECT u.id, u.username, u.is_admin, u.disabled, u.must_change_password, u.tracker_marker_style, u.language, u.pagination_enabled, u.page_size, u.theme
+      SELECT u.id, u.username, u.is_admin, u.disabled, u.must_change_password, u.tracker_marker_style, u.language, u.pagination_enabled, u.page_size, u.theme, u.start_page
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ? AND s.expires_at > ?

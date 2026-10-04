@@ -14,7 +14,7 @@ vi.mock("../api", async (original) => ({ ...await original<object>(), api: vi.fn
 afterEach(() => { vi.resetAllMocks(); setLanguage("en"); });
 it("shows and saves the default page-size dropdown even with pagination disabled", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 50, theme: "sentinel" };
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 50, theme: "sentinel", startPage: "monitor" };
   vi.mocked(api).mockImplementation(async (path, init) => path === "/api/telegram" ? { telegram: { configured: false, linked: false } }
     : path === "/api/trackers" ? { trackers: [] } : { user: { ...user, ...JSON.parse(String(init?.body)) } });
   const container = document.createElement("div"); document.body.append(container);
@@ -40,7 +40,7 @@ it("shows and saves the default page-size dropdown even with pagination disabled
 });
 it("previews a chosen theme immediately, saves it per account and reverts if saving fails", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 50, theme: "sentinel" };
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 50, theme: "sentinel", startPage: "monitor" };
   let failSave = false;
   vi.mocked(api).mockImplementation(async (path, init) => {
     if (path === "/api/telegram") return { telegram: { configured: false, linked: false } };
@@ -75,8 +75,46 @@ it("previews a chosen theme immediately, saves it per account and reverts if sav
     expect(container.querySelector(".theme-options")?.textContent).toContain("Дневной свет");
   } finally { await act(async () => root.unmount()); container.remove(); applyTheme("sentinel"); }
 });
+it("saves the start page per account and keeps the saved choice when saving fails", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 50, theme: "sentinel", startPage: "monitor" };
+  let failSave = false;
+  vi.mocked(api).mockImplementation(async (path, init) => {
+    if (path === "/api/telegram") return { telegram: { configured: false, linked: false } };
+    if (path === "/api/trackers") return { trackers: [] };
+    if (failSave) throw new Error("Server unavailable");
+    return { user: { ...user, ...JSON.parse(String(init?.body)) } };
+  });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), onUserChange = vi.fn(), notify = vi.fn();
+  const render = (current: User) => act(async () => root.render(<DialogProvider><Settings user={current} onUserChange={onUserChange} notify={notify} /></DialogProvider>));
+  const section = () => container.querySelector<HTMLElement>("#start-page")!;
+  const options = () => [...section().querySelectorAll<HTMLInputElement>("input[type=radio]")];
+  try {
+    await render(user);
+    expect(section().querySelector("legend")?.textContent).toBe("Page to open");
+    expect(options().map((input) => [input.value, input.checked, input.closest("label")?.textContent])).toEqual([
+      ["monitor", true, "MonitorYour last used collection"], ["activity", false, "ActivityUnread changes across all collections"]]);
+    await act(async () => options()[1].click());
+    expect(api).toHaveBeenCalledWith("/api/settings/preferences", expect.objectContaining({ method: "PUT", body: JSON.stringify({ startPage: "activity" }) }));
+    expect(onUserChange).toHaveBeenCalledWith(expect.objectContaining({ startPage: "activity", theme: "sentinel", pageSize: 50 }));
+    expect(notify).toHaveBeenLastCalledWith("Preference saved");
 
-const member: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 20, theme: "sentinel" };
+    await render({ ...user, startPage: "activity" });
+    expect(options().map((input) => input.checked)).toEqual([false, true]);
+    expect(section().querySelector(".marker-option--active input")?.getAttribute("value")).toBe("activity");
+    failSave = true;
+    await act(async () => options()[0].click());
+    expect(notify).toHaveBeenLastCalledWith("Server unavailable", "bad");
+    expect(options().map((input) => input.checked)).toEqual([false, true]);
+
+    await act(async () => setLanguage("ru"));
+    expect(section().querySelector("h2")?.textContent).toBe("Начальная страница");
+    expect(section().textContent).toContain("Непрочитанные изменения во всех коллекциях");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+const member: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: true, pageSize: 20, theme: "sentinel", startPage: "monitor" };
 const type = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
 function tracker(key: "kinozal" | "rutracker", options: Partial<Tracker> = {}): Tracker {
   const globalBaseUrl = key === "kinozal" ? "https://kinozal.tv" : "https://rutracker.org";
@@ -102,11 +140,11 @@ it("links every section from the shortcuts and states how each section saves", a
   const { container, cleanup } = await renderSettings();
   try {
     const links = [...container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Settings sections"] a')];
-    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["Account", "#account"], ["Language", "#language"], ["Appearance", "#appearance"], ["Pagination", "#pagination"],
+    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["Account", "#account"], ["Language", "#language"], ["Appearance", "#appearance"], ["Start page", "#start-page"], ["Pagination", "#pagination"],
       ["Source markers", "#source-markers"], ["Telegram bot", "#telegram-bot"], ["Tracker access", "#tracker-access"]]);
     const sections = [...container.querySelectorAll<HTMLElement>("section.settings-section")];
     expect(sections.map((section) => [section.id, section.querySelector("h2")?.textContent, section.querySelector(".save-note")?.textContent])).toEqual([
-      ["account", "Account", "Save to apply"], ["language", "Language", "Saved automatically"], ["appearance", "Appearance", "Saved automatically"], ["pagination", "Pagination", "Saved automatically"],
+      ["account", "Account", "Save to apply"], ["language", "Language", "Saved automatically"], ["appearance", "Appearance", "Saved automatically"], ["start-page", "Start page", "Saved automatically"], ["pagination", "Pagination", "Saved automatically"],
       ["source-markers", "Source markers", "Saved automatically"], ["telegram-bot", "Telegram bot", "Save to apply"], ["tracker-access", "Tracker access", "Save to apply"]]);
     for (const link of links) expect(container.querySelector(link.getAttribute("href")!)?.getAttribute("aria-labelledby")).toBe(`${link.getAttribute("href")!.slice(1)}-heading`);
     await act(async () => setLanguage("ru"));

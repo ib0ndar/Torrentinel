@@ -9,7 +9,7 @@ it("explains the password change for the first-run administrator and for members
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container), onSignOut = vi.fn();
-  const base = { id: "u", mustChangePassword: true, language: "en" as const, trackerMarkerStyle: "icons" as const, paginationEnabled: false, pageSize: 20, theme: "sentinel" as const };
+  const base = { id: "u", mustChangePassword: true, language: "en" as const, trackerMarkerStyle: "icons" as const, paginationEnabled: false, pageSize: 20, theme: "sentinel" as const, startPage: "monitor" as const };
   try {
     await act(async () => root.render(<ChangePassword user={{ ...base, username: "admin", isAdmin: true }} onChanged={vi.fn()} onSignOut={onSignOut} notify={vi.fn()} />));
     expect(container.querySelector("h1")?.textContent).toBe("Secure the admin account.");
@@ -27,7 +27,7 @@ it("uses reset and temporary-password wording for administrators who are not on 
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
-  const admin = { id: "a", username: "root", isAdmin: true, mustChangePassword: true, language: "en" as const, trackerMarkerStyle: "icons" as const, paginationEnabled: false, pageSize: 20, theme: "sentinel" as const };
+  const admin = { id: "a", username: "root", isAdmin: true, mustChangePassword: true, language: "en" as const, trackerMarkerStyle: "icons" as const, paginationEnabled: false, pageSize: 20, theme: "sentinel" as const, startPage: "monitor" as const };
   const view = () => ({ eyebrow: container.querySelector(".eyebrow")?.textContent, title: container.querySelector("h1")?.textContent, text: container.querySelector(".password-panel > p:not(.eyebrow)")?.textContent, label: container.querySelector("label")?.textContent });
   try {
     await act(async () => root.render(<ChangePassword user={{ ...admin, passwordChangeReason: "reset" }} onChanged={vi.fn()} onSignOut={vi.fn()} notify={vi.fn()} />));

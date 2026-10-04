@@ -5,7 +5,7 @@ import { useI18n } from "../../i18n";
 // Stable anchors for the shortcuts; "auto" sections save on change, the others with their own button.
 export const SETTINGS_SECTIONS = [
   { id: "account", title: "Account", auto: false }, { id: "language", title: "Language", auto: true }, { id: "appearance", title: "Appearance", auto: true },
-  { id: "pagination", title: "Pagination", auto: true }, { id: "source-markers", title: "Source markers", auto: true },
+  { id: "start-page", title: "Start page", auto: true }, { id: "pagination", title: "Pagination", auto: true }, { id: "source-markers", title: "Source markers", auto: true },
   { id: "telegram-bot", title: "Telegram bot", auto: false }, { id: "tracker-access", title: "Tracker access", auto: false },
 ] as const;
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];

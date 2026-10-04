@@ -4,7 +4,7 @@ import { api, ApiError, onPasswordChangeRequired, onSessionExpired, PASSWORD_CHA
 import { useSchedulerStatus } from "./hooks/useSchedulerStatus";
 import { TrackersProvider } from "./hooks/useTrackers";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
-import { CollectionsNavigation, NewCollection } from "./components/CollectionsNavigation";
+import { CollectionEditor, CollectionsNavigation } from "./components/CollectionsNavigation";
 import { DialogProvider } from "./components/Dialogs";
 import { CheckActivityContext, TrackerMarkerStyleContext } from "./components/contexts";
 import { Icon, type IconName } from "./components/Icon";
@@ -19,7 +19,7 @@ import { Settings } from "./pages/Settings";
 import { Workspace } from "./pages/Workspace";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
-import { activityPath, adminPath, DEFAULT_MONITOR_VIEW, isPlainClick, monitorPath, type MonitorView, type Navigate, parseRoute, storeCollectionId, storedCollectionId } from "./routing";
+import { activityPath, adminPath, collectionDefaultFilter, DEFAULT_MONITOR_VIEW, isPlainClick, MONITOR_HOME, monitorPath, type MonitorView, type Navigate, parseRoute, type Route, storeCollectionId, storedCollectionId } from "./routing";
 import { applyTheme } from "./theme";
 import { entryKey, newEntryState, rememberScroll, replacedEntryState, restoreScroll, savedScroll } from "./scrollMemory";
 import type { Collection, Notify, User } from "./types";
@@ -29,6 +29,7 @@ type BrowserLocation = { pathname: string; search: string; restored: boolean };
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
 const RELEASE_URL = `https://github.com/ib0ndar/Torrentinel/releases/tag/v${APP_VERSION}`;
+const UNRESOLVED_MONITOR: Route = { name: "monitor", view: DEFAULT_MONITOR_VIEW, explicit: false };
 
 export default function App() {
   const { t } = useI18n();
@@ -54,7 +55,7 @@ export default function App() {
     setUser((current) => current && !current.mustChangePassword ? { ...current, mustChangePassword: true } : current);
     notify(t(PASSWORD_CHANGE_MESSAGE), "bad");
   }), [notify, t]);
-  async function signOut() { try { await api("/api/auth/logout", { method: "POST" }); updateUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
+  async function signOut() { try { await api("/api/auth/logout", { method: "POST" }); updateUser(null); navigate("/", { replace: true }); } catch (error) { notify(errorMessage(error), "bad"); } }
   useEffect(() => {
     api<{ user: User }>("/api/auth/me").then(({ user: current }) => updateUser(current)).catch((error) => {
       if (error instanceof ApiError && error.status === 401) updateUser(null); else notify(errorMessage(error), "bad");
@@ -71,8 +72,13 @@ export default function App() {
 function AppShell({ user, setUser, notify, location, navigate }: { user: User; setUser: (value: User | null) => void; notify: Notify; location: BrowserLocation; navigate: Navigate }) {
   const { t } = useI18n();
   const parsed = parseRoute(location.pathname, location.search);
-  // Administration is administrator-only; others get the Monitor (and its URL) instead.
-  const route = parsed.name === "admin" && !user.isAdmin ? parseRoute("/", "") : parsed;
+  // "/" and unknown addresses open the start page. Administration is administrator-only; others get
+  // the Monitor (and its URL) instead.
+  const home = parsed.name === "home";
+  const route: Route = home ? (user.startPage === "activity" ? { name: "activity", filter: "unread" } : UNRESOLVED_MONITOR)
+    : parsed.name === "admin" && !user.isAdmin ? UNRESOLVED_MONITOR : parsed;
+  const startRedirect = home && route.name === "activity" ? activityPath(route.filter) : null;
+  useLayoutEffect(() => { if (startRedirect) navigate(startRedirect, { replace: true }); }, [startRedirect, navigate]);
   const monitorVisible = route.name === "monitor";
   const { status, intervalMinutes, checking, trackCheck } = useSchedulerStatus(location.pathname);
   // The last Monitor view is kept while other pages are open, so Monitor returns to it.
@@ -82,11 +88,14 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   const data = useWorkspaceData(notify, user.paginationEnabled, user.pageSize, monitorVisible, {
     view: route.name === "monitor" && route.explicit ? route.view : remembered,
     preferredCollectionIds: [lastMonitorView?.collectionId, storedId],
+    // Monitor returns to the last view shown; otherwise the collection the app picks opens in its default filter.
+    applyCollectionDefault: !(route.name === "monitor" && route.explicit) && !lastMonitorView,
     onViewChange: (view, options) => { if (monitorVisible) navigate(monitorPath(view), options); else setLastMonitorView(view); },
   });
   const resolvedPath = data.collectionsLoaded ? monitorPath(data.view) : null, currentPath = location.pathname + location.search;
-  // "/", unknown or deleted collections and (for members) stale /admin addresses, including ones reached
-  // with Back/Forward, resolve to a collection without adding a history entry.
+  // "/", unknown addresses (with Monitor as the start page), "/collections", unknown or deleted collections and
+  // (for members) stale /admin addresses, including ones reached with Back/Forward, resolve to a collection
+  // without adding a history entry.
   useLayoutEffect(() => { if (monitorVisible && resolvedPath && resolvedPath !== currentPath) navigate(resolvedPath, { replace: true }); }, [monitorVisible, resolvedPath, currentPath, navigate]);
   // Another page starts at the top; filter, page and sort changes keep the position. Back/Forward and
   // reloads restore the entry's saved position, retrying while the list is still loading.
@@ -116,7 +125,10 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   }, [monitorVisible, resolvedPath, user.id]); // data.view is rebuilt every render; resolvedPath identifies it.
   const [newCollection, setNewCollection] = useState(false), [accountFocusRequest, setAccountFocusRequest] = useState(0), [shortcutsOpen, setShortcutsOpen] = useState(false);
   const showShortcuts = useCallback(() => setShortcutsOpen(true), []);
-  const collectionHref = (id: string) => monitorPath({ ...data.view, collectionId: id, page: 1 });
+  // Another collection opens in its default filter, keeping the search and sort; the open one keeps its view,
+  // so selecting it again does nothing.
+  const collectionHref = (id: string) => monitorVisible && id === data.selectedId ? monitorPath(data.view)
+    : monitorPath({ ...data.view, collectionId: id, filter: collectionDefaultFilter(data.collections.find((collection) => collection.id === id)), page: 1 });
   const collectionNavigation = {
     collections: data.collections,
     selectedId: monitorVisible ? data.selectedId : null,
@@ -127,7 +139,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   // Same unit as the Activity unread view: unread changes plus standalone "Mark unread" reminders.
   const unreadTotal = data.collections.reduce((sum, collection) => sum + collection.activityCount, 0);
   const loadCollections = useCallback(() => data.loadCollections().catch((error) => notify(errorMessage(error), "bad")), [data.loadCollections, notify]);
-  async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
+  async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); navigate("/", { replace: true }); } catch (error) { notify(errorMessage(error), "bad"); } }
   const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };
   const changePassword: MenuItem = { id: "change-password", label: t("Change password"), icon: "key", onSelect: () => { navigate("/settings"); setAccountFocusRequest((value) => value + 1); } };
   const shortcuts: MenuItem = { id: "shortcuts", label: t("Keyboard shortcuts"), icon: "keyboard", keyboardOnly: true, onSelect: showShortcuts };
@@ -141,7 +153,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   return <div className="app-shell">
     <aside className="app-nav">
       <div className="brand-lockup"><BrandMark size={28} scanning={checking} /><strong>Torrentinel</strong></div>
-      <nav><NavItem to={lastMonitorView ? monitorPath(lastMonitorView) : "/"} icon="monitor" label={t("Monitor")} active={monitorVisible} navigate={navigate} />
+      <nav><NavItem to={lastMonitorView ? monitorPath(lastMonitorView) : MONITOR_HOME} icon="monitor" label={t("Monitor")} active={monitorVisible} navigate={navigate} />
         <NavItem to="/activity" icon="activity" label={t("Activity")} active={route.name === "activity"} navigate={navigate} badge={unreadTotal} /></nav>
       <CollectionsNavigation {...collectionNavigation} className="collection-navigation--desktop" />
       <nav className="secondary-nav"><NavItem to="/settings" icon="sliders" label={t("Settings")} active={route.name === "settings"} navigate={navigate} />{user.isAdmin && <NavItem to="/admin" icon="users" label={t("Administration")} active={route.name === "admin"} navigate={navigate} />}</nav>
@@ -156,7 +168,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
       <CheckActivityContext.Provider value={trackCheck}>{page}</CheckActivityContext.Provider>
     </div>
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
-    {newCollection && <NewCollection onClose={() => setNewCollection(false)} onCreated={async (id) => { await data.loadCollections(); setNewCollection(false); navigate(monitorPath({ ...DEFAULT_MONITOR_VIEW, collectionId: id })); }} notify={notify} />}
+    {newCollection && <CollectionEditor onClose={() => setNewCollection(false)} onSaved={async (collection) => { await data.loadCollections(); setNewCollection(false); navigate(monitorPath({ ...DEFAULT_MONITOR_VIEW, collectionId: collection.id, filter: collectionDefaultFilter(collection) })); }} notify={notify} />}
   </div>;
 }
 // Mobile-only compact entry point to the collections strip outside Monitor.

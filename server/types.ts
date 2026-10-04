@@ -7,6 +7,16 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 export function themePreference(value: unknown): ThemePreference {
   return THEME_PREFERENCES.includes(value as ThemePreference) ? value as ThemePreference : "sentinel";
 }
+export const START_PAGES = ["monitor", "activity"] as const;
+export type StartPage = (typeof START_PAGES)[number];
+export function startPagePreference(value: unknown): StartPage {
+  return START_PAGES.includes(value as StartPage) ? value as StartPage : "monitor";
+}
+export const MONITOR_FILTERS = ["all", "unread", "errors"] as const;
+export type MonitorFilter = (typeof MONITOR_FILTERS)[number];
+export function monitorFilter(value: unknown): MonitorFilter {
+  return MONITOR_FILTERS.includes(value as MonitorFilter) ? value as MonitorFilter : "all";
+}
 
 export interface AuthUser {
   id: string;
@@ -20,6 +30,7 @@ export interface AuthUser {
   paginationEnabled: boolean;
   pageSize: number;
   theme: ThemePreference;
+  startPage: StartPage;
 }
 
 // users.must_change_password stores why a change is required. Any non-zero value still means "must change",

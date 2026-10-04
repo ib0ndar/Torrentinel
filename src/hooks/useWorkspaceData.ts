@@ -3,7 +3,7 @@ import { api } from "../api";
 import type { Collection, Notify, SubscriptionSummary } from "../types";
 import { errorMessage } from "../format";
 import { useVisibleInterval } from "./useVisibleInterval";
-import { DEFAULT_MONITOR_VIEW, type MonitorFilter, type MonitorSort, type MonitorView } from "../routing";
+import { collectionDefaultFilter, DEFAULT_MONITOR_VIEW, type MonitorFilter, type MonitorSort, type MonitorView } from "../routing";
 
 // With routing the view (collection, filter, search, page, sort) comes from the URL and changes are
 // reported back; without it the hook keeps the view in local state.
@@ -11,6 +11,8 @@ export interface WorkspaceRouting {
   view: MonitorView;
   onViewChange: (view: MonitorView, options?: { replace?: boolean }) => void;
   preferredCollectionIds?: Array<string | null | undefined>;
+  /** The view does not come from the address, so the collection opens in its default status filter. */
+  applyCollectionDefault?: boolean;
 }
 
 export function useWorkspaceData(notify: Notify, paginationEnabled = false, pageSize = 50, active = true, routing?: WorkspaceRouting) {
@@ -21,24 +23,33 @@ export function useWorkspaceData(notify: Notify, paginationEnabled = false, page
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [pageCount, setPageCount] = useState(1);
-  const requested = routing?.view ?? localView;
-  // Unknown or deleted collections fall back to the preferred ids, then the first collection.
+  const requested = routing?.view ?? localView, applyDefault = Boolean(routing?.applyCollectionDefault);
+  // When the app picks the collection (none, an unknown or a deleted one was requested, or the view does not
+  // come from the address) it falls back to the preferred ids, then the first collection, and opens it in its
+  // default status filter. Until the defaults are known nothing is requested with a guessed filter.
   const known = (id: string | null | undefined): id is string => Boolean(id) && collections.some((collection) => collection.id === id);
-  const view: MonitorView = !collectionsLoaded || known(requested.collectionId) ? requested
-    : { ...requested, page: 1, collectionId: routing?.preferredCollectionIds?.find(known) ?? collections[0]?.id ?? null };
+  const pickedId = known(requested.collectionId) ? requested.collectionId : routing?.preferredCollectionIds?.find(known) ?? collections[0]?.id ?? null;
+  const view: MonitorView = !collectionsLoaded ? applyDefault ? { ...requested, collectionId: null } : requested
+    : known(requested.collectionId) && !applyDefault ? requested
+    : { ...requested, page: 1, collectionId: pickedId, filter: collectionDefaultFilter(collections.find((collection) => collection.id === pickedId)) };
   const { collectionId: selectedId, filter, search, page, sort } = view;
   const selected = useRef<string | null>(null);
-  const latest = useRef({ view, routing });
+  const latest = useRef({ view, routing, collections });
   const collectionRequest = useRef<AbortController | null>(null);
   const subscriptionRequest = useRef<AbortController | null>(null);
-  useLayoutEffect(() => { latest.current = { view, routing }; });
+  useLayoutEffect(() => { latest.current = { view, routing, collections }; });
+  // Without routing the picked view becomes the local view, so a later change to the defaults does not move it.
+  const pickedLocally = !routing && collectionsLoaded && view.collectionId !== requested.collectionId;
+  useLayoutEffect(() => { if (pickedLocally) setLocalView(view); }, [pickedLocally, view.collectionId]); // view is rebuilt every render
 
   const changeView = useCallback((change: Partial<MonitorView>, options?: { replace?: boolean }) => {
     const next = { ...latest.current.view, ...change };
     if (latest.current.routing) latest.current.routing.onViewChange(next, options); else setLocalView(next);
   }, []);
+  // Another collection opens in its default filter.
   const setSelectedId = useCallback((id: string | null) => {
-    if (latest.current.view.collectionId !== id) changeView({ collectionId: id, page: 1 });
+    if (latest.current.view.collectionId === id) return;
+    changeView({ collectionId: id, page: 1, filter: collectionDefaultFilter(latest.current.collections.find((collection) => collection.id === id)) });
   }, [changeView]);
   // Clear the previous collection's rows before paint, then let the load effect fetch the new one.
   useLayoutEffect(() => {

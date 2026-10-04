@@ -7,18 +7,18 @@ import { parse, type RouteServices } from "./shared.js";
 import { AttemptLimiter, type AttemptRule } from "../attempt-limiter.js";
 import { forgetInitialAdminPassword } from "../initial-admin.js";
 import type { AuthUser } from "../types.js";
-import { passwordChangeReason, themePreference } from "../types.js";
+import { passwordChangeReason, startPagePreference, themePreference } from "../types.js";
 
 interface UserDbRow {
   id: string; username: string; password_hash: string; is_admin: number; disabled: number;
   must_change_password: number; tracker_marker_style: AuthUser["trackerMarkerStyle"];
-  language: AuthUser["language"]; pagination_enabled: number; page_size: number; theme: string;
+  language: AuthUser["language"]; pagination_enabled: number; page_size: number; theme: string; start_page: string;
 }
 export function serializeUser(row: UserDbRow): AuthUser {
   return { id: row.id, username: row.username, isAdmin: Boolean(row.is_admin), mustChangePassword: Boolean(row.must_change_password),
     passwordChangeReason: passwordChangeReason(row.must_change_password),
     trackerMarkerStyle: row.tracker_marker_style, language: row.language, paginationEnabled: Boolean(row.pagination_enabled), pageSize: row.page_size,
-    theme: themePreference(row.theme) };
+    theme: themePreference(row.theme), startPage: startPagePreference(row.start_page) };
 }
 // Compared against when the account is missing or disabled, so every rejected sign-in takes the same time.
 const TIMING_EQUALIZER_HASH = "$2b$12$DuJBLolBSUOuNLDxFp9M8uQ8R6XP0BlY4f8OJDgRKFXKXE2yIOzf.";

@@ -102,6 +102,25 @@ describe("server-side collection paging and filtering", () => {
     const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "admin", password: "admin" } });
     expect(login.json().user.theme).toBe("sentinel");
   });
+  it("persists the per-user start page without touching other preferences", async () => {
+    const { app, db } = services;
+    const me = async () => (await app.inject({ url: "/api/auth/me", headers: { cookie } })).json().user;
+    const save = (payload: Record<string, unknown>) => app.inject({ method: "PUT", url: "/api/settings/preferences", headers: { cookie }, payload });
+    expect((await me()).startPage).toBe("monitor");
+    await save({ theme: "daylight", language: "ru" });
+    const updated = await save({ startPage: "activity" });
+    expect(updated.statusCode).toBe(200); expect(updated.json().user.startPage).toBe("activity");
+    expect(await me()).toMatchObject({ startPage: "activity", theme: "daylight", language: "ru", paginationEnabled: true, pageSize: 50 });
+    const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "admin", password: "admin" } });
+    expect(login.json().user.startPage).toBe("activity");
+    await save({ pageSize: 20 });
+    expect((await me()).startPage).toBe("activity");
+    for (const startPage of ["home", "", "ACTIVITY", null, 1]) expect((await save({ startPage })).statusCode).toBe(400);
+    expect((await me()).startPage).toBe("activity");
+    expect((await save({ startPage: "monitor" })).json().user.startPage).toBe("monitor");
+    db.prepare("UPDATE users SET start_page = 'retired-page' WHERE id = ?").run(userId);
+    expect((await me()).startPage).toBe("monitor");
+  });
 });
 
 describe("server-side collection sorting", () => {

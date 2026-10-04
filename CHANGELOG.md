@@ -2,6 +2,28 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.9.7] - 2026-10-04
+
+### Added
+
+- Choose a **start page** under **Settings → Start page**: Monitor (default) or Activity. It opens for `/` and unknown addresses, so it is what you see after signing in at the main address, after the first password change, and when the home-screen app starts. Addresses of a specific page, bookmarks and Back/Forward still open that page.
+- Each collection has a **default view**, All (default), Unread, or Errors, set when creating the collection or with **Edit collection**. A collection opens in its default view from the collection list, from `/` and the Monitor link, after it is created, and when it replaces a deleted collection. Changing the default keeps the current view on screen.
+- An empty Unread or Errors view says there is nothing unread or nothing needing attention and offers **Show all**, instead of suggesting a different filter or search.
+
+### Changed
+
+- Opening another collection uses that collection's default view instead of keeping the current status filter; search and sort still carry over. Selecting the collection that is already open no longer returns it to the first page.
+- **Rename collection** is now **Edit collection**, a panel with the name and the default view.
+- `/collections` opens Monitor in the last used collection whatever the start page, and the Monitor link uses it before a collection has been opened. Unknown addresses open the start page instead of Monitor.
+- Signing out returns to `/`, so the next sign-in opens the start page. When a session expires or is ended by someone else the address is kept, as before, so signing back in resumes there.
+- A deleted or unknown collection's address shows the replacement collection in its own default view instead of the filter in the address.
+- `GET /api/collections` returns `defaultFilter`; `POST /api/collections` accepts an optional `defaultFilter`, and `PATCH /api/collections/<id>` accepts `name`, `defaultFilter`, or both. `PUT /api/settings/preferences` accepts `startPage` (`monitor` or `activity`), and the signed-in user includes it.
+
+### Upgrade notes
+
+- Startup adds `users.start_page` (default `monitor`) and `collections.default_filter` (default `all`), so existing accounts keep opening Monitor and every collection opens on All. Earlier releases ignore both columns and run unchanged against an upgraded database.
+- Back up the database and application-data directory together before updating, as usual.
+
 ## [0.9.6] - 2026-10-04
 
 ### Security
@@ -534,7 +556,8 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
-[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.9.7...HEAD
+[0.9.7]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.7
 [0.9.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.6
 [0.9.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.5
 [0.9.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.1

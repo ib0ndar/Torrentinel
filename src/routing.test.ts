@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_TABS, adminPath, DEFAULT_DIAGNOSTICS_VIEW, parseRoute } from "./routing";
+import { ADMIN_TABS, adminPath, DEFAULT_DIAGNOSTICS_VIEW, DEFAULT_MONITOR_VIEW, MONITOR_HOME, monitorPath, parseRoute } from "./routing";
 
 const diagnostics = (path: string, search: string) => { const route = parseRoute(path, search); return route.name === "admin" ? route.diagnostics : undefined; };
 
@@ -8,7 +8,7 @@ describe("Administration routes", () => {
     for (const tab of ADMIN_TABS) expect(parseRoute(`/admin/${tab}`, "")).toEqual({ name: "admin", tab, explicit: true, diagnostics: DEFAULT_DIAGNOSTICS_VIEW });
     for (const path of ["/admin", "/admin/", "/admin/unknown", "/admin/users/extra"]) expect(parseRoute(path, "")).toEqual({ name: "admin", tab: "overview", explicit: false, diagnostics: DEFAULT_DIAGNOSTICS_VIEW });
     expect(parseRoute("/admin/users/", "")).toMatchObject({ tab: "users", explicit: true });
-    expect(parseRoute("/administration", "")).toMatchObject({ name: "monitor", explicit: false });
+    expect(parseRoute("/administration", "")).toEqual({ name: "home" });
   });
 
   it("reads Diagnostics filters and pages from the query and drops invalid values", () => {
@@ -35,5 +35,15 @@ describe("Administration routes", () => {
   it("keeps parsing Monitor pages as before", () => {
     expect(parseRoute("/collections/films", "?page=2")).toMatchObject({ name: "monitor", explicit: true, view: { collectionId: "films", page: 2 } });
     expect(parseRoute("/collections/films", "?page=0")).toMatchObject({ view: { page: 1 } });
+  });
+});
+
+describe("Start page and Monitor addresses", () => {
+  it("sends / and unknown addresses to the start page and keeps /collections on Monitor", () => {
+    for (const path of ["/", "/unknown", "/activity/", "/settings/extra", "/collections/films/extra", "/collection"]) expect(parseRoute(path, "?filter=unread")).toEqual({ name: "home" });
+    for (const path of ["/collections", "/collections/", "/collections/%E0%A4%A"]) expect(parseRoute(path, "?filter=unread")).toEqual({ name: "monitor", view: DEFAULT_MONITOR_VIEW, explicit: false });
+    expect(MONITOR_HOME).toBe("/collections");
+    expect(monitorPath({ ...DEFAULT_MONITOR_VIEW, filter: "unread" })).toBe("/collections");
+    expect(monitorPath({ ...DEFAULT_MONITOR_VIEW, collectionId: "films" })).toBe("/collections/films");
   });
 });

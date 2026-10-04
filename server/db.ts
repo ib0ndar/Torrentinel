@@ -368,6 +368,17 @@ function migrate(db: SqliteDatabase): void {
     // The API validates values and unknown stored values fall back to Sentinel.
     db.exec("ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'sentinel'");
   }
+  // Like theme, no CHECK constraint: the API validates values and unknown stored values fall back to Monitor.
+  if (!userColumns.some((column) => column.name === "start_page")) {
+    db.exec("ALTER TABLE users ADD COLUMN start_page TEXT NOT NULL DEFAULT 'monitor'");
+  }
+
+  // The status filter a collection opens with; unknown stored values fall back to All.
+  const collectionColumns = db.prepare("PRAGMA table_info(collections)")
+    .all() as Array<{ name: string }>;
+  if (!collectionColumns.some((column) => column.name === "default_filter")) {
+    db.exec("ALTER TABLE collections ADD COLUMN default_filter TEXT NOT NULL DEFAULT 'all'");
+  }
 
   const trackerStateColumns = db.prepare("PRAGMA table_info(subscription_tracker_state)")
     .all() as Array<{ name: string }>;

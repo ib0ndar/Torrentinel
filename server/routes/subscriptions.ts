@@ -2,7 +2,7 @@ import { z } from "zod";
 import { nowIso, type SqliteDatabase } from "../db.js";
 import { requireReadyUser } from "../auth.js";
 import { trackerRegistry } from "../trackers/index.js";
-import type { TrackerKey } from "../types.js";
+import { MONITOR_FILTERS, type TrackerKey } from "../types.js";
 import { adapterForUserUrl, idParams, jsonArray, jsonObject, ownsCollection, ownsSubscription, parse, trackerKeySchema, urlSchema, type RouteServices } from "./shared.js";
 
 const subscriptionCreateSchema = z.discriminatedUnion("type", [
@@ -26,7 +26,7 @@ const SUBSCRIPTION_ORDER = {
 export function registerSubscriptionRoutes({ app, db, scheduler, coverCache }: RouteServices): void {
   app.get("/api/subscriptions", { preHandler: requireReadyUser }, async (request, reply) => {
     const query = parse(z.object({ collectionId: z.string().optional(), view: z.enum(["summary", "detail"]).default("detail"),
-      search: z.string().trim().max(200).default(""), filter: z.enum(["all", "unread", "errors"]).default("all"), sort: z.enum(["changed", "name", "attention"]).default("changed"),
+      search: z.string().trim().max(200).default(""), filter: z.enum(MONITOR_FILTERS).default("all"), sort: z.enum(["changed", "name", "attention"]).default("changed"),
       page: z.coerce.number().int().min(1).max(1_000_000).optional(), pageSize: z.coerce.number().int().min(1).max(200).optional() }), request.query, reply);
     if (!query || !request.user) return;
     const args: Array<string | number> = [request.user.id];

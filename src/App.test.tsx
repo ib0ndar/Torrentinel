@@ -16,7 +16,7 @@ it("keeps collections available across pages and returns to the chosen collectio
   vi.useFakeTimers();
   const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 0, unreadCount: 0, activityCount: 0 }));
   vi.mocked(api).mockImplementation(async (path) => {
-    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
     if (path === "/api/collections") return { collections };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
@@ -80,7 +80,7 @@ it("returns to sign-in with one clear message when the session expires during ba
   let expired = false;
   vi.mocked(api).mockImplementation(async (path) => {
     if (expired) { expireSession(); throw new SessionExpiredError(); }
-    if (path === "/api/auth/me") return { user: { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/auth/me") return { user: { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
     if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0, activityCount: 0 }] };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
@@ -98,6 +98,8 @@ it("returns to sign-in with one clear message when the session expires during ba
     const toasts = [...container.querySelectorAll(".toast")];
     expect(toasts.map((toast) => toast.textContent)).toEqual(["Your session has expired. Sign in again."]);
     expect(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!.value).toBe("alice");
+    // An ended session keeps the address, so signing back in resumes there.
+    expect(window.location.pathname).toBe("/collections/films");
   } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
 });
 
@@ -107,7 +109,7 @@ it("explains why the session ended when an administrator reset the password", as
   let ended = false;
   vi.mocked(api).mockImplementation(async (path) => {
     if (ended) { expireSession("password-reset"); throw new SessionExpiredError("password-reset"); }
-    if (path === "/api/auth/me") return { user: { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/auth/me") return { user: { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
     if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0, activityCount: 0 }] };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
@@ -129,7 +131,7 @@ it("switches to the password form when a request reports that the password must 
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();
   let reset = false;
-  const user = { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  const user = { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" };
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === "/api/auth/change-password") { reset = false; return { user }; }
     if (path === "/api/auth/logout") return {};
@@ -188,7 +190,7 @@ it("shows sign-in without a session-expired message for a visitor who was never 
 it("opens the account menu, closes it with Escape or an outside click, and signs out from it", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.mocked(api).mockImplementation(async (path) => {
-    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
     if (path === "/api/collections") return { collections: [] };
     if (path === "/api/auth/logout") return {};
@@ -243,10 +245,10 @@ function memoryStorage(): Storage {
   return { get length() { return values.size; }, clear: () => values.clear(), getItem: (key) => values.get(key) ?? null, key: (index) => [...values.keys()][index] ?? null,
     removeItem: (key) => { values.delete(key); }, setItem: (key, value) => { values.set(key, String(value)); } };
 }
-function mockMonitor(options: { paginationEnabled?: boolean; unread?: number } = {}) {
-  const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 60, unreadCount: options.unread ?? 0, activityCount: options.unread ?? 0 }));
+function mockMonitor(options: { paginationEnabled?: boolean; unread?: number; startPage?: "monitor" | "activity"; defaultFilters?: Record<string, string> } = {}) {
+  const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, defaultFilter: options.defaultFilters?.[name.toLowerCase()] ?? "all", subscriptionCount: 60, unreadCount: options.unread ?? 0, activityCount: options.unread ?? 0 }));
   vi.mocked(api).mockImplementation(async (path) => {
-    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: options.paginationEnabled ?? true, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/auth/me") return { user: { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: options.paginationEnabled ?? true, pageSize: 20, theme: "sentinel", startPage: options.startPage ?? "monitor" } };
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
     if (path === "/api/collections") return { collections };
     if (path.startsWith("/api/activity?")) return { events: [], total: 0, page: 1, pageCount: 1 };
@@ -312,17 +314,25 @@ it("restores the collection, filter, search, page and sort from the URL, includi
     expect(currentUrl()).toBe("/collections/books?filter=errors&sort=name");
     expectView("Errors", "1", "name");
 
-    // Collection links keep the filter, search and sort but start on the first page.
-    const films = [...container.querySelectorAll<HTMLAnchorElement>(".collection-navigation--desktop .collection-item")].find((link) => link.textContent?.includes("Films"))!;
-    expect(films.getAttribute("href")).toBe("/collections/films?filter=errors&sort=name");
-    await act(async () => films.click());
+    // The open collection's link keeps its view, so selecting it again does nothing.
+    await act(async () => container.querySelector<HTMLButtonElement>('.pagination--top button[aria-label="Next page"]')!.click());
+    expect(currentUrl()).toBe("/collections/books?filter=errors&page=2&sort=name");
+    const link = (name: string) => [...container.querySelectorAll<HTMLAnchorElement>(".collection-navigation--desktop .collection-item")].find((item) => item.textContent?.includes(name))!;
+    expect(link("Books").getAttribute("href")).toBe("/collections/books?filter=errors&page=2&sort=name");
+    const entries = window.history.length;
+    await act(async () => link("Books").click());
+    expect(currentUrl()).toBe("/collections/books?filter=errors&page=2&sort=name");
+    expect(window.history.length).toBe(entries);
+    // Another collection opens in its default filter (All here) with the same search and sort, on the first page.
+    expect(link("Films").getAttribute("href")).toBe("/collections/films?sort=name");
+    await act(async () => link("Films").click());
     expect(container.querySelector("h1")?.textContent).toBe("Films");
-    expect(currentUrl()).toBe("/collections/films?filter=errors&sort=name");
-    expect(lastSubscriptionQuery().get("collectionId")).toBe("films");
+    expect(currentUrl()).toBe("/collections/films?sort=name");
+    expect(Object.fromEntries(lastSubscriptionQuery())).toMatchObject({ collectionId: "films", filter: "all", sort: "name", page: "1" });
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
-it("resolves / and unknown collections to the last used or first collection without adding history entries", async () => {
+it("resolves /, unknown addresses and unknown collections to the last used or first collection without adding history entries", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.stubGlobal("localStorage", memoryStorage());
   mockMonitor({ paginationEnabled: false });
@@ -336,17 +346,159 @@ it("resolves / and unknown collections to the last used or first collection with
     expect(container.querySelector("h1")?.textContent).toBe("Books");
     expect(window.history.length).toBe(start);
 
+    for (const address of ["/somewhere/else?filter=unread", "/collections"]) {
+      await act(async () => root.unmount());
+      window.history.replaceState({}, "", address);
+      root = createRoot(container);
+      await act(async () => root.render(<App />));
+      expect(currentUrl()).toBe("/collections/books");
+      expect(window.history.length).toBe(start);
+    }
+
     await act(async () => root.unmount());
     localStorage.clear();
+    // The collection picked in place of a deleted one opens in its own default filter.
     window.history.replaceState({}, "", "/collections/deleted?filter=unread&page=4");
     root = createRoot(container);
     await act(async () => root.render(<App />));
-    expect(currentUrl()).toBe("/collections/films?filter=unread");
+    expect(currentUrl()).toBe("/collections/films");
     expect(container.querySelector("h1")?.textContent).toBe("Films");
     expect(localStorage.getItem("torrentinel-last-collection:admin")).toBe("films");
     expect(window.history.length).toBe(start);
     expect(vi.mocked(api).mock.calls.filter(([path]) => path.includes("collectionId=deleted")).length).toBeLessThanOrEqual(1);
     expect(lastSubscriptionQuery().get("collectionId")).toBe("films");
+  } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); }
+});
+
+it("opens Activity for / and unknown addresses when it is the start page, while named addresses and the Monitor link still open their page", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.stubGlobal("localStorage", memoryStorage());
+  mockMonitor({ paginationEnabled: false, unread: 2, startPage: "activity" });
+  const container = document.createElement("div"); document.body.append(container);
+  let root = createRoot(container);
+  const heading = () => container.querySelector("h1")?.textContent;
+  const monitorLink = () => container.querySelector<HTMLAnchorElement>('.app-nav a[aria-label="Monitor"]')!;
+  const open = async (address: string) => {
+    await act(async () => root.unmount()); window.history.replaceState({}, "", address);
+    root = createRoot(container); await act(async () => root.render(<App />));
+  };
+  try {
+    localStorage.setItem("torrentinel-last-collection:admin", "books");
+    const start = window.history.length;
+    await open("/");
+    expect(currentUrl()).toBe("/activity");
+    expect(heading()).toBe("Activity");
+    expect(window.history.length).toBe(start);
+    expect(vi.mocked(api).mock.calls.some(([path]) => path.startsWith("/api/subscriptions?"))).toBe(false);
+    expect(monitorLink().getAttribute("href")).toBe("/collections");
+    expect(monitorLink().getAttribute("aria-current")).toBeNull();
+    await act(async () => monitorLink().click());
+    expect(currentUrl()).toBe("/collections/books");
+    expect(heading()).toBe("Books");
+    expect(window.history.length).toBe(start + 1);
+    await popState(() => window.history.back());
+    expect(currentUrl()).toBe("/activity");
+    expect(monitorLink().getAttribute("href")).toBe("/collections/books");
+
+    await open("/unknown/address?filter=errors");
+    expect(currentUrl()).toBe("/activity");
+    expect(heading()).toBe("Activity");
+    await open("/collections/films?filter=unread");
+    expect(currentUrl()).toBe("/collections/films?filter=unread");
+    expect(heading()).toBe("Films");
+    await open("/activity?filter=all");
+    expect(currentUrl()).toBe("/activity?filter=all");
+    await open("/settings");
+    expect(heading()).toBe("Settings page");
+  } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); }
+});
+
+it("signs out to / so that the next sign-in opens the start page", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  mockMonitor({ paginationEnabled: false, startPage: "activity" });
+  const base = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, init) => path === "/api/auth/logout" ? {} : base(path === "/api/auth/login" ? "/api/auth/me" : path, init));
+  window.history.replaceState({}, "", "/collections/films?filter=errors");
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const type = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
+  try {
+    await act(async () => root.render(<App />));
+    expect(currentUrl()).toBe("/collections/films?filter=errors");
+    expect(container.querySelector("h1")?.textContent).toBe("Films");
+    await act(async () => container.querySelector<HTMLButtonElement>(".account-button")!.click());
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((item) => item.textContent === "Sign out")!.click());
+    expect(container.querySelector(".login-form")).not.toBeNull();
+    expect(currentUrl()).toBe("/");
+    await act(async () => {
+      type(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!, "admin");
+      type(container.querySelector<HTMLInputElement>('input[autocomplete="current-password"]')!, "secret");
+    });
+    await act(async () => container.querySelector(".login-form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(vi.mocked(api)).toHaveBeenCalledWith("/api/auth/login", expect.objectContaining({ method: "POST" }));
+    expect(currentUrl()).toBe("/activity");
+    expect(container.querySelector("h1")?.textContent).toBe("Activity");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("opens a collection in its default filter from /, collection links, a deleted collection's fallback and a new collection, but not from an explicit address", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.stubGlobal("localStorage", memoryStorage());
+  mockMonitor({ paginationEnabled: false, defaultFilters: { books: "unread" } });
+  const base = vi.mocked(api).getMockImplementation()!, created: unknown[] = [];
+  vi.mocked(api).mockImplementation(async (path, init) => {
+    if (path === "/api/collections" && init?.method === "POST") {
+      const { name, defaultFilter } = JSON.parse(String(init.body)) as { name: string; defaultFilter: string };
+      const collection = { id: "series", name, defaultFilter, subscriptionCount: 0, unreadCount: 0, activityCount: 0, errorCount: 0 };
+      created.push(collection); return { collection };
+    }
+    if (path === "/api/collections") return { collections: [...(await base(path, init) as { collections: unknown[] }).collections, ...created] };
+    return base(path, init);
+  });
+  const container = document.createElement("div"); document.body.append(container);
+  let root = createRoot(container);
+  const heading = () => container.querySelector("h1")?.textContent;
+  const activeFilter = () => container.querySelector(".filter-tabs .active .filter-tabs__label")?.textContent;
+  const link = (name: string) => [...container.querySelectorAll<HTMLAnchorElement>(".collection-navigation--desktop .collection-item")].find((item) => item.textContent?.includes(name))!;
+  const filtersRequested = () => vi.mocked(api).mock.calls.filter(([path]) => path.startsWith("/api/subscriptions?")).map(([path]) => new URL(path, "http://test").searchParams.get("filter"));
+  const open = async (address: string) => {
+    await act(async () => root.unmount()); window.history.replaceState({}, "", address); vi.mocked(api).mockClear();
+    root = createRoot(container); await act(async () => root.render(<App />));
+  };
+  try {
+    localStorage.setItem("torrentinel-last-collection:admin", "books");
+    await open("/");
+    expect(currentUrl()).toBe("/collections/books?filter=unread");
+    expect([heading(), activeFilter()]).toEqual(["Books", "Unread"]);
+    // The list is only requested once the default is known.
+    expect(filtersRequested()).toEqual(["unread"]);
+
+    expect(link("Films").getAttribute("href")).toBe("/collections/films");
+    await act(async () => link("Films").click());
+    expect([currentUrl(), heading(), activeFilter()]).toEqual(["/collections/films", "Films", "All"]);
+    expect(link("Books").getAttribute("href")).toBe("/collections/books?filter=unread");
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")].find((button) => button.textContent?.startsWith("Errors"))!.click());
+    expect(link("Books").getAttribute("href")).toBe("/collections/books?filter=unread");
+
+    await open("/collections/books");
+    expect([currentUrl(), heading(), activeFilter()]).toEqual(["/collections/books", "Books", "All"]);
+    expect(filtersRequested()).toEqual(["all"]);
+
+    await open("/collections/deleted?filter=errors&page=3");
+    expect([currentUrl(), heading(), activeFilter()]).toEqual(["/collections/books?filter=unread", "Books", "Unread"]);
+
+    await act(async () => container.querySelector<HTMLButtonElement>('.collection-navigation--desktop button[aria-label="New collection"]')!.click());
+    const drawer = document.querySelector<HTMLElement>(".drawer")!;
+    const choices = [...drawer.querySelectorAll<HTMLInputElement>('input[name="default-filter"]')];
+    expect(choices.map((input) => [input.value, input.checked, input.closest("label")?.textContent])).toEqual([["all", true, "All"], ["unread", false, "Unread"], ["errors", false, "Errors"]]);
+    await act(async () => {
+      const name = drawer.querySelector<HTMLInputElement>('input[maxlength="80"]')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(name, "Series"); name.dispatchEvent(new Event("input", { bubbles: true }));
+      choices[1].click();
+    });
+    await act(async () => drawer.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(vi.mocked(api)).toHaveBeenCalledWith("/api/collections", expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Series", defaultFilter: "unread" }) }));
+    expect([currentUrl(), heading(), activeFilter()]).toEqual(["/collections/series?filter=unread", "Series", "Unread"]);
   } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); }
 });
 
@@ -415,7 +567,7 @@ it("scrolls to the top for another page, keeps the position for filter changes, 
 it("rewrites a stale /admin address reached with Back/Forward to the member's Monitor URL", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   mockMonitor({ paginationEnabled: false });
-  const member = { id: "member", username: "maria", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  const member = { id: "member", username: "maria", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" };
   const base = vi.mocked(api).getMockImplementation()!;
   vi.mocked(api).mockImplementation(async (path, init) => path === "/api/auth/me" ? { user: member } : base(path, init));
   window.history.replaceState({}, "", "/collections/books");
@@ -483,7 +635,7 @@ it("opens an accessible keyboard shortcuts dialog with ? on Monitor and Activity
 it("keeps sign-in errors until dismissed or replaced by signing in, and lifts the stack above the mobile navigation in the app", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   let attempts = 0;
-  const user = { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" };
+  const user = { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" };
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === "/api/auth/me") throw new ApiError("Authentication required", 401);
     if (path === "/api/auth/login") { if (++attempts < 3) throw new ApiError("Invalid username or password", 401); return { user }; }
