@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrowserContext, Page, Response } from "patchright";
-import { IntegratedBrowserClient } from "./core/transport/browser.js";
+import { IntegratedBrowserClient, topLevelNavigationAllowed } from "./core/transport/browser.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -181,6 +181,54 @@ describe("integrated browser client", () => {
   });
 });
 
+describe("integrated browser navigation guard", () => {
+  it("keeps the top-level page on trusted hosts", () => {
+    const trusted = (hostname: string) => hostname === "rutracker.org" || hostname.endsWith(".rutracker.org");
+    expect(topLevelNavigationAllowed("https://rutracker.org/forum/viewtopic.php?t=1", trusted)).toBe(true);
+    expect(topLevelNavigationAllowed("https://static.rutracker.org/", trusted)).toBe(true);
+    expect(topLevelNavigationAllowed("https://evil.example/exploit", trusted)).toBe(false);
+    expect(topLevelNavigationAllowed("http://127.0.0.1:8080/", trusted)).toBe(false);
+    expect(topLevelNavigationAllowed("file:///etc/passwd", trusted)).toBe(false);
+  });
+
+  it("routes Chrome through the egress proxy, pauses top-level documents and closes extra windows", async () => {
+    const fixture = fakeBrowser([["<html><h1 class='maintitle'>Ready</h1></html>"]]);
+    const launch = vi.fn(async (_profile: string, _proxyServer: string) => fixture.context);
+    const root = await tempDirectory();
+    await mkdir(join(profileDirectory(root, "guarded-session"), "Default"), { recursive: true });
+    await writeFile(join(profileDirectory(root, "guarded-session"), "Default", "Preferences"), JSON.stringify({ profile: { name: "kept" }, webrtc: { other: true } }));
+    const client = new IntegratedBrowserClient("guarded-session", {
+      launchContext: launch,
+      profileRoot: root,
+      timeoutMs: 50,
+      allowedHosts: ["rutracker.org"],
+    });
+    await client.get("https://mirror.example/forum/viewtopic.php?t=1");
+    expect(launch.mock.calls[0][1]).toMatch(/^socks5:\/\/127\.0\.0\.1:\d+$/u);
+    // WebRTC is limited through the profile preference, keeping the rest of the profile's settings.
+    expect(JSON.parse(await readFile(join(profileDirectory(root, "guarded-session"), "Default", "Preferences"), "utf8"))).toEqual({
+      profile: { name: "kept" }, webrtc: { other: true, ip_handling_policy: "disable_non_proxied_udp" },
+    });
+    expect(fixture.cdpSend).toHaveBeenCalledWith("Fetch.enable", { patterns: [{ urlPattern: "*", resourceType: "Document", requestStage: "Request" }] });
+
+    const allowedMirror = fixture.pauseRequest("https://mirror.example/forum/viewtopic.php?t=2", "Document");
+    const allowedTracker = fixture.pauseRequest("https://rutracker.org/forum/index.php", "Document");
+    const blockedNavigation = fixture.pauseRequest("https://8.8.8.8/elsewhere", "Document");
+    const frameDocument = fixture.pauseRequest("https://8.8.8.8/frame", "Document", "child-frame");
+    await vi.waitFor(() => expect(fixture.cdpSend.mock.calls.filter(([method]) => method.startsWith("Fetch.") && method !== "Fetch.enable")).toHaveLength(4));
+    const verdict = (requestId: string) => fixture.cdpSend.mock.calls.find(([, parameters]) => (parameters as { requestId?: string } | undefined)?.requestId === requestId);
+    expect(verdict(allowedMirror)?.[0]).toBe("Fetch.continueRequest");
+    expect(verdict(allowedTracker)?.[0]).toBe("Fetch.continueRequest");
+    expect(verdict(blockedNavigation)).toEqual(["Fetch.failRequest", { requestId: blockedNavigation, errorReason: "Aborted" }]);
+    expect(verdict(frameDocument)?.[0]).toBe("Fetch.continueRequest");
+
+    const popup = { isClosed: () => false, close: vi.fn(async () => undefined) };
+    fixture.openPage(popup);
+    expect(popup.close).toHaveBeenCalledOnce();
+    await client.close();
+  });
+});
+
 function fakeBrowser(navigations: Array<Array<string | Error>>) {
   let navigationIndex = -1;
   const bodyIndexes = navigations.map(() => 0);
@@ -252,13 +300,31 @@ function fakeBrowser(navigations: Array<Array<string | Error>>) {
     close: vi.fn(async () => undefined),
   } as unknown as Page;
   const close = vi.fn(async () => undefined);
+  let pausedRequestHandler: ((event: unknown) => void) | undefined;
+  const cdpSend = vi.fn(async (method: string, _parameters?: unknown) => (
+    method === "Page.getFrameTree" ? { frameTree: { frame: { id: "main-frame" } } } : {}
+  ));
+  const cdpSession = {
+    on: vi.fn((event: string, handler: (event: unknown) => void) => { if (event === "Fetch.requestPaused") pausedRequestHandler = handler; }),
+    send: cdpSend,
+  };
+  let pageListener: ((page: unknown) => void) | undefined;
   const context = {
     pages: () => [page],
+    on: vi.fn((event: string, listener: (page: unknown) => void) => { if (event === "page") pageListener = listener; }),
     newPage: vi.fn(async () => page),
+    newCDPSession: vi.fn(async () => cdpSession),
     cookies: vi.fn(async () => [{ name: "cf_clearance", value: "fixture" }]),
     close,
   } as unknown as BrowserContext;
-  return { context, goto, content: page.content, close, filledFields, clickSubmit };
+  let requestCount = 0;
+  const pauseRequest = (url: string, resourceType: string, frameId = "main-frame") => {
+    const requestId = `request-${requestCount += 1}`;
+    pausedRequestHandler?.({ requestId, request: { url }, resourceType, frameId });
+    return requestId;
+  };
+  const openPage = (opened: unknown) => pageListener?.(opened);
+  return { context, goto, content: page.content, close, filledFields, clickSubmit, cdpSend, pauseRequest, openPage };
 }
 
 async function tempDirectory(): Promise<string> {

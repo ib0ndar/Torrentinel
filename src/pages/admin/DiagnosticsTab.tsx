@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { Icon } from "../../components/Icon";
 import { PageNavigation } from "../../components/Pagination";
 import { ListSkeleton, TrackerTag } from "../../components/UI";
-import { deliveryMethodLabel, diagnosticStateClass, errorMessage, formatCoverageMinutes, formatDiagnosticDuration, relativeTime } from "../../format";
+import { deliveryMethodLabel, diagnosticStateClass, errorMessage, formatCoverageMinutes, formatDiagnosticDuration, relativeTime, webHref } from "../../format";
 import { useTrackerName, useTrackers } from "../../hooks/useTrackers";
 import { translate, useI18n } from "../../i18n";
 import type { DiagnosticsView, DiagnosticsViewChange } from "../../routing";
@@ -102,7 +102,7 @@ function TrackerLogsSection({ revision, refresh, notify, pageSize, onViewChange,
 
 function ObservationRow({ row }: { row: TrackerObservation }) {
   const { t, language } = useI18n(), trackerName = useTrackerName();
-  const url = row.resolvedUrl || row.requestedUrl, terms = typeof row.details.requiredTerms === "string" ? row.details.requiredTerms : undefined;
+  const url = webHref(row.resolvedUrl) || webHref(row.requestedUrl), terms = typeof row.details.requiredTerms === "string" ? row.details.requiredTerms : undefined;
   const feedCount = numericDetail(row.details.feedEntryCount), feedBaseline = row.details.feedCoverageStatus === "baseline";
   const feedSummary = row.operation === "feed-poll" && feedCount !== undefined ? feedBaseline ? t("{count} feed entries seeded · overlap unavailable", { count: feedCount })
     : [t("{count} feed entries scanned", { count: feedCount }), detailFragment(row.details.feedNewEntryCount, "new"), detailFragment(row.details.feedOverlapCount, "overlap")].filter(Boolean).join(" · ") : undefined;

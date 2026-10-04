@@ -2,11 +2,12 @@ import * as cheerio from "cheerio";
 import type { Release } from "../../../types.js";
 import { TrackerError } from "../../core/errors.js";
 import {
+  absoluteHttpUrl,
   absoluteImageUrl,
-  absoluteUrl,
   cleanText,
   externalIdFromUrl,
   labeledValue,
+  magnetLink,
   normalizeTrackerChangeMarker,
   uniqueReleases,
 } from "../../core/parsing.js";
@@ -28,8 +29,8 @@ export function parseRutorDirect(body: string, normalizedUrl: string): Release {
     title,
     url: normalizedUrl,
     coverUrl: absoluteImageUrl(coverSource, normalizedUrl),
-    magnet: $("a[href^='magnet:']").first().attr("href"),
-    torrentUrl: absoluteUrl($("a[href*='/download/']").first().attr("href"), normalizedUrl),
+    magnet: magnetLink($("a[href^='magnet:']").first().attr("href")),
+    torrentUrl: absoluteHttpUrl($("a[href*='/download/']").first().attr("href"), normalizedUrl),
     metadata: {
       snapshotVersion: rutorManifest.snapshotVersion,
       coverObserved: true,
@@ -48,15 +49,15 @@ export function parseRutorRecent(body: string, baseUrl: string): Release[] {
     const title = cleanText($(element).text());
     if (!href || !title || !/\/torrent\/\d+/i.test(href)) return;
     const row = $(element).closest("tr");
-    const url = absoluteUrl(href, baseUrl);
+    const url = absoluteHttpUrl(href, baseUrl);
     if (!url) return;
     releases.push({
       trackerKey: "rutor",
       externalId: externalIdFromUrl(url, [/\/torrent\/(\d+)/i]),
       title,
       url,
-      magnet: row.find("a[href^='magnet:']").first().attr("href"),
-      torrentUrl: absoluteUrl(row.find("a[href*='/download/']").first().attr("href"), baseUrl),
+      magnet: magnetLink(row.find("a[href^='magnet:']").first().attr("href")),
+      torrentUrl: absoluteHttpUrl(row.find("a[href*='/download/']").first().attr("href"), baseUrl),
       metadata: { size: cleanText(row.find("td").eq(-2).text()) || null },
     });
   });

@@ -8,6 +8,7 @@ import type { DiscoveryBatch, TrackerContext, TrackerPlugin } from "./trackers/c
 import { TrackerError } from "./trackers/core/errors.js";
 import type { TelegramService } from "./telegram.js";
 import { readTrackerCredentials, type SecretVault } from "./secrets.js";
+import { effectiveBaseUrl } from "./mirrors.js";
 import {
   DIAGNOSTIC_CLEANUP_INTERVAL_MS,
   finishSchedulerRun,
@@ -242,7 +243,7 @@ export class Scheduler {
 
   async checkSubscription(subscriptionId: string, userId: string): Promise<void> {
     if (this.stopping) return;
-    const direct = this.directRows("AND s.id = ? AND s.user_id = ?").get(subscriptionId, userId) as DirectRow | undefined;
+    const direct = this.directRow(subscriptionId, userId);
     if (direct) {
       const active = this.directChecks.get(subscriptionId);
       if (active) {
@@ -270,7 +271,7 @@ export class Scheduler {
   }
 
   private async pollDirect(status: SchedulerStatus, runId: string): Promise<void> {
-    const rows = this.directRows().all() as DirectRow[];
+    const rows = this.directRows();
     for (const row of rows) await this.checkDirect(row, status, runId);
   }
 
@@ -280,7 +281,7 @@ export class Scheduler {
     const work = Promise.resolve().then(async () => {
       // Rows selected before earlier network requests may have been edited or
       // removed. Never compare a fresh snapshot against a stale baseline.
-      const current = this.directRows("AND s.id = ? AND s.user_id = ?").get(row.id, row.user_id) as DirectRow | undefined;
+      const current = this.directRow(row.id, row.user_id);
       return current ? this.checkDirectOnce(current, status, runId) : "removed";
     }).finally(() => {
       this.directChecks.delete(row.id);
@@ -439,12 +440,13 @@ export class Scheduler {
   }
 
   private async pollRules(status: SchedulerStatus, runId: string, scope?: RuleScope): Promise<void> {
-    const rows = this.db.prepare(`
+    const rows: RuleRow[] = (this.db.prepare(`
       SELECT s.id, s.user_id, s.name, st.tracker_key, s.required_terms, s.ignored_terms,
-             COALESCE(utm.base_url, tm.base_url) AS base_url,
+             utm.base_url AS personal_base_url, tm.base_url AS global_base_url,
              COALESCE(sts.initialized, 0) AS tracker_initialized,
              sts.discovery_revision
       FROM subscriptions s
+      JOIN users u ON u.id = s.user_id AND u.disabled = 0
       JOIN subscription_trackers st ON st.subscription_id = s.id
       JOIN tracker_mirrors tm ON tm.tracker_key = st.tracker_key AND tm.enabled = 1
       LEFT JOIN user_tracker_mirrors utm ON utm.user_id = s.user_id AND utm.tracker_key = st.tracker_key
@@ -453,7 +455,7 @@ export class Scheduler {
       WHERE s.type = 'rule' AND s.enabled = 1
       ${scope ? "AND s.id = ? AND s.user_id = ?" : ""}
       ORDER BY s.user_id, st.tracker_key
-    `).all(...(scope ? [scope.subscriptionId, scope.userId] : [])) as RuleRow[];
+    `).all(...(scope ? [scope.subscriptionId, scope.userId] : [])) as Array<Omit<RuleRow, "base_url"> & MirrorColumns>).map(withBaseUrl);
 
     const groups = new Map<string, RuleRow[]>();
     for (const row of rows) {
@@ -795,24 +797,29 @@ export class Scheduler {
   }
 
   private directRowStillCurrent(row: DirectRow): boolean {
-    const latest = this.directRows("AND s.id = ? AND s.user_id = ?").get(row.id, row.user_id) as DirectRow | undefined;
+    const latest = this.directRow(row.id, row.user_id);
     return Boolean(latest && latest.direct_url === row.direct_url && latest.base_url === row.base_url
       && latest.tracker_key === row.tracker_key && latest.current_fingerprint === row.current_fingerprint
       && latest.initialized === row.initialized);
   }
 
-  private directRows(extraWhere = "") {
-    return this.db.prepare(`
+  private directRow(subscriptionId: string, userId: string): DirectRow | undefined {
+    return this.directRows("AND s.id = ? AND s.user_id = ?", subscriptionId, userId)[0];
+  }
+
+  private directRows(extraWhere = "", ...parameters: string[]): DirectRow[] {
+    return (this.db.prepare(`
       SELECT s.id, s.user_id, s.name, s.direct_url, s.initialized,
              s.current_fingerprint, s.current_snapshot, st.tracker_key,
-             COALESCE(utm.base_url, tm.base_url) AS base_url
+             utm.base_url AS personal_base_url, tm.base_url AS global_base_url
       FROM subscriptions s
+      JOIN users u ON u.id = s.user_id AND u.disabled = 0
       JOIN subscription_trackers st ON st.subscription_id = s.id
       JOIN tracker_mirrors tm ON tm.tracker_key = st.tracker_key AND tm.enabled = 1
       LEFT JOIN user_tracker_mirrors utm ON utm.user_id = s.user_id AND utm.tracker_key = st.tracker_key
       WHERE s.type = 'direct' AND s.enabled = 1 ${extraWhere}
       ORDER BY s.created_at
-    `);
+    `).all(...parameters) as Array<Omit<DirectRow, "base_url"> & MirrorColumns>).map(withBaseUrl);
   }
 
   private updateTrackerState(
@@ -873,6 +880,16 @@ export class Scheduler {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `).run(JSON.stringify(status), nowIso());
   }
+}
+
+interface MirrorColumns {
+  personal_base_url: string | null;
+  global_base_url: string;
+}
+
+function withBaseUrl<T extends { tracker_key: TrackerKey } & MirrorColumns>(row: T): Omit<T, keyof MirrorColumns> & { base_url: string } {
+  const { personal_base_url: personal, global_base_url: global, ...rest } = row;
+  return { ...rest, base_url: effectiveBaseUrl(row.tracker_key, personal, global) };
 }
 
 function ruleDiscoveryGroups(plugin: TrackerPlugin, rows: RuleRow[]): RuleDiscoveryGroup[] {

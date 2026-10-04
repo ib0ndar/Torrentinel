@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import type { RuleDiscoveryProvider, RuleDiscoveryQuery, TrackerContext } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
-import { cleanText, externalIdFromUrl, uniqueReleases } from "../../core/parsing.js";
+import { cleanText, externalIdFromUrl, magnetLink, uniqueReleases } from "../../core/parsing.js";
 import { CookieSession } from "../../core/transport/http.js";
 import type { Release } from "../../../types.js";
 import type { RutrackerSearchRecovery } from "./search.js";
@@ -62,7 +62,7 @@ export class RutrackerRuleDiscovery implements RuleDiscoveryProvider {
     $("entry").each((_, element) => {
       const title = cleanText($(element).find("title").first().text());
       const href = $(element).find("link[href]").first().attr("href") || "";
-      const magnet = $(element).find("link[rel='enclosure'][href^='magnet:']").first().attr("href") || undefined;
+      const magnet = magnetLink($(element).find("link[rel='enclosure'][href^='magnet:']").first().attr("href"));
       if (!title || !/[?&]t=\d+/i.test(href)) return;
       entries.push({
         externalId: externalIdFromUrl(href, [/[?&]t=(\d+)/i]),

@@ -1,12 +1,13 @@
 import { challengeDetected, TrackerError } from "../../core/errors.js";
 import { IntegratedBrowserClient, type BrowserPage } from "../../core/transport/browser.js";
 import type { HttpResult } from "../../core/transport/http.js";
-import { CookieSession } from "../../core/transport/http.js";
+import { CookieSession, type SeedCookie } from "../../core/transport/http.js";
 import type { TrackerContext } from "../../core/contracts.js";
+import { rutorManifest } from "./manifest.js";
 
 export interface RutorHttpSession {
   get(url: string, signal?: AbortSignal): Promise<HttpResult>;
-  seedCookies(cookies: Array<{ name: string; value: string }>, userAgent?: string): void;
+  seedCookies(cookies: SeedCookie[], userAgent?: string, sourceUrl?: string): void;
 }
 
 export interface RutorBrowserSession {
@@ -28,6 +29,7 @@ export class RutorTransport {
       new IntegratedBrowserClient(sessionId, {
         trackerKey: "rutor",
         trackerName: "Rutor",
+        allowedHosts: rutorManifest.canonicalHosts,
       })
     ),
   ) {}
@@ -72,7 +74,7 @@ export class RutorTransport {
       throw new TrackerError("challenge", "Rutor returned an interactive verification challenge", { trackerKey: "rutor" });
     }
     if (page.cookies || page.userAgent) {
-      session.http.seedCookies(page.cookies || [], page.userAgent);
+      session.http.seedCookies(page.cookies || [], page.userAgent, page.url);
     }
     return this.validate({
       body: page.body,

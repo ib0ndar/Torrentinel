@@ -3,8 +3,16 @@ import { nowIso } from "../db.js";
 import { requireReadyUser } from "../auth.js";
 import { listTrackers } from "../trackers/index.js";
 import { readTrackerCredentials, writeTrackerCredentials } from "../secrets.js";
-import { origin, parse, resolvedMirrors, trackerKeySchema, urlSchema, type RouteServices } from "./shared.js";
-import { THEME_PREFERENCES } from "../types.js";
+import { globalMirrorUrl, origin, parse, resolvedMirrors, trackerKeySchema, urlSchema, type RouteServices } from "./shared.js";
+import { THEME_PREFERENCES, type TrackerKey } from "../types.js";
+import { personalMirrorAllowed } from "../mirrors.js";
+import type { SqliteDatabase } from "../db.js";
+
+const MIRROR_NOT_ALLOWED = "Personal mirrors are limited to the tracker's own domains and the global mirror";
+function mirrorRejected(db: SqliteDatabase, trackerKey: TrackerKey, baseUrl: string): boolean {
+  const globalBaseUrl = globalMirrorUrl(db, trackerKey);
+  return !globalBaseUrl || !personalMirrorAllowed(trackerKey, origin(baseUrl), globalBaseUrl);
+}
 
 export function registerSettingsRoutes({ app, db, vault, telegram }: RouteServices): void {
   app.put("/api/settings/preferences", { preHandler: requireReadyUser }, async (request, reply) => {
@@ -38,6 +46,7 @@ export function registerSettingsRoutes({ app, db, vault, telegram }: RouteServic
     const input = parse(z.object({ baseUrl: urlSchema.nullable().optional(), username: z.string().trim().max(80).optional(),
       password: z.string().max(500).optional(), clearCredentials: z.boolean().default(false) }), request.body, reply);
     if (!params || !input || !request.user) return;
+    if (input.baseUrl && mirrorRejected(db, params.trackerKey, input.baseUrl)) return reply.code(400).send({ error: MIRROR_NOT_ALLOWED });
     const userId = request.user.id, timestamp = nowIso();
     let credentials: { username: string; password: string } | undefined;
     if (!input.clearCredentials && (input.username !== undefined || input.password !== undefined)) {
@@ -61,6 +70,7 @@ export function registerSettingsRoutes({ app, db, vault, telegram }: RouteServic
   app.put("/api/trackers/:trackerKey/mirror", { preHandler: requireReadyUser }, async (request, reply) => {
     const params = parse(z.object({ trackerKey: trackerKeySchema }), request.params, reply), input = parse(z.object({ baseUrl: urlSchema.nullable() }), request.body, reply);
     if (!params || !input || !request.user) return;
+    if (input.baseUrl && mirrorRejected(db, params.trackerKey, input.baseUrl)) return reply.code(400).send({ error: MIRROR_NOT_ALLOWED });
     if (!input.baseUrl) db.prepare("DELETE FROM user_tracker_mirrors WHERE user_id = ? AND tracker_key = ?").run(request.user.id, params.trackerKey);
     else db.prepare(`INSERT INTO user_tracker_mirrors (user_id, tracker_key, base_url, updated_at) VALUES (?, ?, ?, ?)
       ON CONFLICT(user_id, tracker_key) DO UPDATE SET base_url = excluded.base_url, updated_at = excluded.updated_at`).run(request.user.id, params.trackerKey, origin(input.baseUrl), nowIso());
@@ -68,7 +78,8 @@ export function registerSettingsRoutes({ app, db, vault, telegram }: RouteServic
   });
   app.get("/api/telegram", { preHandler: requireReadyUser }, async (request) => ({ telegram: telegram.statusForUser(request.user!.id) }));
   app.post("/api/telegram/bot", { preHandler: requireReadyUser }, async (request, reply) => {
-    const input = parse(z.object({ token: z.string().trim().min(20).max(200) }), request.body, reply);
+    // BotFather tokens are <bot id>:<secret>; anything else is rejected before it reaches a Telegram API URL.
+    const input = parse(z.object({ token: z.string().trim().regex(/^\d{3,20}:[A-Za-z0-9_-]{30,100}$/u) }), request.body, reply);
     if (!input || !request.user) return;
     return { telegram: await telegram.configureBot(request.user.id, input.token) };
   });

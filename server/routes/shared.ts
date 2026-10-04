@@ -7,6 +7,7 @@ import type { SecretVault } from "../secrets.js";
 import type { CoverCacheStore } from "../cover-cache.js";
 import { TRACKER_KEYS, type TrackerKey } from "../types.js";
 import { adapterForUrl, trackerRegistry } from "../trackers/index.js";
+import { personalMirrorAllowed } from "../mirrors.js";
 
 export interface RouteServices {
   app: FastifyInstance; db: SqliteDatabase; scheduler: Scheduler;
@@ -38,11 +39,17 @@ export function jsonObject(value: string | null): Record<string, unknown> | null
   try { return JSON.parse(value) as Record<string, unknown>; } catch { return null; }
 }
 export interface ResolvedMirrorRow { tracker_key: TrackerKey; display_name: string; global_base_url: string; user_base_url: string | null; base_url: string; enabled: number }
+// A stored personal mirror that is no longer permitted (for example after the global mirror changed) is ignored.
 export function resolvedMirrors(db: SqliteDatabase, userId: string): ResolvedMirrorRow[] {
-  return db.prepare(`SELECT tm.tracker_key, tm.display_name, tm.base_url AS global_base_url, tm.enabled,
-    utm.base_url AS user_base_url, COALESCE(utm.base_url, tm.base_url) AS base_url
+  return (db.prepare(`SELECT tm.tracker_key, tm.display_name, tm.base_url AS global_base_url, tm.enabled, utm.base_url AS user_base_url
     FROM tracker_mirrors tm LEFT JOIN user_tracker_mirrors utm ON utm.tracker_key = tm.tracker_key AND utm.user_id = ?
-    ORDER BY tm.display_name`).all(userId) as ResolvedMirrorRow[];
+    ORDER BY tm.display_name`).all(userId) as Array<Omit<ResolvedMirrorRow, "base_url">>).map((row) => {
+    const personal = row.user_base_url && personalMirrorAllowed(row.tracker_key, row.user_base_url, row.global_base_url) ? row.user_base_url : null;
+    return { ...row, user_base_url: personal, base_url: personal || row.global_base_url };
+  });
+}
+export function globalMirrorUrl(db: SqliteDatabase, trackerKey: TrackerKey): string | undefined {
+  return (db.prepare("SELECT base_url FROM tracker_mirrors WHERE tracker_key = ?").get(trackerKey) as { base_url: string } | undefined)?.base_url;
 }
 export function adapterForUserUrl(db: SqliteDatabase, userId: string, value: string) {
   const canonical = adapterForUrl(value);

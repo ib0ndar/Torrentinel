@@ -48,6 +48,7 @@ describe("RuTracker authenticated search recovery", () => {
     expect(http.seedCookies).toHaveBeenCalledWith(
       [{ name: "cf_clearance", value: "clearance" }],
       "Validated browser agent",
+      "https://rutracker.org/forum/login.php",
     );
     expect(http.postForm).toHaveBeenCalledWith(
       "https://rutracker.org/forum/login.php",

@@ -7,9 +7,14 @@ import { Icon } from "../components/Icon";
 import { useTrackers } from "../hooks/useTrackers";
 import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { Drawer, EmptyCompact, Field, ListSkeleton, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
-import { absoluteTime, errorMessage, relativeTime } from "../format";
+import { absoluteTime, errorMessage, magnetHref, relativeTime, webHref } from "../format";
 import { useI18n } from "../i18n";
 import type { Collection, Notify, RuleMatch, Subscription, SubscriptionEvent, TrackerKey } from "../types";
+
+function withSafeLinks(subscription: Subscription): Subscription {
+  const snapshot = subscription.currentSnapshot;
+  return snapshot ? { ...subscription, currentSnapshot: { ...snapshot, url: webHref(snapshot.url), coverUrl: webHref(snapshot.coverUrl), magnet: magnetHref(snapshot.magnet), torrentUrl: webHref(snapshot.torrentUrl) } } : subscription;
+}
 
 export function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: { id: string; collections: Collection[]; onClose: () => void; onChanged: () => Promise<void>; notify: Notify }) {
   const { t } = useI18n(), dialog = useDialog(), trackCheck = useContext(CheckActivityContext);
@@ -20,7 +25,8 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
   const load = useCallback(async (opening = false, signal?: AbortSignal) => {
     const result = await api<{ subscription: Subscription; events: SubscriptionEvent[]; matches: RuleMatch[] }>(`/api/subscriptions/${id}${opening ? "/open" : ""}`, { ...(opening ? { method: "POST" } : {}), signal });
     if (signal?.aborted) return;
-    setItem(result.subscription); setEvents(result.events); setMatches(result.matches);
+    setItem(withSafeLinks(result.subscription)); setEvents(result.events);
+    setMatches(result.matches.map((match) => ({ ...match, url: webHref(match.url) || "#", magnet: magnetHref(match.magnet), torrentUrl: webHref(match.torrentUrl) })));
   }, [id]);
   const onOpened = useEffectEvent(() => onChanged()), onOpenError = useEffectEvent((error: unknown) => notify(errorMessage(error), "bad"));
   useEffect(() => { const controller = new AbortController(); void load(true, controller.signal).then(() => { if (!controller.signal.aborted) return onOpened(); }).catch((error) => { if (!controller.signal.aborted) onOpenError(error); }); return () => controller.abort(); }, [load]);

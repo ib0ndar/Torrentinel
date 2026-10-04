@@ -28,6 +28,20 @@ function optionalHttpUrl(name: string, value: string | undefined): string | unde
   return url.toString().replace(/\/$/, "");
 }
 
+function browserSandbox(): "auto" | "true" | "false" {
+  const raw = process.env.BROWSER_SANDBOX?.trim() || "auto";
+  if (raw === "auto" || raw === "true" || raw === "false") return raw;
+  throw new Error("BROWSER_SANDBOX must be auto, true or false");
+}
+
+// Fastify's trustProxy: false, true, or a comma-separated list of proxy addresses/CIDR ranges.
+function trustProxy(): boolean | string {
+  const raw = process.env.TRUST_PROXY?.trim();
+  if (!raw || raw === "false") return false;
+  if (raw === "true") return true;
+  return raw;
+}
+
 export const config = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: integer("PORT", process.env.NODE_ENV === "production" ? 8080 : 8787),
@@ -45,8 +59,10 @@ export const config = {
   browserTimeoutMs: integer("BROWSER_TIMEOUT_MS", 120_000),
   browserHeadless: boolean("BROWSER_HEADLESS", true),
   browserChannel: process.env.BROWSER_CHANNEL || "auto",
+  browserSandbox: browserSandbox(),
   sessionDays: integer("SESSION_DAYS", 30),
   sessionCookieSecure: process.env.SESSION_COOKIE_SECURE === "true",
+  trustProxy: trustProxy(),
 };
 
 export type AppConfig = typeof config;

@@ -6,7 +6,7 @@ import {
   type Http2CoverFetcher,
 } from "./cover-http2.js";
 import type { CoverCacheStore } from "./cover-cache.js";
-import { NetworkCoverRetriever } from "./cover-fetch.js";
+import { fetchCover, NetworkCoverRetriever, type CoverFetcher } from "./cover-fetch.js";
 import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
 import { recordTelegramDelivery, safeDiagnosticText, type TelegramDeliveryInput } from "./diagnostics.js";
@@ -86,7 +86,7 @@ export class TelegramService {
     private readonly vault: SecretVault,
     private readonly fetcher: typeof fetch = fetch,
     private readonly publicUrl = config.publicUrl,
-    private readonly mediaFetcher: typeof fetch = fetch,
+    private readonly mediaFetcher: CoverFetcher = fetchCover,
     private readonly http2MediaFetcher: Http2CoverFetcher = downloadCoverWithHttp2,
     private readonly coverCache?: CoverCacheStore,
   ) {}

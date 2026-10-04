@@ -1,11 +1,50 @@
+import { Agent, fetch as undiciFetch } from "undici";
 import {
   downloadCoverWithHttp2,
   type CoverAsset,
   type Http2CoverFetcher,
 } from "./cover-http2.js";
+import { assertPublicHttpUrl, bareHostname, publicOnlyLookup } from "./egress.js";
 
 export const MAX_COVER_BYTES = 10_000_000;
 export const COVER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138 Safari/537.36";
+const MAX_COVER_REDIRECTS = 3;
+
+export interface CoverRequestInit {
+  headers: Record<string, string>;
+  signal: AbortSignal;
+  /** Host of the release page; only this host may resolve to a local address (an administrator's LAN mirror). */
+  trustedHostname?: string;
+}
+
+export type CoverFetcher = (url: string, init: CoverRequestInit) => Promise<Response>;
+
+const publicDispatcher = new Agent({ connect: { lookup: publicOnlyLookup } });
+
+/**
+ * Cover URLs come from tracker posts written by uploaders, so every hop that leaves the
+ * release page's host must reach the public internet. Redirects are followed here so each
+ * target is checked, and the dispatcher re-checks the address it actually connects to.
+ */
+export const fetchCover: CoverFetcher = async (url, init) => {
+  let current = new URL(url);
+  for (let redirects = 0; ; redirects += 1) {
+    const trusted = Boolean(init.trustedHostname) && bareHostname(current) === init.trustedHostname;
+    if (current.protocol !== "http:" && current.protocol !== "https:") throw new Error(`cover URL uses unsupported scheme ${current.protocol}`);
+    if (!trusted) await assertPublicHttpUrl(current);
+    const response = await undiciFetch(current, {
+      headers: init.headers,
+      signal: init.signal,
+      redirect: "manual",
+      ...(trusted ? {} : { dispatcher: publicDispatcher }),
+    });
+    const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+    if (!location) return response as unknown as Response;
+    await response.body?.cancel().catch(() => undefined);
+    if (redirects >= MAX_COVER_REDIRECTS) throw new Error("cover download exceeded the redirect limit");
+    current = new URL(location, current);
+  }
+};
 
 export interface CoverRetrieval {
   asset: CoverAsset;
@@ -18,7 +57,7 @@ export interface CoverRetriever {
 
 export class NetworkCoverRetriever implements CoverRetriever {
   constructor(
-    private readonly mediaFetcher: typeof fetch = fetch,
+    private readonly mediaFetcher: CoverFetcher = fetchCover,
     private readonly http2MediaFetcher: Http2CoverFetcher = downloadCoverWithHttp2,
   ) {}
 
@@ -28,10 +67,12 @@ export class NetworkCoverRetriever implements CoverRetriever {
       referer: releaseUrl,
       "user-agent": COVER_USER_AGENT,
     };
+    const trustedHostname = hostnameOf(releaseUrl);
     try {
       const response = await this.mediaFetcher(coverUrl, {
         headers,
         signal: AbortSignal.timeout(20_000),
+        trustedHostname,
       });
       return { asset: await coverAssetFromResponse(response) };
     } catch (error) {
@@ -41,6 +82,7 @@ export class NetworkCoverRetriever implements CoverRetriever {
           headers,
           maximumBytes: MAX_COVER_BYTES,
           timeoutMs: 20_000,
+          trustedHostname,
         });
         return { asset, fallbackErrors: `standard HTTPS fetch: ${standardFetchError}` };
       } catch (http2Error) {
@@ -50,6 +92,7 @@ export class NetworkCoverRetriever implements CoverRetriever {
             headers: headersWithoutReferer,
             maximumBytes: MAX_COVER_BYTES,
             timeoutMs: 20_000,
+            trustedHostname,
           });
           return {
             asset,
@@ -76,9 +119,39 @@ export async function coverAssetFromResponse(response: Response): Promise<CoverA
   if (!contentType?.startsWith("image/")) throw new Error("cover URL did not return an image");
   const declaredLength = Number.parseInt(response.headers.get("content-length") || "0", 10);
   if (declaredLength > MAX_COVER_BYTES) throw new Error("cover exceeds Telegram's photo size limit");
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength > MAX_COVER_BYTES) throw new Error("cover exceeds Telegram's photo size limit");
-  return { bytes, contentType };
+  return { bytes: await readLimited(response, MAX_COVER_BYTES), contentType };
+}
+
+async function readLimited(response: Response, maximumBytes: number): Promise<ArrayBuffer> {
+  if (!response.body) return new ArrayBuffer(0);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > maximumBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("cover exceeds Telegram's photo size limit");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes.buffer;
+}
+
+function hostnameOf(value: string): string | undefined {
+  try {
+    return bareHostname(new URL(value));
+  } catch {
+    return undefined;
+  }
 }
 
 export function coverErrorMessage(error: unknown): string {

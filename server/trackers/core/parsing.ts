@@ -15,11 +15,18 @@ export function absoluteUrl(value: string | undefined, baseUrl: string): string 
   }
 }
 
-export function absoluteImageUrl(value: string | undefined, baseUrl: string): string | undefined {
+export function absoluteHttpUrl(value: string | undefined, baseUrl: string): string | undefined {
   const resolved = absoluteUrl(value, baseUrl);
   if (!resolved) return undefined;
   const protocol = new URL(resolved).protocol;
   return protocol === "https:" || protocol === "http:" ? resolved : undefined;
+}
+
+export const absoluteImageUrl = absoluteHttpUrl;
+
+export function magnetLink(value: string | undefined): string | undefined {
+  const link = value?.trim();
+  return link && /^magnet:\?/iu.test(link) ? link : undefined;
 }
 
 export function labeledValue($: CheerioAPI, labels: string[]): string | undefined {

@@ -7,14 +7,15 @@ import type {
 } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
 import {
-  absoluteUrl,
+  absoluteHttpUrl,
   cleanText,
   externalIdFromUrl,
   uniqueReleases,
 } from "../../core/parsing.js";
 import { IntegratedBrowserClient, type BrowserPage } from "../../core/transport/browser.js";
-import { CookieSession, type HttpResult } from "../../core/transport/http.js";
+import { CookieSession, type HttpResult, type SeedCookie } from "../../core/transport/http.js";
 import type { Release } from "../../../types.js";
+import { rutrackerManifest } from "./manifest.js";
 
 const MAX_RECOVERY_PAGES = 20;
 
@@ -25,7 +26,7 @@ export interface RutrackerClearanceProvider {
 
 export interface RutrackerHttpSession {
   clear(): void;
-  seedCookies(cookies: Array<{ name: string; value: string }>, userAgent?: string): void;
+  seedCookies(cookies: SeedCookie[], userAgent?: string, sourceUrl?: string): void;
   get(url: string, signal?: AbortSignal): Promise<HttpResult>;
   postForm(
     url: string,
@@ -51,7 +52,7 @@ export class RutrackerSearchRecovery {
 
   constructor(
     private readonly clearanceFactory: (sessionId: string) => RutrackerClearanceProvider = (sessionId) => (
-      new IntegratedBrowserClient(sessionId)
+      new IntegratedBrowserClient(sessionId, { allowedHosts: rutrackerManifest.canonicalHosts })
     ),
     private readonly httpFactory: () => RutrackerHttpSession = () => new CookieSession(),
   ) {}
@@ -164,7 +165,7 @@ export class RutrackerSearchRecovery {
       });
     }
     client.http.clear();
-    client.http.seedCookies(clearance.cookies, clearance.userAgent);
+    client.http.seedCookies(clearance.cookies, clearance.userAgent, clearance.url);
     const redirect = `${searchUrl.pathname.replace(/^\/forum\//u, "")}${searchUrl.search}`;
     const result = await client.http.postForm(loginUrl.toString(), {
       login_username: context.username!,
@@ -196,7 +197,7 @@ export function parseRutrackerSearch(body: string, baseUrl: string, pageUrl = ba
     const topicLink = row.find("td.t-title-col a[href*='viewtopic.php?t=']").first();
     const href = topicLink.attr("href");
     const title = cleanText(topicLink.text());
-    const releaseUrl = absoluteUrl(href, baseUrl);
+    const releaseUrl = absoluteHttpUrl(href, baseUrl);
     if (!releaseUrl || !title) return;
     const externalId = externalIdFromUrl(releaseUrl, [/[?&]t=(\d+)/iu]);
     const timestamp = Number.parseInt(row.find("td[data-ts_text]").last().attr("data-ts_text") || "", 10);
@@ -220,10 +221,12 @@ export function parseRutrackerSearch(body: string, baseUrl: string, pageUrl = ba
     });
   }
 
-  const currentStart = Number.parseInt(new URL(pageUrl, baseUrl).searchParams.get("start") || "0", 10) || 0;
+  const currentPage = new URL(pageUrl, baseUrl);
+  const currentStart = Number.parseInt(currentPage.searchParams.get("start") || "0", 10) || 0;
   const nextCandidates = $("a[href*='tracker.php'][href*='start=']").map((_, link) => {
-    const resolved = absoluteUrl($(link).attr("href"), pageUrl);
-    if (!resolved) return undefined;
+    const resolved = absoluteHttpUrl($(link).attr("href"), currentPage.toString());
+    // The authenticated session must stay on the tracker that served the results.
+    if (!resolved || new URL(resolved).origin !== currentPage.origin) return undefined;
     const start = Number.parseInt(new URL(resolved).searchParams.get("start") || "", 10);
     return Number.isFinite(start) && start > currentStart ? { start, url: resolved } : undefined;
   }).get().filter((value): value is { start: number; url: string } => Boolean(value));

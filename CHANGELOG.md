@@ -2,6 +2,31 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.9.5] - 2026-10-04
+
+### Security
+
+- Personal tracker mirrors are limited to the tracker's own domains (for example `rutracker.net`) and the global mirror. Previously any account could point a personal mirror at any address and make the server request pages on the local network or cloud metadata services, then read part of the response in the subscription title. A stored personal mirror that is no longer allowed is ignored and the global mirror is used instead; Settings explains which addresses are accepted. Administrators can still set any global mirror, including one on the local network.
+- Because personal mirrors are limited, an account can no longer feed made-up RuTracker search results into the release buffer that every account's rules read during feed-gap recovery.
+- The integrated browser starts Chrome with its sandbox (`BROWSER_SANDBOX`, default `auto`), logs that it did, and falls back with a logged warning only where the environment cannot provide one. The supplied Compose file applies `deploy/torrentinel-seccomp.json` (Docker's default seccomp profile plus user namespaces) so the sandbox works in the container; Podman's default seccomp profile already allows it, so the Quadlet needs no change.
+- The integrated browser only navigates to the tracker's own domains and the page it was asked to open, and cannot open further windows. All of its connections, including those of frames in other processes, workers, service workers and WebSockets, go through a proxy inside Torrentinel that resolves host names itself and refuses local and private network addresses for everything except the tracker's own hosts. WebRTC cannot send traffic around the proxy.
+- Cover art is downloaded only from public internet addresses, checked again for every redirect and at connection time, unless it comes from the release page's own host. Tracker posts could previously make the server send requests into the local network.
+- Sign-in is limited after repeated failures per address, per account from an address, and per account (HTTP 429 with `Retry-After`), and current-password guesses on the password change form are limited per account. Unknown and disabled accounts take as long to reject as a wrong password, so response times no longer reveal which usernames exist. Set the new `TRUST_PROXY` behind a reverse proxy so limits apply per client.
+- State-changing requests from other sites are rejected (`Sec-Fetch-Site`, or `Origin` in older browsers), in addition to the `SameSite=Strict` session cookie, which still trusts sibling subdomains.
+- Tracker HTTP sessions send cookies only to the host or domain that set them, refuse redirects to local addresses and form re-submission to another host, and stop reading responses above 20 MB. RuTracker catch-up search only follows result pages on the same tracker.
+- Magnet and torrent links read from tracker pages are kept only when they are real `magnet:` or `http(s)` links, and the web interface no longer renders any other scheme stored by earlier releases.
+- Disabled accounts' subscriptions are no longer checked; previously only their notifications stopped.
+- Telegram bot tokens must have BotFather's `<bot id>:<secret>` form.
+- The server logs a warning when `PUBLIC_URL` uses HTTPS but `SESSION_COOKIE_SECURE` is `false`.
+- Fastify 5.12.5 (from 5.12.1) includes upstream security fixes.
+
+### Upgrade notes
+
+- Personal mirrors outside the tracker's domains stop being used after the update. Ask an administrator to set such a mirror as the global mirror under **Administration → Mirrors**.
+- Docker Compose now needs `deploy/torrentinel-seccomp.json` from the same checkout, which the documented `git checkout` update provides. New optional settings: `BROWSER_SANDBOX` and `TRUST_PROXY`.
+- Check the log after updating: `The integrated browser runs Chrome with its sandbox.` confirms the sandbox; a warning means Chrome runs without it (see "Integrated browser sandbox" in the README).
+- Back up the database and application-data directory together before updating, as usual.
+
 ## [0.9.1] - 2026-10-04
 
 ### Fixed
@@ -496,6 +521,7 @@ All notable changes to Torrentinel are documented in this file.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
 [Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.8.0...HEAD
+[0.9.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.5
 [0.9.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.8.0

@@ -11,7 +11,7 @@ export function createRutrackerPlugin(detailProvider?: RutrackerDetailProvider):
     const path = url.pathname.startsWith("/forum/") ? url.pathname : `/forum${url.pathname}`;
     return new URL(`${path}${url.search}`, baseUrl).toString();
   };
-  const sharedBrowser = detailProvider || new IntegratedBrowserClient();
+  const sharedBrowser = detailProvider || new IntegratedBrowserClient(undefined, { allowedHosts: rutrackerManifest.canonicalHosts });
   const direct = new RutrackerDirectMonitor(normalizeUrl, sharedBrowser);
   const searchRecovery = new RutrackerSearchRecovery(() => sharedBrowser);
   return {

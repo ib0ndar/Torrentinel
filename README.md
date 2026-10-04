@@ -291,8 +291,10 @@ Runtime settings are read from the process environment. The direct systemd insta
 | `BROWSER_TIMEOUT_MS` | Editable, default `120000` | Editable, default `120000` | Editable, default `120000` | Integrated browser navigation and challenge timeout |
 | `BROWSER_HEADLESS` | Editable, default `true` | Editable, default `false` | Editable, default `false` | Use headless mode; containers use a private virtual display by default |
 | `BROWSER_CHANNEL` | Editable, default `auto` | Editable, default `auto` | Editable, default `auto` | `auto` selects Chrome on `amd64` and bundled Chromium on `arm64` |
+| `BROWSER_SANDBOX` | Editable, default `auto` | Editable, default `auto` | Editable, default `auto` | Chrome sandbox: `auto` uses it when available, `true` requires it, `false` disables it; see [Integrated browser sandbox](#integrated-browser-sandbox) |
 | `SESSION_DAYS` | Editable, default `30` | Editable, default `30` | Editable, default `30` | Login-session lifetime |
 | `SESSION_COOKIE_SECURE` | Editable, default `false` | Editable, default `false` | Editable, default `false` | Set to `true` when the public URL uses HTTPS |
+| `TRUST_PROXY` | Editable, default `false` | Editable, default `false` | Editable, default `false` | Reverse proxy addresses whose `X-Forwarded-For` is trusted (`true`, or a comma-separated list of addresses/CIDR ranges); sign-in limits then apply per client |
 
 The standalone container image accepts all runtime variables directly. The supported Compose and Quadlet definitions intentionally fix their internal listen ports and data paths; use the documented host-port setting instead of changing container internals.
 
@@ -300,7 +302,23 @@ Tracker passwords and Telegram tokens are configured only in the web interface a
 
 ### Reverse proxy and HTTPS
 
-When a reverse proxy terminates HTTPS, point it at Torrentinel's host port, set `PUBLIC_URL` to the final `https://` address, and set `SESSION_COOKIE_SECURE=true`. The native service binds to loopback by default and is ready for this arrangement. Container ports bind on the host, so restrict them with the host firewall when only the reverse proxy should have access. The integrated browser has no listening port.
+When a reverse proxy terminates HTTPS, point it at Torrentinel's host port, set `PUBLIC_URL` to the final `https://` address, and set `SESSION_COOKIE_SECURE=true`. Set `TRUST_PROXY` to the address the proxy connects from (for example `127.0.0.1` for the native service, or the container network's gateway for containers) so sign-in attempt limits apply to each client rather than to the proxy, and send `Strict-Transport-Security` from the proxy. The native service binds to loopback by default and is ready for this arrangement. Container ports bind on the host, so restrict them with the host firewall when only the reverse proxy should have access. The integrated browser has no listening port.
+
+### Integrated browser sandbox
+
+Torrentinel starts Chrome with its sandbox, which isolates web content from the rest of the application, and logs `The integrated browser runs Chrome with its sandbox.` the first time it does. With the default `BROWSER_SANDBOX=auto`, Torrentinel falls back to running Chrome without the sandbox when the environment cannot provide one, and logs a warning instead. Set `BROWSER_SANDBOX=true` to refuse to start Chrome without the sandbox.
+
+Independently of the sandbox, the integrated browser only opens pages on the tracker's own domains and the configured mirror, cannot open further windows, and connects only through a proxy inside Torrentinel. The proxy resolves every host name itself and refuses local and private network addresses for everything except the tracker's own hosts, including requests from frames, workers, and WebSockets; WebRTC cannot send traffic around it.
+
+- **Docker Compose:** the supplied `compose.yaml` applies `deploy/torrentinel-seccomp.json`. This is Docker's default seccomp profile (from [moby/profiles](https://github.com/moby/profiles/blob/main/seccomp/default.json)) with one added rule that lets processes create user namespaces, which Chrome's sandbox needs and Docker's default profile blocks.
+- **Podman Quadlet:** Podman's default seccomp profile already allows the user namespaces Chrome's sandbox needs, so the supplied Quadlet needs nothing extra. If the log shows the fallback warning with an older Podman release, copy `deploy/torrentinel-seccomp.json` to `~/.config/containers/systemd/` and add `SeccompProfile=%h/.config/containers/systemd/torrentinel-seccomp.json` to the `[Container]` section of `torrentinel.container`.
+- **Direct installation:** the sandbox works when the host allows unprivileged user namespaces. Some distributions restrict them (for example Ubuntu 24.04 with `kernel.apparmor_restrict_unprivileged_userns=1`); allow them for the Chrome binary in use or accept the fallback.
+
+### Accounts and trust
+
+Administrators are trusted with the whole installation. They manage accounts, see every account's tracker activity in Diagnostics, and set the global mirrors that tracker logins are sent to, so an administrator could capture other accounts' tracker passwords. Grant administrator rights only to people you would also give the server's data directory.
+
+Other accounts are isolated from one another. A personal mirror may only use the tracker's own domains (for example `rutracker.net`) or the global mirror address; to use another mirror, an administrator sets it as the global mirror under **Administration → Mirrors**. Repeated failed sign-ins are limited per address and per account.
 
 ## Telegram notifications
 

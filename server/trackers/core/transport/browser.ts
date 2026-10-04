@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readlink, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { chromium, type BrowserContext, type Page, type Response } from "patchright";
 import { config } from "../../../config.js";
+import { bareHostname } from "../../../egress.js";
 import type { TrackerKey } from "../../../types.js";
 import { challengeDetected, TrackerError } from "../errors.js";
+import { startBrowserEgressProxy, type BrowserEgressProxy } from "./browser-egress.js";
 
 const SESSION_TTL_MS = 120 * 60 * 1_000;
 const CHALLENGE_POLL_MS = 500;
@@ -13,7 +15,7 @@ const CHALLENGE_SETTLE_MS = 1_000;
 const NAVIGATION_RETRY_MS = 50;
 const PROFILE_SINGLETON_FILES = ["SingletonLock", "SingletonSocket", "SingletonCookie"] as const;
 
-type BrowserContextLauncher = (profileDirectory: string) => Promise<BrowserContext>;
+type BrowserContextLauncher = (profileDirectory: string, proxyServer: string) => Promise<BrowserContext>;
 
 export interface IntegratedBrowserOptions {
   launchContext?: BrowserContextLauncher;
@@ -21,13 +23,15 @@ export interface IntegratedBrowserOptions {
   timeoutMs?: number;
   trackerKey?: TrackerKey;
   trackerName?: string;
+  /** The tracker's own domains; the page may navigate within them and the hosts it was asked to open. */
+  allowedHosts?: readonly string[];
 }
 
 export interface BrowserPage {
   body: string;
   url: string;
   status: number;
-  cookies?: Array<{ name: string; value: string }>;
+  cookies?: Array<{ name: string; value: string; domain?: string }>;
   userAgent?: string;
 }
 
@@ -58,17 +62,26 @@ export class IntegratedBrowserClient {
   private context?: BrowserContext;
   private contextCreatedAt = 0;
   private queue: Promise<void> = Promise.resolve();
+  private readonly trustedHosts = new Set<string>();
+  private readonly guardedPages = new WeakSet<Page>();
+  private activePage?: Page;
+  private proxy?: BrowserEgressProxy;
+  private blockedNavigation?: string;
 
   constructor(
     private readonly sessionId = "torrentinel-rutracker",
     private readonly options: IntegratedBrowserOptions = {},
-  ) {}
+  ) {
+    for (const host of options.allowedHosts || []) this.trustedHosts.add(host.toLocaleLowerCase("en-US"));
+  }
 
   get(url: string, signal?: AbortSignal): Promise<BrowserPage> {
+    this.trust(url);
     return this.serialized(() => this.getPage(url, signal));
   }
 
   submitForm(submission: BrowserFormSubmission, signal?: AbortSignal): Promise<BrowserPage> {
+    this.trust(submission.pageUrl);
     return this.serialized(() => this.submitFormPage(submission, signal));
   }
 
@@ -144,7 +157,14 @@ export class IntegratedBrowserClient {
     await mkdir(profileDirectory, { recursive: true, mode: 0o700 });
     try {
       await removeStaleProfileSingletons(profileDirectory);
-      this.context = await (this.options.launchContext || launchContext)(profileDirectory);
+      await restrictWebRtc(profileDirectory);
+      this.proxy = await startBrowserEgressProxy(this.isTrustedHost);
+      const context = await (this.options.launchContext || launchContext)(profileDirectory, this.proxy.server);
+      // Only the session page may run; windows opened by a page are closed straight away.
+      context.on("page", (page) => {
+        if (this.activePage && !this.activePage.isClosed() && page !== this.activePage) void page.close().catch(() => undefined);
+      });
+      this.context = context;
       this.contextCreatedAt = Date.now();
     } catch (error) {
       await this.resetContext();
@@ -168,6 +188,7 @@ export class IntegratedBrowserClient {
       }
     };
     page.on("response", observeDocument);
+    this.blockedNavigation = undefined;
     const abort = () => void page.close().catch(() => undefined);
     signal?.addEventListener("abort", abort, { once: true });
     const deadline = Date.now() + timeoutMs;
@@ -186,7 +207,7 @@ export class IntegratedBrowserClient {
         throw this.browserError(`returned HTTP ${status}`);
       }
       const cookies = (await context.cookies(page.url()))
-        .map(({ name, value }) => ({ name, value }));
+        .map(({ name, value, domain }) => ({ name, value, domain }));
       const userAgent = await page.evaluate(() => navigator.userAgent);
       return {
         body,
@@ -198,6 +219,9 @@ export class IntegratedBrowserClient {
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
       if (error instanceof TrackerError) throw error;
+      if (this.blockedNavigation) {
+        throw this.browserError(`refused to leave the tracker for ${this.blockedNavigation}`, "temporary", error);
+      }
       throw this.browserError(`failed: ${errorMessage(error)}`, "temporary", error);
     } finally {
       signal?.removeEventListener("abort", abort);
@@ -237,20 +261,63 @@ export class IntegratedBrowserClient {
   }
 
   private async sessionPage(context: BrowserContext): Promise<Page> {
-    const existing = context.pages().find((page) => !page.isClosed());
-    return existing || context.newPage();
+    const page = (this.activePage && !this.activePage.isClosed() ? this.activePage : undefined)
+      || context.pages().find((candidate) => !candidate.isClosed())
+      || await context.newPage();
+    this.activePage = page;
+    await this.guardNavigation(context, page);
+    return page;
+  }
+
+  private trust(url: string): void {
+    try {
+      this.trustedHosts.add(bareHostname(new URL(url)));
+    } catch {
+      // An invalid URL fails later in navigation.
+    }
+  }
+
+  private readonly isTrustedHost = (hostname: string): boolean => (
+    [...this.trustedHosts].some((host) => hostname === host || hostname.endsWith(`.${host}`))
+  );
+
+  /**
+   * Keeps the top-level page on trusted tracker hosts. Only document requests are paused, through
+   * a separate DevTools session rather than Playwright routing, which would turn off Chrome's HTTP
+   * cache. Where any request may connect to is decided by the egress proxy.
+   */
+  private async guardNavigation(context: BrowserContext, page: Page): Promise<void> {
+    if (this.guardedPages.has(page)) return;
+    const session = await context.newCDPSession(page);
+    const { frameTree } = await session.send("Page.getFrameTree");
+    const mainFrameId = frameTree.frame.id;
+    session.on("Fetch.requestPaused", (event) => {
+      const allowed = event.frameId !== mainFrameId || topLevelNavigationAllowed(event.request.url, this.isTrustedHost);
+      if (!allowed) this.blockedNavigation = hostOf(event.request.url);
+      // An aborted navigation leaves the current page in place; a blocked one would load
+      // Chrome's error page afterwards and interrupt the next navigation.
+      void (allowed
+        ? session.send("Fetch.continueRequest", { requestId: event.requestId })
+        : session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Aborted" })).catch(() => undefined);
+    });
+    await session.send("Fetch.enable", { patterns: [{ urlPattern: "*", resourceType: "Document", requestStage: "Request" }] });
+    this.guardedPages.add(page);
   }
 
   private async resetContext(): Promise<void> {
-    const context = this.context;
+    const context = this.context, proxy = this.proxy;
     this.context = undefined;
+    this.proxy = undefined;
+    this.activePage = undefined;
     this.contextCreatedAt = 0;
-    if (!context) return;
-    try {
-      await context.close();
-    } catch {
-      // Chrome may already have exited after a crash or container shutdown.
+    if (context) {
+      try {
+        await context.close();
+      } catch {
+        // Chrome may already have exited after a crash or container shutdown.
+      }
     }
+    await proxy?.close();
   }
 
   private serialized<T>(operation: () => Promise<T>): Promise<T> {
@@ -313,14 +380,84 @@ function isMissingPathError(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-function launchContext(profileDirectory: string): Promise<BrowserContext> {
+/** A top-level page may only be on a trusted tracker host. */
+export function topLevelNavigationAllowed(value: string, isTrustedHost: (hostname: string) => boolean): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return (url.protocol === "http:" || url.protocol === "https:") && isTrustedHost(bareHostname(url));
+}
+
+/**
+ * WebRTC sends UDP directly rather than through the proxy. Full Chrome ignores the command-line
+ * switch for this but honours the profile preference behind the WebRtcIPHandlingPolicy policy, which
+ * stops UDP that does not go through the proxy, so WebRTC cannot reach local addresses either.
+ */
+async function restrictWebRtc(profileDirectory: string): Promise<void> {
+  const path = resolve(profileDirectory, "Default", "Preferences");
+  let preferences: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) preferences = parsed as Record<string, unknown>;
+  } catch (error) {
+    // Chrome resets an unreadable preferences file itself, so it is replaced rather than kept.
+    if (!isMissingPathError(error) && !(error instanceof SyntaxError)) throw error;
+  }
+  const webrtc = preferences.webrtc && typeof preferences.webrtc === "object" ? preferences.webrtc as Record<string, unknown> : {};
+  if (webrtc.ip_handling_policy === "disable_non_proxied_udp") return;
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await writeFile(path, JSON.stringify({ ...preferences, webrtc: { ...webrtc, ip_handling_policy: "disable_non_proxied_udp" } }), { mode: 0o600 });
+}
+
+function hostOf(value: string): string {
+  try {
+    return new URL(value).host;
+  } catch {
+    return "an invalid address";
+  }
+}
+
+let sandboxUnavailable = false;
+let sandboxReported = false;
+
+/**
+ * BROWSER_SANDBOX=auto starts Chrome with its sandbox and falls back only when the environment
+ * cannot provide one (for example Docker's default seccomp profile, which blocks the user
+ * namespaces Chrome needs). The fallback is logged once; true refuses to run without it.
+ */
+async function launchContext(profileDirectory: string, proxyServer: string): Promise<BrowserContext> {
   const channel = selectedBrowserChannel();
-  return chromium.launchPersistentContext(profileDirectory, {
+  const launch = (chromiumSandbox: boolean) => chromium.launchPersistentContext(profileDirectory, {
     ...(channel ? { channel } : {}),
     headless: config.browserHeadless,
     viewport: config.browserHeadless ? { width: 1365, height: 768 } : null,
     serviceWorkers: "allow",
+    chromiumSandbox,
+    // With a SOCKS5 proxy Chrome resolves no host names itself and also proxies loopback addresses.
+    proxy: { server: proxyServer },
+    // Pages may not open further windows (window.open fails as if a popup blocker stopped it). The
+    // headless shell limits WebRTC through this switch; full Chrome through the profile preference.
+    args: ["--block-new-web-contents", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
   });
+  if (config.browserSandbox === "false" || (config.browserSandbox === "auto" && sandboxUnavailable)) return launch(false);
+  try {
+    const context = await launch(true);
+    if (!sandboxReported) {
+      sandboxReported = true;
+      console.info("The integrated browser runs Chrome with its sandbox.");
+    }
+    return context;
+  } catch (error) {
+    if (config.browserSandbox === "true" || !/sandbox/iu.test(errorMessage(error))) throw error;
+    sandboxUnavailable = true;
+    console.warn("The integrated browser's sandbox is unavailable in this environment, so Chrome runs without it. "
+      + "See \"Integrated browser sandbox\" in the README to enable it, or set BROWSER_SANDBOX=false to silence this warning.");
+    await removeStaleProfileSingletons(profileDirectory);
+    return launch(false);
+  }
 }
 
 function selectedBrowserChannel(): string | undefined {

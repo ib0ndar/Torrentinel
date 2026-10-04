@@ -2,6 +2,9 @@ import { config } from "./config.js";
 import { createApplication } from "./app.js";
 
 const { app, scheduler, telegram } = await createApplication();
+if (config.publicUrl?.startsWith("https:") && !config.sessionCookieSecure) {
+  app.log.warn("PUBLIC_URL uses HTTPS but SESSION_COOKIE_SECURE is false; set it to true so session cookies are never sent over plain HTTP.");
+}
 await app.listen({ host: config.host, port: config.port });
 scheduler.start();
 await telegram.start();

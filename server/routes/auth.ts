@@ -1,8 +1,10 @@
 import { compare, hash } from "bcryptjs";
+import type { FastifyReply } from "fastify";
 import { z } from "zod";
 import { nowIso } from "../db.js";
 import { createSession, destroyOtherSessions, destroySession, requireUser } from "../auth.js";
 import { parse, type RouteServices } from "./shared.js";
+import { AttemptLimiter, type AttemptRule } from "../attempt-limiter.js";
 import type { AuthUser } from "../types.js";
 import { passwordChangeReason, themePreference } from "../types.js";
 
@@ -17,12 +19,32 @@ export function serializeUser(row: UserDbRow): AuthUser {
     trackerMarkerStyle: row.tracker_marker_style, language: row.language, paginationEnabled: Boolean(row.pagination_enabled), pageSize: row.page_size,
     theme: themePreference(row.theme) };
 }
+// Compared against when the account is missing or disabled, so every rejected sign-in takes the same time.
+const TIMING_EQUALIZER_HASH = "$2b$12$DuJBLolBSUOuNLDxFp9M8uQ8R6XP0BlY4f8OJDgRKFXKXE2yIOzf.";
+function tooManyAttempts(reply: FastifyReply, retryAfterMs: number, error: string) {
+  return reply.code(429).header("retry-after", String(Math.ceil(retryAfterMs / 1_000))).send({ error });
+}
 export function registerAuthRoutes({ app, db }: RouteServices): void {
+  const attempts = new AttemptLimiter();
   app.post("/api/auth/login", async (request, reply) => {
     const input = parse(z.object({ username: z.string().trim().min(1).max(80), password: z.string().min(1).max(500) }), request.body, reply);
     if (!input) return;
+    // Per address, per account from that address, and per account from anywhere (distributed guessing).
+    const account = input.username.toLowerCase();
+    const rules: AttemptRule[] = [
+      { key: `login-address:${request.ip}`, limit: 30 },
+      { key: `login-account-address:${account}\n${request.ip}`, limit: 10 },
+      { key: `login-account:${account}`, limit: 100 },
+    ];
+    const retryAfterMs = attempts.retryAfterMs(rules);
+    if (retryAfterMs > 0) return tooManyAttempts(reply, retryAfterMs, "Too many sign-in attempts. Try again later.");
     const row = db.prepare("SELECT * FROM users WHERE username = ?").get(input.username) as UserDbRow | undefined;
-    if (!row || row.disabled || !(await compare(input.password, row.password_hash))) return reply.code(401).send({ error: "Invalid username or password" });
+    const passwordMatches = await compare(input.password, row?.password_hash ?? TIMING_EQUALIZER_HASH);
+    if (!row || row.disabled || !passwordMatches) {
+      attempts.recordFailure(rules);
+      return reply.code(401).send({ error: "Invalid username or password" });
+    }
+    attempts.reset([rules[1].key]);
     createSession(db, reply, row.id);
     return { user: serializeUser(row) };
   });
@@ -33,8 +55,15 @@ export function registerAuthRoutes({ app, db }: RouteServices): void {
   app.post("/api/auth/change-password", { preHandler: requireUser }, async (request, reply) => {
     const input = parse(z.object({ currentPassword: z.string().min(1).max(500), newPassword: z.string().min(8).max(500) }), request.body, reply);
     if (!input || !request.user) return;
+    const rules: AttemptRule[] = [{ key: `password-change:${request.user.id}`, limit: 10 }];
+    const retryAfterMs = attempts.retryAfterMs(rules);
+    if (retryAfterMs > 0) return tooManyAttempts(reply, retryAfterMs, "Too many incorrect passwords. Try again later.");
     const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(request.user.id) as { password_hash: string } | undefined;
-    if (!row || !(await compare(input.currentPassword, row.password_hash))) return reply.code(400).send({ error: "Current password is incorrect" });
+    if (!row || !(await compare(input.currentPassword, row.password_hash))) {
+      attempts.recordFailure(rules);
+      return reply.code(400).send({ error: "Current password is incorrect" });
+    }
+    attempts.reset([rules[0].key]);
     const passwordHash = await hash(input.newPassword, 12), userId = request.user.id;
     // Other browsers and devices must sign in again with the new password; this session stays.
     db.transaction(() => {

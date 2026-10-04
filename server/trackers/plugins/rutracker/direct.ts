@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import type { DirectMonitor } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
-import { absoluteImageUrl, cleanText, externalIdFromUrl, fingerprintRelease } from "../../core/parsing.js";
+import { absoluteImageUrl, cleanText, externalIdFromUrl, fingerprintRelease, magnetLink } from "../../core/parsing.js";
 import { IntegratedBrowserClient, type BrowserPage } from "../../core/transport/browser.js";
 import type { Release } from "../../../types.js";
 import { rutrackerManifest } from "./manifest.js";
@@ -14,7 +14,7 @@ export interface RutrackerDetailProvider {
 export class RutrackerDirectMonitor implements DirectMonitor {
   constructor(
     private readonly normalizeUrl: (url: URL, baseUrl: string) => string,
-    private readonly detailProvider: RutrackerDetailProvider = new IntegratedBrowserClient(),
+    private readonly detailProvider: RutrackerDetailProvider = new IntegratedBrowserClient(undefined, { allowedHosts: rutrackerManifest.canonicalHosts }),
   ) {}
 
   async fetchSnapshot(url: string, context: Parameters<DirectMonitor["fetchSnapshot"]>[1]) {
@@ -24,7 +24,7 @@ export class RutrackerDirectMonitor implements DirectMonitor {
     const $ = cheerio.load(page.body);
     const title = cleanText($("h1.maintitle, .maintitle, h1").first().text());
     if (!title) throw new TrackerError("parse", "RuTracker topic page did not contain a title", { trackerKey: "rutracker" });
-    const magnet = $("a.magnet-link[href^='magnet:'], a[href^='magnet:']").first().attr("href") || undefined;
+    const magnet = magnetLink($("a.magnet-link[href^='magnet:'], a[href^='magnet:']").first().attr("href"));
     const coverImage = $(".post_body").first().find("img.postImg").first();
     const coverSource = coverImage.hasClass("post-img-broken")
       ? coverImage.attr("title")

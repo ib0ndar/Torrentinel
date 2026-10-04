@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { capitalize } from "../format";
+import { capitalize, magnetHref, webHref } from "../format";
 import { useI18n } from "../i18n";
 import type { SubscriptionEvent } from "../types";
 import { Icon } from "./Icon";
@@ -52,12 +52,12 @@ export function ChangeDetails({ event }: { event: SubscriptionEvent }) {
   const changes = directChanges(event), title = titleChange(event);
   const previous = snapshot(event.payload?.previous), current = snapshot(event.payload?.current), links: ReactNode[] = [];
   if (changes.includes("magnet changed")) {
-    const next = text(current?.magnet), old = text(previous?.magnet);
+    const next = magnetHref(current?.magnet), old = magnetHref(previous?.magnet);
     if (next) links.push(<a key="magnet" href={next}><Icon name="magnet" size={15} />{t("Magnet")}</a>);
     if (old) links.push(<a key="previous-magnet" className="change-links__previous" href={old}><Icon name="magnet" size={15} />{t("Previous magnet")}</a>);
   }
   if (changes.includes("torrent file changed")) {
-    const next = text(current?.torrentUrl), old = text(previous?.torrentUrl);
+    const next = webHref(current?.torrentUrl), old = webHref(previous?.torrentUrl);
     if (next) links.push(<a key="torrent" href={next} target="_blank" rel="noreferrer"><Icon name="download" size={15} />{t("Torrent file")}</a>);
     if (old) links.push(<a key="previous-torrent" className="change-links__previous" href={old} target="_blank" rel="noreferrer"><Icon name="download" size={15} />{t("Previous torrent file")}</a>);
   }

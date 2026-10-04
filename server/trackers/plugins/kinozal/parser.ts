@@ -1,11 +1,12 @@
 import * as cheerio from "cheerio";
 import type { Release } from "../../../types.js";
 import {
+  absoluteHttpUrl,
   absoluteImageUrl,
-  absoluteUrl,
   cleanText,
   externalIdFromUrl,
   labeledValue,
+  magnetLink,
   normalizeTrackerChangeMarker,
   uniqueReleases,
 } from "../../core/parsing.js";
@@ -31,8 +32,8 @@ export function parseKinozalDirect(body: string, normalizedUrl: string): Release
     title,
     url: normalizedUrl,
     coverUrl: absoluteImageUrl(coverSource, normalizedUrl),
-    magnet: $("a[href^='magnet:']").first().attr("href"),
-    torrentUrl: absoluteUrl(
+    magnet: magnetLink($("a[href^='magnet:']").first().attr("href")),
+    torrentUrl: absoluteHttpUrl(
       $("a[href*='download.php?id='], a[href*='/download/']").first().attr("href") || `/download.php?id=${externalId}`,
       normalizedUrl,
     ),
@@ -55,7 +56,7 @@ export function parseKinozalSearch(body: string, baseUrl: string): Release[] {
     const href = link.attr("href");
     const title = cleanText(link.text()) || cleanText(link.attr("title"));
     if (!href || !title) return;
-    const releaseUrl = absoluteUrl(href, baseUrl);
+    const releaseUrl = absoluteHttpUrl(href, baseUrl);
     if (!releaseUrl) return;
     const externalId = externalIdFromUrl(releaseUrl, [/[?&]id=(\d+)/i]);
     releases.push({
@@ -63,8 +64,8 @@ export function parseKinozalSearch(body: string, baseUrl: string): Release[] {
       externalId,
       title,
       url: releaseUrl,
-      magnet: row.find("a[href^='magnet:']").first().attr("href"),
-      torrentUrl: absoluteUrl(row.find("a[href*='download.php?id=']").first().attr("href") || `/download.php?id=${externalId}`, baseUrl),
+      magnet: magnetLink(row.find("a[href^='magnet:']").first().attr("href")),
+      torrentUrl: absoluteHttpUrl(row.find("a[href*='download.php?id=']").first().attr("href") || `/download.php?id=${externalId}`, baseUrl),
       metadata: { size: cleanText(row.find(".s, .size").first().text()) || null },
     });
   });

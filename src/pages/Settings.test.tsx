@@ -80,7 +80,7 @@ const member: User = { id: "user", username: "test", isAdmin: false, mustChangeP
 const type = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
 function tracker(key: "kinozal" | "rutracker", options: Partial<Tracker> = {}): Tracker {
   const globalBaseUrl = key === "kinozal" ? "https://kinozal.tv" : "https://rutracker.org";
-  return { key, displayName: key === "kinozal" ? "Kinozal" : "RuTracker", hosts: [], snapshotVersion: 1, capabilities: { authentication: key === "kinozal" ? "required" : "optional", customMirrors: true, direct: true, rules: true, covers: true, ruleDiscovery: key === "kinozal" ? "search" : "feed" },
+  return { key, displayName: key === "kinozal" ? "Kinozal" : "RuTracker", hosts: key === "kinozal" ? ["kinozal.tv", "kinozal.me"] : ["rutracker.org", "rutracker.net"], snapshotVersion: 1, capabilities: { authentication: key === "kinozal" ? "required" : "optional", customMirrors: true, direct: true, rules: true, covers: true, ruleDiscovery: key === "kinozal" ? "search" : "feed" },
     baseUrl: globalBaseUrl, globalBaseUrl, hasOverride: false, enabled: true, credentialsConfigured: false, ...options };
 }
 async function renderSettings(trackers: () => Tracker[] = () => [], extra: (path: string, init?: RequestInit) => unknown = () => undefined) {
@@ -186,7 +186,11 @@ it("enables tracker Save only for valid unsaved changes, discards them, and subm
     // The source marker previews show the trackers from the same list.
     expect([...container.querySelectorAll(".marker-preview")].map((preview) => [...preview.querySelectorAll(".tracker-tag")].map((tag) => tag.classList[2]))).toEqual([["tracker-tag--kinozal", "tracker-tag--rutracker"], ["tracker-tag--kinozal", "tracker-tag--rutracker"]]);
     expect(field("RuTracker", "Mirror override").value).toBe("https://rutracker.net");
-    await act(async () => type(field("RuTracker", "Mirror override"), "https://rutracker.nl"));
+    // Personal mirrors are limited to the tracker's own domains and the global mirror.
+    await act(async () => type(field("RuTracker", "Mirror override"), "http://192.168.1.10:8080"));
+    expect(save("RuTracker").disabled).toBe(true);
+    expect(row("RuTracker").querySelector(".integration-actions small")?.textContent).toBe("Personal mirrors must use rutracker.org, rutracker.net or the global mirror");
+    await act(async () => type(field("RuTracker", "Mirror override"), "https://rutracker.org"));
     expect(save("RuTracker").disabled).toBe(false);
     expect(row("RuTracker").textContent).toContain("Unsaved changes");
     await act(async () => discard("RuTracker")!.click());

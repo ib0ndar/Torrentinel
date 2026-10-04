@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
@@ -13,7 +13,7 @@ import { Scheduler } from "./scheduler.js";
 import { createSecretVault, ensureVaultKey } from "./secrets.js";
 import { closeTrackerAdapters } from "./trackers/index.js";
 import { CoverCache } from "./cover-cache.js";
-import type { CoverRetriever } from "./cover-fetch.js";
+import { fetchCover, type CoverRetriever } from "./cover-fetch.js";
 import { downloadCoverWithHttp2 } from "./cover-http2.js";
 
 interface ApplicationOptions {
@@ -26,12 +26,42 @@ interface ApplicationOptions {
   coverRetriever?: CoverRetriever;
 }
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Session cookies are SameSite=Strict, which still treats sibling subdomains as the same site.
+ * State-changing requests must therefore come from this application's own pages: browsers report
+ * that in Sec-Fetch-Site, and older ones in Origin. Requests without either (scripts, curl) carry
+ * no ambient browser credentials and are left alone.
+ */
+function crossSiteRequest(request: FastifyRequest): boolean {
+  if (SAFE_METHODS.has(request.method)) return false;
+  const fetchSite = request.headers["sec-fetch-site"];
+  if (typeof fetchSite === "string") return fetchSite !== "same-origin" && fetchSite !== "none";
+  const origin = request.headers.origin;
+  if (origin === undefined) return false;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host.toLowerCase();
+  } catch {
+    return true;
+  }
+  const forwardedHost = request.headers["x-forwarded-host"];
+  const allowedHosts = [
+    request.headers.host,
+    ...(typeof forwardedHost === "string" ? forwardedHost.split(",") : []),
+    config.publicUrl ? new URL(config.publicUrl).host : undefined,
+  ].filter((value): value is string => Boolean(value)).map((value) => value.trim().toLowerCase());
+  return !allowedHosts.includes(originHost);
+}
+
 export async function createApplication(options: ApplicationOptions = {}) {
   const app = Fastify({
     logger: options.logger === undefined
       ? { level: config.nodeEnv === "development" ? "debug" : "info" }
       : options.logger,
     bodyLimit: 1_000_000,
+    trustProxy: config.trustProxy,
   });
   const db = createDatabase(options.databasePath);
   const vault = createSecretVault(options.encryptionKeyPath || config.encryptionKeyPath);
@@ -44,13 +74,17 @@ export async function createApplication(options: ApplicationOptions = {}) {
     vault,
     options.telegramFetch,
     config.publicUrl,
-    fetch,
+    fetchCover,
     downloadCoverWithHttp2,
     coverCache,
   );
   const scheduler = new Scheduler(db, telegram, vault, coverCache);
 
   await app.register(cookie);
+  app.addHook("onRequest", async (request, reply) => {
+    if (!crossSiteRequest(request)) return;
+    await reply.code(403).send({ error: "Cross-site request blocked" });
+  });
   app.addHook("onSend", async (_request, reply) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "DENY");

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, jsonBody } from "../../api";
 import { useDialog } from "../../components/Dialogs";
 import { ListSkeleton, TrackerTag } from "../../components/UI";
-import { errorMessage, isHttpUrl } from "../../format";
+import { errorMessage } from "../../format";
 import { useI18n } from "../../i18n";
 import type { Notify, Tracker, TrackerKey } from "../../types";
 import { SettingsSection } from "./SettingsSection";
@@ -11,6 +11,15 @@ type TrackerDraft = { mirror: string; username: string; password: string };
 type TrackerEdits = Partial<Record<TrackerKey, Partial<TrackerDraft>>>;
 const savedDraft = (tracker: Tracker): TrackerDraft => ({ mirror: tracker.hasOverride ? tracker.baseUrl : "", username: tracker.username || "", password: "" });
 const withoutEdit = (edits: TrackerEdits, key: TrackerKey) => { const { [key]: _discarded, ...rest } = edits; return rest; };
+// Same rule as the server: the tracker's own domains on the default port, or the global mirror.
+function mirrorAllowed(value: string, tracker: Tracker): boolean {
+  try {
+    const url = new URL(value), host = url.hostname.toLowerCase();
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return false;
+    if (url.origin === new URL(tracker.globalBaseUrl).origin) return true;
+    return url.port === "" && tracker.hosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  } catch { return false; }
+}
 
 export function TrackerAccessSection({ trackers, reload, notify }: { trackers: Tracker[] | null; reload: () => Promise<Tracker[]>; notify: Notify }) {
   const { t } = useI18n(), dialog = useDialog();
@@ -45,7 +54,8 @@ function TrackerAccessRow({ tracker, edit, saving, onEdit, onDiscard, onSave, on
   const saved = savedDraft(tracker), draft = { ...saved, ...edit };
   const dirty = draft.mirror !== saved.mirror || draft.username !== saved.username || draft.password !== "";
   // A login needs both a username and a password (typed now or already stored).
-  const valid = Boolean(draft.username.trim()) === Boolean(draft.password || tracker.credentialsConfigured) && (!draft.mirror.trim() || isHttpUrl(draft.mirror.trim()));
+  const mirrorRejected = Boolean(draft.mirror.trim()) && !mirrorAllowed(draft.mirror.trim(), tracker);
+  const valid = Boolean(draft.username.trim()) === Boolean(draft.password || tracker.credentialsConfigured) && !mirrorRejected;
   // Feed trackers poll a public feed and use a login only to recover coverage gaps.
   const configured = tracker.credentialsConfigured, feed = tracker.capabilities.ruleDiscovery === "feed", required = tracker.capabilities.authentication === "required";
   const summary = feed ? configured ? t("Public feed + authenticated gap recovery; login stored for {name}", { name: tracker.username || "" }) : t("Public feed monitoring; login enables coverage-gap recovery")
@@ -60,7 +70,7 @@ function TrackerAccessRow({ tracker, edit, saving, onEdit, onDiscard, onSave, on
     <div className="tracker-settings-fields">
       <label className="settings-field settings-field--wide">
         <span>{t("Mirror override")}</span>
-        <input type="url" value={draft.mirror} onChange={(event) => onEdit({ mirror: event.target.value })} placeholder={tracker.globalBaseUrl} />
+        <input type="url" value={draft.mirror} onChange={(event) => onEdit({ mirror: event.target.value })} placeholder={tracker.globalBaseUrl} aria-invalid={mirrorRejected || undefined} />
       </label>
       <label className="settings-field">
         <span>{t("Username")}</span>
@@ -72,7 +82,8 @@ function TrackerAccessRow({ tracker, edit, saving, onEdit, onDiscard, onSave, on
       </label>
     </div>
     <div className="integration-actions">
-      <small>{tracker.hasOverride ? t("Personal mirror active") : t("Using global mirror {url}", { url: tracker.globalBaseUrl })}</small>
+      <small role={mirrorRejected ? "alert" : undefined}>{mirrorRejected ? t("Personal mirrors must use {hosts} or the global mirror", { hosts: tracker.hosts.join(", ") })
+        : tracker.hasOverride ? t("Personal mirror active") : t("Using global mirror {url}", { url: tracker.globalBaseUrl })}</small>
       {dirty && <span className="unsaved-hint">{t("Unsaved changes")}</span>}
       {dirty && <button type="button" className="text-button" disabled={saving} onClick={onDiscard}>{t("Discard")}</button>}
       {configured && <button type="button" className="text-button text-button--danger" onClick={onClearCredentials}>{t("Remove login")}</button>}

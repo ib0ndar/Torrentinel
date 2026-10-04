@@ -1,4 +1,5 @@
 import { connect, constants, type IncomingHttpHeaders } from "node:http2";
+import { assertPublicHttpUrl, bareHostname, publicOnlyLookup } from "./egress.js";
 
 const MAX_REDIRECTS = 3;
 
@@ -11,6 +12,8 @@ export interface Http2CoverOptions {
   headers: Record<string, string>;
   maximumBytes: number;
   timeoutMs: number;
+  /** Host of the release page; every other host must be a public internet address. */
+  trustedHostname?: string;
 }
 
 export type Http2CoverFetcher = (url: string, options: Http2CoverOptions) => Promise<CoverAsset>;
@@ -22,13 +25,15 @@ export const downloadCoverWithHttp2: Http2CoverFetcher = async (url, options) =>
 async function requestCover(urlValue: string, options: Http2CoverOptions, redirectCount: number): Promise<CoverAsset> {
   const url = new URL(urlValue);
   if (url.protocol !== "https:") throw new Error("HTTPS/2 cover retry requires an HTTPS URL");
+  const trusted = Boolean(options.trustedHostname) && bareHostname(url) === options.trustedHostname;
+  if (!trusted) await assertPublicHttpUrl(url);
 
   const result = await new Promise<{
     status: number;
     headers: IncomingHttpHeaders;
     bytes: ArrayBuffer;
   }>((resolve, reject) => {
-    const session = connect(url.origin);
+    const session = connect(url.origin, trusted ? {} : { lookup: publicOnlyLookup });
     let settled = false;
     let responseHeaders: IncomingHttpHeaders = {};
     const chunks: Buffer[] = [];

@@ -18,4 +18,7 @@ The maintainer will acknowledge a complete report when practical, investigate it
 - Use HTTPS for any deployment reachable beyond a trusted local network.
 - Restrict access to the SQLite database, application-data directory, integrated-browser profile, backups, and environment files. Browser profiles can contain reusable challenge-clearance cookies.
 - Do not add a public debugging or browser-control port; the integrated browser requires no inbound network access.
+- Keep Chrome's sandbox available to the integrated browser: use the supplied seccomp profile with Docker (Podman's default profile already allows it; see "Integrated browser sandbox" in the README) and watch the log for a warning that it is unavailable.
+- Behind a reverse proxy, set `TRUST_PROXY` to the proxy's address so sign-in attempt limits apply to each client, and send `Strict-Transport-Security` from the proxy.
+- Grant administrator rights only to people trusted with the whole installation. Administrators control the global tracker mirrors that every account's tracker logins are sent to, and can see all accounts' tracker activity in Diagnostics.
 - Back up the database and application-data directory together because encrypted integrations require the matching generated key.

@@ -7,6 +7,13 @@ export function errorMessage(error: unknown): string { return t(error instanceof
 export function isHttpUrl(value: string): boolean {
   try { return ["http:", "https:"].includes(new URL(value).protocol); } catch { return false; }
 }
+// Release links come from tracker pages, so only web and magnet links are rendered, whatever an older release stored.
+function linkWithScheme(value: unknown, schemes: readonly string[]): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try { return schemes.includes(new URL(value).protocol) ? value : undefined; } catch { return undefined; }
+}
+export function webHref(value: unknown): string | undefined { return linkWithScheme(value, ["http:", "https:"]); }
+export function magnetHref(value: unknown): string | undefined { return linkWithScheme(value, ["magnet:"]); }
 export function relativeTime(value: string): string {
   const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1_000), abs = Math.abs(seconds);
   const formatter = new Intl.RelativeTimeFormat(getLanguage(), { numeric: "auto" });

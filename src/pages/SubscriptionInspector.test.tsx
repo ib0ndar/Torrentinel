@@ -92,7 +92,13 @@ it("omits action columns that no rule match uses", async () => {
   try {
     expect(none.drawer.querySelectorAll(".match-row")).toHaveLength(2);
     expect(none.drawer.querySelector(".match-row__actions")).toBeNull();
-  } finally { await act(async () => none.root.unmount()); }
+  } finally { await act(async () => none.root.unmount()); document.body.innerHTML = ""; }
+  // Links stored by an older release with a script scheme are not rendered at all.
+  const unsafe = await open({ subscription: subscription({ type: "rule", label: "Dune", requiredTerms: ["Dune"] }), events: [], matches: [{ ...match("1", "javascript:alert(1)//download/"), magnet: "javascript:alert(2)" }] });
+  try {
+    expect(unsafe.drawer.querySelector(".match-row__actions")).toBeNull();
+    expect(unsafe.drawer.querySelector('a[href^="javascript:"]')).toBeNull();
+  } finally { await act(async () => unsafe.root.unmount()); }
 });
 
 it("refreshes the open details every 30 seconds only while the tab is visible", async () => {

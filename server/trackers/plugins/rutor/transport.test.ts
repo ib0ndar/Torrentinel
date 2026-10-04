@@ -55,7 +55,7 @@ describe("Rutor transport", () => {
     expect(browserFactory).toHaveBeenCalledOnce();
     expect(browserFactory).toHaveBeenCalledWith("torrentinel-rutor-rutor.is");
     expect(browser.get).toHaveBeenCalledOnce();
-    expect(http.seedCookies).toHaveBeenCalledWith(clearedPage.cookies, clearedPage.userAgent);
+    expect(http.seedCookies).toHaveBeenCalledWith(clearedPage.cookies, clearedPage.userAgent, requestedUrl);
     await transport.close();
     expect(browser.close).toHaveBeenCalledOnce();
   });
@@ -80,7 +80,7 @@ describe("Rutor transport", () => {
       body: "<html><title>Cleared</title></html>",
     });
     expect(browser.get).toHaveBeenCalledOnce();
-    expect(http.seedCookies).toHaveBeenCalledWith([], "Fixture browser agent");
+    expect(http.seedCookies).toHaveBeenCalledWith([], "Fixture browser agent", requestedUrl);
   });
 
   it("does not start a browser for non-challenge failures", async () => {

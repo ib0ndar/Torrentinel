@@ -6,6 +6,7 @@ import {
   type BrowserFormSubmission,
   type BrowserPage,
 } from "../../core/transport/browser.js";
+import { kinozalManifest } from "./manifest.js";
 
 const LOGIN_FORM_SELECTOR = 'form[action*="takelogin.php"]';
 const DEFAULT_RETRY_BACKOFF_MS = 15 * 60 * 1_000;
@@ -44,6 +45,7 @@ export class KinozalSessionManager {
       new IntegratedBrowserClient(sessionId, {
         trackerKey: "kinozal",
         trackerName: "Kinozal",
+        allowedHosts: kinozalManifest.canonicalHosts,
       })
     ),
     private readonly options: KinozalSessionOptions = {},

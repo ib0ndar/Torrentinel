@@ -108,7 +108,14 @@ describe("authenticated API", () => {
       expect(storedCredentials.username_encrypted).not.toContain("EncryptedTrackerUser");
       expect(storedCredentials.password_encrypted).not.toContain("EncryptedTrackerPassword");
 
-      const telegramToken = "not-a-real-telegram-token-for-testing";
+      const malformedToken = await app.inject({
+        method: "POST",
+        url: "/api/telegram/bot",
+        headers: { cookie: adminCookie },
+        payload: { token: "not-a-real-telegram-token/../../evil" },
+      });
+      expect(malformedToken.statusCode).toBe(400);
+      const telegramToken = "123456789:AAFakeTelegramTokenForTesting_123456";
       const configuredBot = await app.inject({
         method: "POST",
         url: "/api/telegram/bot",
