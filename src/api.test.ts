@@ -27,6 +27,20 @@ it("reports a required password change for a 428 from an authenticated endpoint"
   } finally { stop(); stopExpired(); }
 });
 
+it("passes the server's reason when someone else ended the session, and ignores unknown reasons", async () => {
+  const listener = vi.fn(), stop = onSessionExpired(listener);
+  try {
+    vi.stubGlobal("fetch", respond(401, { error: "Authentication required", code: "SESSION_ENDED", details: { reason: "password-reset" } }));
+    const failure = await api("/api/collections").catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(SessionExpiredError);
+    expect(failure).toMatchObject({ reason: "password-reset", message: "An administrator reset your password. Sign in with the temporary password you were given." });
+    expect(listener).toHaveBeenLastCalledWith("password-reset");
+    vi.stubGlobal("fetch", respond(401, { error: "Authentication required", code: "SESSION_ENDED", details: { reason: "something-else" } }));
+    expect(await api("/api/collections").catch((error: unknown) => error)).toMatchObject({ reason: undefined, message: "Your session has expired. Sign in again." });
+    expect(listener).toHaveBeenLastCalledWith(undefined);
+  } finally { stop(); }
+});
+
 it("keeps sign-in failures and other errors as ordinary API errors", async () => {
   const listener = vi.fn(), stop = onSessionExpired(listener);
   try {

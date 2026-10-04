@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import packageManifest from "../package.json";
-import { api, ApiError, onPasswordChangeRequired, onSessionExpired, PASSWORD_CHANGE_MESSAGE, SESSION_EXPIRED_MESSAGE } from "./api";
+import { api, ApiError, onPasswordChangeRequired, onSessionExpired, PASSWORD_CHANGE_MESSAGE, sessionEndMessage } from "./api";
 import { useSchedulerStatus } from "./hooks/useSchedulerStatus";
 import { TrackersProvider } from "./hooks/useTrackers";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
@@ -41,11 +41,11 @@ export default function App() {
     if ((value?.username ?? null) !== signedIn.current) clear();
     signedIn.current = value?.username ?? null; if (value) { setLanguage(value.language); applyTheme(value.theme); } setUser(value);
   }, [clear]);
-  useEffect(() => onSessionExpired(() => {
+  useEffect(() => onSessionExpired((reason) => {
     if (signedIn.current === null) return;
     setLastUsername(signedIn.current);
     updateUser(null);
-    notify(t(SESSION_EXPIRED_MESSAGE), "bad");
+    notify(t(sessionEndMessage(reason)), "bad");
   }), [notify, updateUser, t]);
   // The session is valid but the password must be changed first (an administrator reset also
   // ends sessions, so this is normally only reached by requests racing that change).
@@ -130,7 +130,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); } catch (error) { notify(errorMessage(error), "bad"); } }
   const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };
   const changePassword: MenuItem = { id: "change-password", label: t("Change password"), icon: "key", onSelect: () => { navigate("/settings"); setAccountFocusRequest((value) => value + 1); } };
-  const shortcuts: MenuItem = { id: "shortcuts", label: t("Keyboard shortcuts"), icon: "keyboard", onSelect: showShortcuts };
+  const shortcuts: MenuItem = { id: "shortcuts", label: t("Keyboard shortcuts"), icon: "keyboard", keyboardOnly: true, onSelect: showShortcuts };
   const versionTitle = APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`;
   const accountSummary = <div className="account-summary"><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span></div>;
   const schedulerLine = (className: string) => <div className={className}><span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>;

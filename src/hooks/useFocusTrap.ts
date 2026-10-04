@@ -35,12 +35,19 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, initialFocus?: 
     const keyDown = (event: KeyboardEvent) => {
       const container = ref.current;
       if (event.key !== "Tab" || openModals.at(-1) !== modal || !container) return;
-      const focusable = focusableElements(container), active = document.activeElement;
-      if (!focusable.length) { event.preventDefault(); return; }
-      const first = focusable[0], last = focusable[focusable.length - 1];
-      if (!container.contains(active)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
-      else if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+      // Visible notifications (data-modal-companion) join the loop after the modal's own controls.
+      const companions = [...document.querySelectorAll<HTMLElement>("[data-modal-companion]")].flatMap(focusableElements);
+      const loop = [...focusableElements(container), ...companions], active = document.activeElement as HTMLElement | null;
+      if (!loop.length) { event.preventDefault(); return; }
+      const index = active ? loop.indexOf(active) : -1;
+      if (index < 0) {
+        // Something inside the modal that is not a Tab stop (e.g. a focused heading) keeps native order.
+        if (active && container.contains(active)) return;
+        event.preventDefault(); (event.shiftKey ? loop[loop.length - 1] : loop[0]).focus();
+        return;
+      }
+      event.preventDefault();
+      loop[(index + (event.shiftKey ? -1 : 1) + loop.length) % loop.length].focus();
     };
     document.addEventListener("keydown", keyDown);
     return () => {

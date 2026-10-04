@@ -2,7 +2,7 @@ import { hash } from "bcryptjs";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { nowIso, type SqliteDatabase } from "../db.js";
-import { requireAdmin } from "../auth.js";
+import { requireAdmin, revokeSessions } from "../auth.js";
 import { DIAGNOSTIC_RETENTION_HOURS, diagnosticCutoffIso, pruneDiagnostics } from "../diagnostics.js";
 import { idParams, isUniqueError, jsonObject, origin, parse, trackerKeySchema, urlSchema, type RouteServices } from "./shared.js";
 import { LABEL_SQL } from "./subscriptions.js";
@@ -85,14 +85,14 @@ export function registerAdminRoutes({ app, db }: RouteServices): void {
     if (!current) return reply.code(404).send({ error: "User not found" });
     db.prepare("UPDATE users SET disabled = ?, is_admin = ?, updated_at = ? WHERE id = ?").run(input.disabled === undefined ? current.disabled : input.disabled ? 1 : 0,
       input.isAdmin === undefined ? current.is_admin : input.isAdmin ? 1 : 0, nowIso(), params.id);
-    if (input.disabled) db.prepare("DELETE FROM sessions WHERE user_id = ?").run(params.id);
+    if (input.disabled) revokeSessions(db, params.id, "account-disabled");
     return { ok: true };
   });
   app.post("/api/admin/users/:id/reset-password", { preHandler: requireAdmin }, async (request, reply) => {
     const params = parse(idParams, request.params, reply), input = parse(z.object({ password: z.string().min(8).max(500) }), request.body, reply);
     if (!params || !input) return;
     if (!db.prepare("UPDATE users SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE id = ?").run(await hash(input.password, 12), PASSWORD_CHANGE.reset, nowIso(), params.id).changes) return reply.code(404).send({ error: "User not found" });
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(params.id); return { ok: true };
+    revokeSessions(db, params.id, "password-reset"); return { ok: true };
   });
   app.get("/api/admin/mirrors", { preHandler: requireAdmin }, async () => ({ mirrors: db.prepare("SELECT tracker_key, display_name, base_url, enabled, updated_at FROM tracker_mirrors ORDER BY display_name")
     .all().map((value) => { const row = value as Record<string, unknown>; return { ...camelRow(row), enabled: Boolean(row.enabled) }; }) }));

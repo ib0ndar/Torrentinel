@@ -9,8 +9,13 @@ import { passwordChangeReason, themePreference } from "./types.js";
 declare module "fastify" {
   interface FastifyRequest {
     user: AuthUser | null;
+    /** Set when the request's session cookie belongs to a session someone else ended. */
+    sessionEndReason: SessionEndReason | null;
   }
 }
+
+export type SessionEndReason = "password-reset" | "password-changed" | "account-disabled";
+const SESSION_END_REASONS: readonly string[] = ["password-reset", "password-changed", "account-disabled"];
 
 const COOKIE_NAME = "torrentinel_session";
 
@@ -48,6 +53,7 @@ function toAuthUser(row: UserRow): AuthUser {
 
 export function registerAuth(app: FastifyInstance, db: SqliteDatabase): void {
   app.decorateRequest("user", null);
+  app.decorateRequest("sessionEndReason", null);
 
   app.addHook("preHandler", async (request) => {
     const token = request.cookies[COOKIE_NAME];
@@ -60,7 +66,10 @@ export function registerAuth(app: FastifyInstance, db: SqliteDatabase): void {
       WHERE s.token_hash = ? AND s.expires_at > ?
     `).get(tokenHash(token), nowIso()) as UserRow | undefined;
 
-    if (row && !row.disabled) request.user = toAuthUser(row);
+    if (row && !row.disabled) { request.user = toAuthUser(row); return; }
+    if (row) return;
+    const ended = db.prepare("SELECT reason FROM revoked_sessions WHERE token_hash = ? AND expires_at > ?").get(tokenHash(token), nowIso()) as { reason: string } | undefined;
+    if (ended && SESSION_END_REASONS.includes(ended.reason)) request.sessionEndReason = ended.reason as SessionEndReason;
   });
 }
 
@@ -87,21 +96,33 @@ export function destroySession(db: SqliteDatabase, request: FastifyRequest, repl
   reply.clearCookie(COOKIE_NAME, { path: "/" });
 }
 
+// Ends the user's sessions (except one, if given) and records why, so a later request with an ended
+// session's cookie is told what happened. The sessions themselves are deleted as before.
+export function revokeSessions(db: SqliteDatabase, userId: string, reason: SessionEndReason, keepTokenHash = ""): number {
+  db.prepare(`INSERT OR REPLACE INTO revoked_sessions (token_hash, reason, expires_at)
+    SELECT token_hash, ?, expires_at FROM sessions WHERE user_id = ? AND token_hash <> ?`).run(reason, userId, keepTokenHash);
+  return db.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?").run(userId, keepTokenHash).changes;
+}
+
 // Ends every session of the user except the one making this request.
 export function destroyOtherSessions(db: SqliteDatabase, request: FastifyRequest, userId: string): number {
   const token = request.cookies[COOKIE_NAME];
-  return db.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?").run(userId, token ? tokenHash(token) : "").changes;
+  return revokeSessions(db, userId, "password-changed", token ? tokenHash(token) : "");
+}
+
+async function authenticationRequired(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await reply.code(401).send(request.sessionEndReason
+    ? { error: "Authentication required", code: "SESSION_ENDED", details: { reason: request.sessionEndReason } }
+    : { error: "Authentication required" });
 }
 
 export async function requireUser(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  if (!request.user) {
-    await reply.code(401).send({ error: "Authentication required" });
-  }
+  if (!request.user) await authenticationRequired(request, reply);
 }
 
 export async function requireReadyUser(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!request.user) {
-    await reply.code(401).send({ error: "Authentication required" });
+    await authenticationRequired(request, reply);
     return;
   }
   if (request.user.mustChangePassword) {
@@ -111,7 +132,7 @@ export async function requireReadyUser(request: FastifyRequest, reply: FastifyRe
 
 export async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!request.user) {
-    await reply.code(401).send({ error: "Authentication required" });
+    await authenticationRequired(request, reply);
     return;
   }
   if (request.user.mustChangePassword) {

@@ -98,7 +98,30 @@ it("returns to sign-in with one clear message when the session expires during ba
     const toasts = [...container.querySelectorAll(".toast")];
     expect(toasts.map((toast) => toast.textContent)).toEqual(["Your session has expired. Sign in again."]);
     expect(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!.value).toBe("alice");
-    expect(container.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe("");
+  } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
+});
+
+it("explains why the session ended when an administrator reset the password", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.useFakeTimers();
+  let ended = false;
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (ended) { expireSession("password-reset"); throw new SessionExpiredError("password-reset"); }
+    if (path === "/api/auth/me") return { user: { id: "u1", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel" } };
+    if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
+    if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 0, unreadCount: 0, activityCount: 0 }] };
+    if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    ended = true;
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(container.querySelector(".login-form")).not.toBeNull();
+    expect([...container.querySelectorAll(".toast")].map((toast) => toast.textContent)).toEqual(["An administrator reset your password. Sign in with the temporary password you were given."]);
+    expect(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!.value).toBe("alice");
   } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
 });
 

@@ -2,7 +2,8 @@ import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, 
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 
-export type MenuItem = { id: string; label: string; icon?: IconName; tone?: "danger"; href?: string; title?: string; onSelect?: () => void };
+// keyboardOnly items are hidden on touch-only devices (no hover, coarse pointer), where they are of no use.
+export type MenuItem = { id: string; label: string; icon?: IconName; tone?: "danger"; href?: string; title?: string; keyboardOnly?: boolean; onSelect?: () => void };
 type OpenFocus = "first" | "last";
 
 export function MenuButton({ className, triggerLabel, menuLabel, items, header, align = "end", offset = 6, children }: {
@@ -11,7 +12,8 @@ export function MenuButton({ className, triggerLabel, menuLabel, items, header, 
   const [open, setOpen] = useState<OpenFocus | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null), popoverRef = useRef<HTMLDivElement>(null), menuId = useId();
   const close = useCallback((restoreFocus: boolean) => { setOpen(null); if (restoreFocus) triggerRef.current?.focus(); }, []);
-  const menuItems = () => [...popoverRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []];
+  // Only items that are displayed (keyboard-only items are hidden on touch-only devices).
+  const menuItems = () => [...popoverRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []].filter((item) => getComputedStyle(item).display !== "none");
   const place = useCallback(() => {
     const trigger = triggerRef.current, popover = popoverRef.current;
     if (!trigger || !popover) return;
@@ -61,7 +63,7 @@ export function MenuButton({ className, triggerLabel, menuLabel, items, header, 
     {open && createPortal(<div ref={popoverRef} className="menu-popover" onKeyDown={menuKeyDown}>
       {header && <div className="menu-popover__header">{header}</div>}
       <div id={menuId} role="menu" aria-label={menuLabel} className="menu-popover__items">{items.map((item) => {
-        const content = <>{item.icon && <Icon name={item.icon} size={17} />}<span>{item.label}</span></>, itemClass = `menu-item ${item.tone === "danger" ? "menu-item--danger" : ""}`;
+        const content = <>{item.icon && <Icon name={item.icon} size={17} />}<span>{item.label}</span></>, itemClass = `menu-item ${item.tone === "danger" ? "menu-item--danger" : ""} ${item.keyboardOnly ? "menu-item--keyboard" : ""}`;
         return item.href
           ? <a key={item.id} role="menuitem" tabIndex={-1} className={itemClass} href={item.href} title={item.title} target="_blank" rel="noreferrer" onClick={() => close(false)}>{content}</a>
           : <button key={item.id} type="button" role="menuitem" tabIndex={-1} className={itemClass} title={item.title} onClick={() => select(item)}>{content}</button>;

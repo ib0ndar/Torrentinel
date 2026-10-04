@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { focusableElements } from "../hooks/useFocusTrap";
 import { useI18n } from "../i18n";
 import type { Notify } from "../types";
 
@@ -32,7 +33,9 @@ export function useToasts() {
 export function ToastRegion({ toasts, onDismiss, aboveNavigation = false }: { toasts: Toast[]; onDismiss: (id: number) => void; aboveNavigation?: boolean }) {
   const firstRow = MAX_TOASTS - toasts.length + 1;
   const items = (tone: Toast["tone"]) => toasts.map((toast, index) => toast.tone === tone && <ToastItem key={toast.id} toast={toast} row={firstRow + index} onDismiss={onDismiss} />);
-  return <div className={`toast-stack ${aboveNavigation ? "toast-stack--navigation" : ""}`}>
+  // data-modal-companion: an open drawer or dialog includes these buttons in its Tab loop, so an error can be
+  // reached and dismissed without closing the panel.
+  return <div className={`toast-stack ${aboveNavigation ? "toast-stack--navigation" : ""}`} data-modal-companion>
     <div className="toast-region" role="status" aria-live="polite" aria-atomic="false">{items("good")}</div>
     <div className="toast-region" role="alert" aria-live="assertive" aria-atomic="false">{items("bad")}</div>
   </div>;
@@ -42,18 +45,32 @@ export function ToastRegion({ toasts, onDismiss, aboveNavigation = false }: { to
 function ToastItem({ toast, row, onDismiss }: { toast: Toast; row: number; onDismiss: (id: number) => void }) {
   const { t } = useI18n();
   const [hovered, setHovered] = useState(false), [focused, setFocused] = useState(false);
-  const remaining = useRef(SUCCESS_DURATION_MS);
+  const remaining = useRef(SUCCESS_DURATION_MS), element = useRef<HTMLDivElement>(null);
   const paused = hovered || focused;
   useEffect(() => {
     if (toast.tone !== "good" || paused) return;
     const started = Date.now(), timer = window.setTimeout(() => onDismiss(toast.id), remaining.current);
     return () => { window.clearTimeout(timer); remaining.current = Math.max(RESUMED_MINIMUM_MS, remaining.current - (Date.now() - started)); };
   }, [toast, paused, onDismiss]);
-  return <div className={`toast toast--${toast.tone}`} style={{ gridRow: row }} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}
+  // Closing a focused toast moves focus to another toast or back into the open panel instead of the page body.
+  function close() {
+    const own = element.current;
+    if (own?.contains(document.activeElement)) {
+      const stack = own.closest<HTMLElement>("[data-modal-companion]"), modals = document.querySelectorAll<HTMLElement>('[aria-modal="true"]');
+      const others = stack ? focusableElements(stack).filter((button) => !own.contains(button)) : [];
+      const modal = modals[modals.length - 1];
+      const target = others[0] ?? (modal ? focusableElements(modal)[0] : undefined);
+      onDismiss(toast.id);
+      if (target) window.requestAnimationFrame(() => { if (target.isConnected) target.focus({ preventScroll: true }); });
+      return;
+    }
+    onDismiss(toast.id);
+  }
+  return <div ref={element} className={`toast toast--${toast.tone}`} style={{ gridRow: row }} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}
     onFocus={() => setFocused(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false); }}
-    onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onDismiss(toast.id); } }}>
+    onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
     <Icon name={toast.tone === "bad" ? "alert" : "check"} size={17} />
     <span className="toast__message">{toast.message}</span>
-    <button type="button" className="toast__close" aria-label={t("Dismiss notification")} title={t("Dismiss notification")} onClick={() => onDismiss(toast.id)}><Icon name="close" size={15} /></button>
+    <button type="button" className="toast__close" aria-label={t("Dismiss notification")} title={t("Dismiss notification")} onClick={close}><Icon name="close" size={15} /></button>
   </div>;
 }

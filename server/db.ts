@@ -46,6 +46,16 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
 
+    -- Why a session was ended by someone else (administrator reset or disable, or a password change in
+    -- another session), so a later request with its cookie can say so. Ended sessions are still deleted
+    -- from sessions, so releases that ignore this table never treat them as valid.
+    CREATE TABLE IF NOT EXISTS revoked_sessions (
+      token_hash TEXT PRIMARY KEY,
+      reason TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_revoked_sessions_expiry ON revoked_sessions(expires_at);
+
     CREATE TABLE IF NOT EXISTS collections (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -415,5 +425,6 @@ function seed(db: SqliteDatabase): void {
   }
 
   db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(timestamp);
+  db.prepare("DELETE FROM revoked_sessions WHERE expires_at <= ?").run(timestamp);
   db.prepare("DELETE FROM telegram_link_codes WHERE expires_at <= ?").run(timestamp);
 }

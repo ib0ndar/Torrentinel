@@ -10,6 +10,9 @@ All notable changes to Torrentinel are documented in this file.
 - Back/Forward and reloads return a long collection list (and other pages) to where you were, instead of near the top while the list is still loading.
 - Closing details opened from an Unread list moves focus to the entry that took its place (or the selected filter) when the opened entry is no longer listed, instead of losing focus.
 - Tracker icons in Diagnostics, Settings, and Administration keep their full width, so they line up across rows.
+- When an administrator resets your password or disables your account, or you change your password in another session, the signed-out browser now says so ("An administrator reset your password. Sign in with the temporary password you were given.", and similar) instead of "Your session has expired". The server keeps the reason for ended sessions in a new `revoked_sessions` table and returns it on the next request as `code: "SESSION_ENDED"` with `details.reason`; the sessions themselves are still deleted, so earlier releases are unaffected.
+- With a panel open, Tab now also reaches visible notifications, so an error can be read and dismissed without closing the panel; closing a focused notification returns focus to the panel.
+- The **Keyboard shortcuts** item is hidden in the account menu on touch-only devices, where it has no use. Arrow keys in menus skip hidden items.
 
 ## [0.9.0] - 2026-10-04
 

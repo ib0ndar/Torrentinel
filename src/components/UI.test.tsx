@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DialogProvider, useDialog } from "./Dialogs";
 import { Drawer } from "./UI";
+import { ToastRegion, useToasts } from "./Toasts";
 
 const originalRects = HTMLElement.prototype.getClientRects;
 // jsdom has no layout; treat every rendered element as visible for the focus trap.
@@ -103,4 +104,35 @@ it("lets a dialog over a drawer own Tab and Escape, then hands both back to the 
     await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
     expect(close).toHaveBeenCalledOnce();
   } finally { await act(async () => root.unmount()); }
+});
+
+function DrawerWithError() {
+  const toasts = useToasts();
+  return <>
+    <button className="opener" onClick={() => toasts.notify("Save failed", "bad")}>Fail</button>
+    <Drawer title="Details" subtitle="Test" onClose={() => undefined}><button className="last">Save</button></Drawer>
+    <ToastRegion toasts={toasts.toasts} onDismiss={toasts.dismiss} />
+  </>;
+}
+it("lets Tab reach an error notification while a drawer is open, and returns focus to the drawer when it is closed", async () => {
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<DrawerWithError />));
+    await nextFrame();
+    await act(async () => container.querySelector<HTMLButtonElement>(".opener")!.click());
+    const drawer = document.querySelector<HTMLElement>(".drawer")!, dismiss = () => document.querySelector<HTMLButtonElement>(".toast__close")!;
+    const [drawerClose] = [...drawer.querySelectorAll<HTMLButtonElement>("button")];
+    drawer.querySelector<HTMLButtonElement>(".last")!.focus();
+    await tab();
+    expect(document.activeElement).toBe(dismiss());
+    await tab();
+    expect(document.activeElement).toBe(drawerClose);
+    await tab(true);
+    expect(document.activeElement).toBe(dismiss());
+    await act(async () => { dismiss().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+    await nextFrame();
+    expect(document.querySelector(".toast")).toBeNull();
+    expect(drawer.contains(document.activeElement)).toBe(true);
+  } finally { await act(async () => root.unmount()); container.remove(); }
 });

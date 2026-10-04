@@ -11,23 +11,35 @@ export class ApiError extends Error {
 }
 
 export const SESSION_EXPIRED_MESSAGE = "Your session has expired. Sign in again.";
+// The server says why when someone else ended the session (code SESSION_ENDED, details.reason).
+export type SessionEndReason = "password-reset" | "password-changed" | "account-disabled";
+const SESSION_END_MESSAGES: Record<SessionEndReason, string> = {
+  "password-reset": "An administrator reset your password. Sign in with the temporary password you were given.",
+  "password-changed": "Your password was changed in another session. Sign in with the new password.",
+  "account-disabled": "An administrator disabled your account.",
+};
+export function sessionEndMessage(reason?: SessionEndReason): string { return reason ? SESSION_END_MESSAGES[reason] : SESSION_EXPIRED_MESSAGE; }
+function sessionEndReason(payload: { code?: string; details?: unknown }): SessionEndReason | undefined {
+  const reason = payload.code === "SESSION_ENDED" ? (payload.details as { reason?: unknown } | undefined)?.reason : undefined;
+  return typeof reason === "string" && reason in SESSION_END_MESSAGES ? reason as SessionEndReason : undefined;
+}
 
 // A 401 from any endpoint other than sign-in means the session cookie is no
 // longer valid (expired, signed out elsewhere, server data reset, or account disabled).
 export class SessionExpiredError extends ApiError {
-  constructor() {
-    super(SESSION_EXPIRED_MESSAGE, 401, "SESSION_EXPIRED");
+  constructor(public readonly reason?: SessionEndReason) {
+    super(sessionEndMessage(reason), 401, "SESSION_EXPIRED");
     this.name = "SessionExpiredError";
   }
 }
 
-const sessionExpiredListeners = new Set<() => void>();
-export function onSessionExpired(listener: () => void): () => void {
+const sessionExpiredListeners = new Set<(reason?: SessionEndReason) => void>();
+export function onSessionExpired(listener: (reason?: SessionEndReason) => void): () => void {
   sessionExpiredListeners.add(listener);
   return () => { sessionExpiredListeners.delete(listener); };
 }
-export function expireSession(): void {
-  for (const listener of [...sessionExpiredListeners]) listener();
+export function expireSession(reason?: SessionEndReason): void {
+  for (const listener of [...sessionExpiredListeners]) listener(reason);
 }
 
 export const PASSWORD_CHANGE_MESSAGE = "Choose a new password to continue.";
@@ -60,8 +72,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     details?: unknown;
   };
   if (response.status === 401 && path !== "/api/auth/login") {
-    expireSession();
-    throw new SessionExpiredError();
+    const reason = sessionEndReason(payload);
+    expireSession(reason);
+    throw new SessionExpiredError(reason);
   }
   if (response.status === 428 && payload.code === "PASSWORD_CHANGE_REQUIRED") {
     requirePasswordChange();

@@ -67,6 +67,34 @@ describe("password change", () => {
     expect((await me(current)).statusCode).toBe(200);
   });
 
+  it("tells a signed-out browser why its session ended: administrator reset, disable, or a password change elsewhere", async () => {
+    services.db.prepare("UPDATE users SET must_change_password = 0").run();
+    const admin = (await login("admin", "admin")).cookie;
+    const ended = async (cookie: string) => { const response = await me(cookie); return { status: response.statusCode, code: response.json().code, reason: response.json().details?.reason }; };
+    const first = (await login("member", "Member-Password-1")).cookie;
+    expect((await services.app.inject({ method: "POST", url: "/api/admin/users/member/reset-password", headers: { cookie: admin }, payload: { password: "Temporary-3" } })).statusCode).toBe(200);
+    expect(await ended(first)).toEqual({ status: 401, code: "SESSION_ENDED", reason: "password-reset" });
+    // The ended session stays deleted; only the reason is kept.
+    expect(sessionCount("member")).toBe(0);
+
+    const before = (await login("member", "Temporary-3")).cookie, current = (await login("member", "Temporary-3")).cookie;
+    expect((await changePassword(current, "Temporary-3", "Member-Password-4")).statusCode).toBe(200);
+    expect(await ended(before)).toEqual({ status: 401, code: "SESSION_ENDED", reason: "password-changed" });
+    expect((await me(current)).statusCode).toBe(200);
+
+    expect((await services.app.inject({ method: "PATCH", url: "/api/admin/users/member", headers: { cookie: admin }, payload: { disabled: true } })).statusCode).toBe(200);
+    expect(await ended(current)).toEqual({ status: 401, code: "SESSION_ENDED", reason: "account-disabled" });
+    // Any request that needs a session reports the reason, not only /api/auth/me.
+    expect((await services.app.inject({ url: "/api/collections", headers: { cookie: current } })).json()).toMatchObject({ code: "SESSION_ENDED", details: { reason: "account-disabled" } });
+
+    // Unknown cookies, your own sign-out and no cookie at all stay a plain 401.
+    expect(await ended("torrentinel_session=unknown-token")).toEqual({ status: 401, code: undefined, reason: undefined });
+    const signedOut = (await login("admin", "admin")).cookie;
+    await services.app.inject({ method: "POST", url: "/api/auth/logout", headers: { cookie: signedOut } });
+    expect(await ended(signedOut)).toEqual({ status: 401, code: undefined, reason: undefined });
+    expect((await services.app.inject({ url: "/api/auth/me" })).json()).toEqual({ error: "Authentication required" });
+  });
+
   it("reports why a password change is required: first run, created by an administrator, or reset", async () => {
     const admin = (await login("admin", "admin")).cookie;
     expect((await me(admin)).json().user).toMatchObject({ mustChangePassword: true, passwordChangeReason: "initial" });
