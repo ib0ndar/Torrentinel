@@ -2,7 +2,7 @@
 
 All notable changes to Torrentinel are documented in this file.
 
-## [Unreleased]
+## [0.9.1] - 2026-10-04
 
 ### Fixed
 
@@ -13,6 +13,13 @@ All notable changes to Torrentinel are documented in this file.
 - When an administrator resets your password or disables your account, or you change your password in another session, the signed-out browser now says so ("An administrator reset your password. Sign in with the temporary password you were given.", and similar) instead of "Your session has expired". The server keeps the reason for ended sessions in a new `revoked_sessions` table and returns it on the next request as `code: "SESSION_ENDED"` with `details.reason`; the sessions themselves are still deleted, so earlier releases are unaffected.
 - With a panel open, Tab now also reaches visible notifications, so an error can be read and dismissed without closing the panel; closing a focused notification returns focus to the panel.
 - The **Keyboard shortcuts** item is hidden in the account menu on touch-only devices, where it has no use. Arrow keys in menus skip hidden items.
+
+### Upgrade notes
+
+- Startup adds the `revoked_sessions` table (the reason a session was ended, kept until the session would have expired). Ended sessions are still deleted from `sessions`, and 0.9.0 ignores the new table, so it runs unchanged against an upgraded database.
+- `users.must_change_password` now stores why a change is required (1 first-run default account, 2 administrator reset, 3 created by an administrator); any non-zero value still means a change is required. Existing rows keep their value.
+- `GET /api/auth/me` returns `passwordChangeReason` while a change is required, and a 401 for an ended session carries `code: "SESSION_ENDED"` with `details.reason` (`password-reset`, `password-changed`, or `account-disabled`).
+- Back up the database and application-data directory together before updating, as usual.
 
 ## [0.9.0] - 2026-10-04
 
@@ -489,6 +496,7 @@ All notable changes to Torrentinel are documented in this file.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
 [Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.8.0...HEAD
+[0.9.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.7.0
