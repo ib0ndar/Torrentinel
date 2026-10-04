@@ -19,7 +19,7 @@
   <a href="https://github.com/ib0ndar/Torrentinel/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/ib0ndar/Torrentinel"></a>
 </p>
 
-Torrentinel is a self-hosted watchlist and change-detection service. It monitors selected tracker releases, detects changes to titles, artwork, magnets, torrent files, and metadata, discovers new phrase matches, keeps per-user history, and sends Telegram notifications.
+Torrentinel watches the tracker topics and search phrases you care about and tells you exactly what changed: a re-uploaded torrent file, a new magnet, an updated title, fresh artwork or metadata, or a brand-new release that matches your phrases. Every account has its own collections, history, and unread inbox and can link its own Telegram bot, and the whole service, tracker browser included, runs as one self-hosted service or container.
 
 <p align="center">
   <img src="docs/screenshots/product-tour.gif" alt="Torrentinel product tour showing release monitoring, change history, and tracker diagnostics" width="960">
@@ -27,14 +27,19 @@ Torrentinel is a self-hosted watchlist and change-detection service. It monitors
 
 ## Why Torrentinel?
 
-Torrentinel is designed for people who want to follow releases over time, including changes to an existing tracker topic. It complements download clients and media automation rather than replacing them.
+On forum-style trackers such as RuTracker and Kinozal, releases change in place: a series topic gains episodes, an uploader replaces the torrent file, the title and artwork are updated. Torrentinel is built to follow exactly that. It is a notification-first watchlist: it tells you what changed and puts the release one tap away, and leaves downloading to the client you already use, so it never needs your download client's credentials.
 
-**Use Torrentinel when you want to:**
+**What sets it apart:**
 
-- Watch specific tracker pages for later changes
-- Discover new posts matching simple required and ignored phrases
-- Keep private per-user collections, history, and read state
-- Receive Telegram notifications without connecting a download client
+- **It shows what changed, not just that something changed.** Every check fingerprints the title, cover, magnet, torrent file, and tracker metadata, and the history shows the previous and new values side by side. The first check is a silent baseline, and when a Torrentinel update changes how a tracker page is read, subscriptions are re-baselined silently instead of producing false alerts.
+- **Rules find new releases for you.** Besides watching known pages, a rule watches several trackers at once for new releases whose titles contain every required phrase and none of the ignored ones, case-insensitively in Latin and Cyrillic. Each tracker uses the discovery method that suits it: RuTracker's feed, Rutor's list of recent releases, and Kinozal's search.
+- **Gaps between polls are detected and filled.** RuTracker's rolling feed is buffered persistently and compared between polls. When a gap is detected, Torrentinel catches up with an authenticated search (with a RuTracker login configured), and Administration shows the feed window, the overlap, and the safety margin of the chosen polling interval.
+- **One container, browser included.** Tracker logins, searches, and anti-bot challenges are handled by an integrated Patchright browser inside the same container or service, and its clearance survives restarts. There is no challenge-solver sidecar, no database server, and no cron job: one image, or one native Node.js service, with SQLite.
+- **Built for a household, not just one person.** Each account has its own collections, history, unread state, tracker logins, personal mirrors, Telegram bot, language, theme, start page, and default views, isolated from the other accounts. Administrators create accounts; there is no public registration.
+- **Notifications you can act on.** Telegram messages carry the cover art, title, tracker, what changed or which rule matched, size, and category, in each account's language, with buttons for the tracker page and the magnet link or torrent file. Deliveries are queued in the database, retried with backoff that respects Telegram's rate limits, and logged.
+- **Secure by default.** There is no default password, tracker logins and bot tokens are encrypted with AES-256-GCM, and ports are published on the local machine only. Torrentinel refuses DNS-rebinding and cross-site requests and limits sign-in attempts, and its sandboxed browser stays on the tracker's own domains and cannot reach your local network. Cover downloads and tracker redirects never reach your local network either.
+- **Transparent when something goes wrong.** Subscriptions that need attention are flagged and can be sorted first, and administrators can review every tracker request and Telegram delivery from the last seven days with its outcome, HTTP status, timing, and what was found (cover, magnet, torrent file).
+- **A fast, considered interface.** An Activity inbox across all collections, server-side search and filters, addresses that survive reloads and Back/Forward, keyboard shortcuts, a phone layout with bottom navigation, English and Russian, and eight color themes plus Auto.
 
 ## Quick start with Docker Compose
 
@@ -75,25 +80,61 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 
 ## Features
 
-- Direct-link monitoring for title, cover, magnet, torrent-file, and metadata changes
-- Case-insensitive rule subscriptions with required and ignored phrases
-- Per-user collections, history, and unread activity: opening details marks a subscription read; mark it unread in the details to keep a reminder
-- Activity view of changes across all collections, with old and new values, and Mark all read per collection or for everything
-- Reliable Telegram notifications with artwork, release links, a persistent delivery queue, and automatic retries
-- Server-side collection search, status filters, and sorting, optional pagination, and quick page-size controls; the current view is kept in the address
-- A start page per account (Monitor or Activity) and a default view per collection (All, Unread, or Errors)
-- English (default) and Russian interfaces and Telegram release messages, selected per account in Settings
-- Eight color themes, including two light themes and a high-contrast theme, plus Auto, which follows the device's light or dark mode; selected per account in Settings
-- Persistent cover fallback when an image host is temporarily unavailable
-- Tracker credentials, mirrors, and Telegram bots configured from the web interface
-- Administrator-managed accounts with no public registration
-- Configurable polling from 5 minutes to 6 hours
-- Persistent RuTracker feed buffering with overlap monitoring and authenticated gap recovery
-- Integrated Patchright browser for Kinozal login/search, RuTracker detail access, and challenge-only Rutor fallback
-- Tracker diagnostics with seven-day log retention
-- Encrypted credentials and bot tokens in SQLite
-- Modular TypeScript tracker adapters
-- Source-built container support for `linux/amd64` and `linux/arm64`
+### Monitoring and discovery
+
+- **Direct subscriptions** to tracker topics: the title, cover, magnet, torrent file, and tracker metadata are fingerprinted on every check, and any change is recorded with its previous and new values
+- **Silent baselines:** the first check of a page or rule records a baseline without notifying, and when an update changes how Torrentinel reads a tracker page, existing subscriptions are re-baselined without false alerts
+- **Rule subscriptions** across several trackers with required and ignored phrases, matched case-insensitively in Latin and Cyrillic; ignored phrases start with trailer, teaser, and soundtrack in English and Russian, and every rule keeps its matches with tracker links, magnets, and torrent files
+- **Discovery suited to each tracker:** RuTracker's rolling feed, Rutor's recent-release list, and Kinozal's search
+- **RuTracker feed continuity:** a persistent release buffer, overlap tracking between polls, gap detection, and authenticated catch-up search when a RuTracker login is configured, with a warning when the polling interval comes too close to the feed window
+- **Per-subscription controls:** Check now, pause and resume, edit the link or the phrases and trackers, and move between collections
+- **Integrated browser where a tracker needs it:** Kinozal login and search, RuTracker detail pages and catch-up search, and Rutor only when a challenge appears; logins and challenge clearance are kept between restarts
+- Configurable polling from 5 minutes to 6 hours, one schedule for every account and tracker
+- Global and personal tracker mirrors, and a persistent cover cache that keeps artwork available when an image host is down
+
+### Activity and notifications
+
+- **Unread inbox:** a subscription with new changes stays unread until you open its details; **Mark unread** keeps a reminder, and **Mark all read** works per collection or everywhere
+- **Activity view** of changes across all collections, newest first and grouped by day, with old and new values and an unread count in the navigation
+- **Telegram notifications per account:** each account links its own bot with a short-lived code and receives messages in its own language, with cover art (from the cache, the image's address, or an upload, falling back to text), what changed or which rule matched, size, and category
+- **One-tap buttons** for the tracker page and the magnet link, served through your Torrentinel address because Telegram buttons cannot open magnet links directly, or the torrent file when there is no magnet
+- **Reliable delivery:** notifications are queued in SQLite, delivered at least once, and retried with exponential backoff (up to six hours) that honors Telegram's rate limits; administrators see the delivery log and the queue
+
+### Interface
+
+- Collections with server-side search (case-insensitive in Latin and Cyrillic), All, Unread, and Errors filters with counts, sorting by last change, name, or needs attention first, and optional pagination with 10 to 100 entries per page
+- **Every view has an address:** collection, filter, search, page, and sort survive reloads, bookmarks, and Back/Forward, and reloads and Back/Forward also restore the scroll position
+- **Your own starting point:** a start page per account (Monitor or Activity) and a default view per collection (All, Unread, or Errors)
+- Keyboard shortcuts: `/` search, `j`/`k` move between rows, `Enter` opens, `a` adds a subscription, `?` lists the shortcuts, `Esc` closes
+- Keyboard-operable menus, dialogs, and panels with managed focus, and a phone and tablet layout with bottom navigation, checked automatically at widths from 320 to 1440 pixels
+- English (default) and Russian interfaces and Telegram messages, selected per account
+- Eight color themes, including two light themes and a high-contrast theme, plus Auto, which follows the device's light or dark mode
+- Tracker markers shown as each tracker's website icon or as letter badges
+
+### Accounts and administration
+
+- Administrator-managed accounts with no public registration; new accounts get a private Inbox and a temporary password that must be changed at the first sign-in
+- Collections, history, tracker logins, personal mirrors, Telegram bots, and preferences are isolated per account
+- Users change their own password, which signs out their other sessions; when an administrator resets a password or disables an account, the user's sessions end and the sign-in page says why
+- **Administration:** an overview with the scheduler and RuTracker feed coverage, users and roles, global mirrors, and diagnostics with a filterable seven-day tracker request log, Telegram deliveries, and the notification queue
+
+### Security and privacy
+
+- No default password: the first start generates one, keeps it readable only by Torrentinel, and deletes it after the first password change
+- Tracker logins and Telegram bot tokens are encrypted with AES-256-GCM using a key kept outside the database, and are set only in the web interface, never in environment variables
+- Ports are published on the local machine only by default, and requests addressed to unknown host names are refused to stop DNS rebinding
+- HttpOnly, SameSite=Strict session cookies, refused cross-site requests, and sign-in attempt limits per address and account; unknown accounts take as long to reject as a wrong password
+- The integrated Chrome runs in its sandbox, opens only the tracker's own domains, has no listening port, and connects through an internal proxy that refuses local and private network addresses
+- Cover downloads and tracker redirects reach only public internet addresses, tracker responses are size-limited, and personal mirrors are limited to the tracker's own domains
+
+### Deployment and operations
+
+- One image with the application, Patchright, Chrome or Chromium, and a private virtual display; no sidecar, database server, or cron job
+- Docker Compose, rootless Podman Quadlet, or a native systemd service on Node.js 22.20+
+- `linux/amd64` and `linux/arm64` images with build provenance; every image build runs the full automated test suite
+- Health endpoint with scheduler state and a container health check
+- Automatic database migrations at startup, and a documented paired backup of the database and its encryption key
+- Modular TypeScript tracker adapters with declared capabilities and contract tests
 
 ## Screenshots
 
