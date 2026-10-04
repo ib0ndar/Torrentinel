@@ -237,7 +237,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .tracker-stack { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .subscription-open .tracker-stack, .activity-entry .tracker-stack { flex-wrap: nowrap; gap: 2px; }
 .subscription-open .tracker-tag, .activity-entry .tracker-tag { width: 24px; flex: 0 0 auto; }
-.tracker-tag { width: 31px; height: 24px; display: inline-grid; place-items: center; }
+.tracker-tag { width: 31px; height: 24px; flex: 0 0 auto; display: inline-grid; place-items: center; }
 .tracker-tag img { display: block; width: 20px; height: 20px; object-fit: contain; }
 .tracker-tag--abbreviations { border: 1px solid var(--line-strong); border-radius: 5px; background: color-mix(in srgb, var(--overlay) 2.5%, transparent); color: var(--muted); font-size: 10px; font-weight: 850; letter-spacing: .02em; }
 .tracker-tag--abbreviations.tracker-tag--kinozal { color: var(--tracker-kinozal); border-color: color-mix(in srgb, var(--tracker-kinozal) 24%, transparent); background: color-mix(in srgb, var(--tracker-kinozal) 7%, transparent); }

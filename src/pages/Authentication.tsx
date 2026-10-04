@@ -19,14 +19,19 @@ export function Login({ onLogin, notify, initialUsername = "" }: { onLogin: (use
 export function ChangePassword({ user, onChanged, onSignOut, notify }: { user: User; onChanged: (user: User) => void; onSignOut: () => void; notify: Notify }) {
   const { t } = useI18n();
   const [currentPassword, setCurrentPassword] = useState(""), [newPassword, setNewPassword] = useState(""), [confirm, setConfirm] = useState(""), [busy, setBusy] = useState(false);
-  // Administrators see the first-run wording; members always arrive with a temporary password set by an administrator.
-  const copy = user.isAdmin
-    ? { eyebrow: "First sign-in", title: "Secure the admin account.", text: "The default password cannot be used after setup." }
-    : { eyebrow: "Password change required", title: "Choose a new password.", text: "Your account uses a temporary password. Enter it, then choose a new one to continue." };
+  // Only the first-run default administrator sees the setup wording; resets and accounts created with a temporary
+  // password get their own. Older servers send no reason, so administrators then fall back to the first-run case.
+  const reason = user.passwordChangeReason ?? (user.isAdmin ? "initial" : "created");
+  const firstRun = reason === "initial" && user.isAdmin;
+  const copy = reason === "reset"
+    ? { eyebrow: "Password reset", title: "Choose a new password.", text: "An administrator reset your password. Enter the temporary password you were given, then choose a new one to continue." }
+    : firstRun
+      ? { eyebrow: "First sign-in", title: "Secure the admin account.", text: "The default password cannot be used after setup." }
+      : { eyebrow: "Password change required", title: "Choose a new password.", text: "Your account uses a temporary password. Enter it, then choose a new one to continue." };
   async function submit(event: FormEvent) {
     event.preventDefault(); if (newPassword !== confirm) return notify(t("New passwords do not match"), "bad"); setBusy(true);
     try { const result = await api<{ user: User }>("/api/auth/change-password", { method: "POST", ...jsonBody({ currentPassword, newPassword }) }); onChanged(result.user); notify(t("Password changed")); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
-  return <main className="password-page"><section className="password-panel"><BrandMark size={40} /><p className="eyebrow">{t(copy.eyebrow)}</p><h1>{t(copy.title)}</h1><p>{t(copy.text)}</p><form onSubmit={submit}><Field label={t(user.isAdmin ? "Current password" : "Temporary password")}><input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoFocus required /></Field><Field label={t("New password")}><input type="password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></Field><Field label={t("Confirm new password")}><input type="password" minLength={8} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></Field><button className="button button--primary button--wide" disabled={busy}>{t("Save new password")}</button></form><button type="button" className="text-button password-sign-out" onClick={onSignOut}>{t("Sign out")}</button></section></main>;
+  return <main className="password-page"><section className="password-panel"><BrandMark size={40} /><p className="eyebrow">{t(copy.eyebrow)}</p><h1>{t(copy.title)}</h1><p>{t(copy.text)}</p><form onSubmit={submit}><Field label={t(firstRun ? "Current password" : "Temporary password")}><input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoFocus required /></Field><Field label={t("New password")}><input type="password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></Field><Field label={t("Confirm new password")}><input type="password" minLength={8} value={confirm} onChange={(event) => setConfirm(event.target.value)} required /></Field><button className="button button--primary button--wide" disabled={busy}>{t("Save new password")}</button></form><button type="button" className="text-button password-sign-out" onClick={onSignOut}>{t("Sign out")}</button></section></main>;
 }

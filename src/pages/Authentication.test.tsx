@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { ChangePassword, Login } from "./Authentication";
+import { setLanguage } from "../i18n";
 
 it("explains the password change for the first-run administrator and for members with a temporary password", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -20,6 +21,28 @@ it("explains the password change for the first-run administrator and for members
     await act(async () => container.querySelector<HTMLButtonElement>(".password-sign-out")!.click());
     expect(onSignOut).toHaveBeenCalledOnce();
   } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("uses reset and temporary-password wording for administrators who are not on their first-run setup", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const admin = { id: "a", username: "root", isAdmin: true, mustChangePassword: true, language: "en" as const, trackerMarkerStyle: "icons" as const, paginationEnabled: false, pageSize: 20, theme: "sentinel" as const };
+  const view = () => ({ eyebrow: container.querySelector(".eyebrow")?.textContent, title: container.querySelector("h1")?.textContent, text: container.querySelector(".password-panel > p:not(.eyebrow)")?.textContent, label: container.querySelector("label")?.textContent });
+  try {
+    await act(async () => root.render(<ChangePassword user={{ ...admin, passwordChangeReason: "reset" }} onChanged={vi.fn()} onSignOut={vi.fn()} notify={vi.fn()} />));
+    expect(view()).toMatchObject({ eyebrow: "Password reset", title: "Choose a new password.", text: "An administrator reset your password. Enter the temporary password you were given, then choose a new one to continue." });
+    expect(view().label).toContain("Temporary password");
+    await act(async () => root.render(<ChangePassword user={{ ...admin, passwordChangeReason: "created" }} onChanged={vi.fn()} onSignOut={vi.fn()} notify={vi.fn()} />));
+    expect(view()).toMatchObject({ eyebrow: "Password change required", title: "Choose a new password." });
+    expect(view().label).toContain("Temporary password");
+    await act(async () => root.render(<ChangePassword user={{ ...admin, passwordChangeReason: "initial" }} onChanged={vi.fn()} onSignOut={vi.fn()} notify={vi.fn()} />));
+    expect(view()).toMatchObject({ eyebrow: "First sign-in", title: "Secure the admin account." });
+    expect(view().label).toContain("Current password");
+    await act(async () => setLanguage("ru"));
+    await act(async () => root.render(<ChangePassword user={{ ...admin, passwordChangeReason: "reset" }} onChanged={vi.fn()} onSignOut={vi.fn()} notify={vi.fn()} />));
+    expect(view()).toMatchObject({ eyebrow: "Сброс пароля", title: "Задайте новый пароль." });
+  } finally { await act(async () => setLanguage("en")); await act(async () => root.unmount()); container.remove(); }
 });
 
 it("starts the sign-in form with empty, required credentials", async () => {

@@ -4,7 +4,7 @@ import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
 import { config } from "./config.js";
 import type { AuthUser, TrackerMarkerStyle } from "./types.js";
-import { themePreference } from "./types.js";
+import { passwordChangeReason, themePreference } from "./types.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -37,6 +37,7 @@ function toAuthUser(row: UserRow): AuthUser {
     username: row.username,
     isAdmin: Boolean(row.is_admin),
     mustChangePassword: Boolean(row.must_change_password),
+    passwordChangeReason: passwordChangeReason(row.must_change_password),
     trackerMarkerStyle: row.tracker_marker_style,
     language: row.language,
     paginationEnabled: Boolean(row.pagination_enabled),

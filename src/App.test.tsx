@@ -356,31 +356,36 @@ it("adds an Activity view with the total unread count and keeps Monitor one clic
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
-it("scrolls to the top for another page but not for filter changes or Back/Forward", async () => {
+it("scrolls to the top for another page, keeps the position for filter changes, and restores it on Back/Forward", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   mockMonitor({ paginationEnabled: false });
   window.history.replaceState({}, "", "/collections/films");
-  Object.defineProperty(window, "scrollY", { configurable: true, value: 640 });
-  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+  let y = 640;
+  Object.defineProperty(window, "scrollY", { configurable: true, get: () => y });
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(((x: number, top: number) => { y = top; }) as typeof window.scrollTo);
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   const nav = (label: string) => container.querySelector<HTMLAnchorElement>(`.app-nav a[aria-label^="${label}"]`)!;
   try {
     await act(async () => root.render(<App />));
     expect(scrollTo).not.toHaveBeenCalled();
+    expect(window.history.scrollRestoration).toBe("manual");
     await act(async () => [...container.querySelectorAll<HTMLButtonElement>(".filter-tabs button")][1].click());
     expect(currentUrl()).toBe("/collections/films?filter=unread");
     expect(scrollTo).not.toHaveBeenCalled();
     await act(async () => nav("Settings").click());
-    expect(scrollTo).toHaveBeenCalledTimes(1);
     expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+    y = 300;
     await act(async () => nav("Activity").click());
-    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+    const pageChanges = scrollTo.mock.calls.length;
     await popState(() => window.history.back());
     expect(currentUrl()).toBe("/settings");
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 300);
     await popState(() => window.history.back());
     expect(currentUrl()).toBe("/collections/films?filter=unread");
-    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 640);
+    expect(scrollTo.mock.calls.length).toBeGreaterThan(pageChanges);
   } finally { await act(async () => root.unmount()); container.remove(); scrollTo.mockRestore(); Reflect.deleteProperty(window, "scrollY"); }
 });
 

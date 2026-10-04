@@ -12,6 +12,8 @@ export interface User {
   username: string;
   isAdmin: boolean;
   mustChangePassword: boolean;
+  /** Why the password must be changed: the first-run default account, an account created by an administrator, or an administrator reset. */
+  passwordChangeReason?: "initial" | "created" | "reset";
   trackerMarkerStyle: TrackerMarkerStyle;
   language: "en" | "ru";
   paginationEnabled: boolean;

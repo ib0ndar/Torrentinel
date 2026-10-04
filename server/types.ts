@@ -13,11 +13,22 @@ export interface AuthUser {
   username: string;
   isAdmin: boolean;
   mustChangePassword: boolean;
+  /** Why the password must be changed; absent when no change is required. */
+  passwordChangeReason?: PasswordChangeReason;
   trackerMarkerStyle: TrackerMarkerStyle;
   language: "en" | "ru";
   paginationEnabled: boolean;
   pageSize: number;
   theme: ThemePreference;
+}
+
+// users.must_change_password stores why a change is required. Any non-zero value still means "must change",
+// so older releases that read it as a boolean keep working against the same database.
+export const PASSWORD_CHANGE = { none: 0, initial: 1, reset: 2, created: 3 } as const;
+export type PasswordChangeReason = "initial" | "reset" | "created";
+export function passwordChangeReason(value: number): PasswordChangeReason | undefined {
+  if (!value) return undefined;
+  return value === PASSWORD_CHANGE.reset ? "reset" : value === PASSWORD_CHANGE.created ? "created" : "initial";
 }
 
 export interface Release {

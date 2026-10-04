@@ -22,7 +22,7 @@ export function Drawer({ title, subtitle, onClose, wide = false, extraWide = fal
 }
 // Toggle buttons in a labelled group (not a tablist: the lists are not tab panels), with optional counts.
 export function FilterTabs<T extends string>({ label, options, value, onChange }: { label: string; options: Array<{ value: T; label: string; count?: number; alert?: boolean }>; value: T; onChange: (value: T) => void }) {
-  return <div className="filter-tabs" role="group" aria-label={label}>{options.map((option) => <button key={option.value} type="button" className={value === option.value ? "active" : ""} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>
+  return <div className="filter-tabs" role="group" aria-label={label} data-focus-fallback>{options.map((option) => <button key={option.value} type="button" className={value === option.value ? "active" : ""} aria-pressed={value === option.value} onClick={() => onChange(option.value)}>
     <span className="filter-tabs__label">{option.label}</span>{typeof option.count === "number" && <> <span className={`filter-count ${option.alert && option.count > 0 ? "filter-count--alert" : ""}`}>{option.count}</span></>}
   </button>)}</div>;
 }

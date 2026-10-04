@@ -6,6 +6,7 @@ import { requireAdmin } from "../auth.js";
 import { DIAGNOSTIC_RETENTION_HOURS, diagnosticCutoffIso, pruneDiagnostics } from "../diagnostics.js";
 import { idParams, isUniqueError, jsonObject, origin, parse, trackerKeySchema, urlSchema, type RouteServices } from "./shared.js";
 import { LABEL_SQL } from "./subscriptions.js";
+import { PASSWORD_CHANGE } from "../types.js";
 
 const OPERATIONS = ["direct", "feed-poll", "rule-discovery", "rule-enrichment"] as const;
 const outcomeSchema = z.string().trim().min(1).max(40);
@@ -69,8 +70,8 @@ export function registerAdminRoutes({ app, db }: RouteServices): void {
     const id = nanoid(), timestamp = nowIso(), passwordHash = await hash(input.password, 12);
     try {
       db.transaction(() => {
-        db.prepare(`INSERT INTO users (id, username, password_hash, is_admin, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)`)
-          .run(id, input.username, passwordHash, input.isAdmin ? 1 : 0, timestamp, timestamp);
+        db.prepare(`INSERT INTO users (id, username, password_hash, is_admin, must_change_password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .run(id, input.username, passwordHash, input.isAdmin ? 1 : 0, PASSWORD_CHANGE.created, timestamp, timestamp);
         db.prepare("INSERT INTO collections (id, user_id, name, created_at, updated_at) VALUES (?, ?, 'Inbox', ?, ?)").run(nanoid(), id, timestamp, timestamp);
       })();
     } catch (error) { if (isUniqueError(error)) return reply.code(409).send({ error: "Username already exists" }); throw error; }
@@ -90,7 +91,7 @@ export function registerAdminRoutes({ app, db }: RouteServices): void {
   app.post("/api/admin/users/:id/reset-password", { preHandler: requireAdmin }, async (request, reply) => {
     const params = parse(idParams, request.params, reply), input = parse(z.object({ password: z.string().min(8).max(500) }), request.body, reply);
     if (!params || !input) return;
-    if (!db.prepare("UPDATE users SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE id = ?").run(await hash(input.password, 12), nowIso(), params.id).changes) return reply.code(404).send({ error: "User not found" });
+    if (!db.prepare("UPDATE users SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE id = ?").run(await hash(input.password, 12), PASSWORD_CHANGE.reset, nowIso(), params.id).changes) return reply.code(404).send({ error: "User not found" });
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(params.id); return { ok: true };
   });
   app.get("/api/admin/mirrors", { preHandler: requireAdmin }, async () => ({ mirrors: db.prepare("SELECT tracker_key, display_name, base_url, enabled, updated_at FROM tracker_mirrors ORDER BY display_name")

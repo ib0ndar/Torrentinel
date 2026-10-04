@@ -4,7 +4,7 @@ import { nowIso } from "../db.js";
 import { createSession, destroyOtherSessions, destroySession, requireUser } from "../auth.js";
 import { parse, type RouteServices } from "./shared.js";
 import type { AuthUser } from "../types.js";
-import { themePreference } from "../types.js";
+import { passwordChangeReason, themePreference } from "../types.js";
 
 interface UserDbRow {
   id: string; username: string; password_hash: string; is_admin: number; disabled: number;
@@ -13,6 +13,7 @@ interface UserDbRow {
 }
 export function serializeUser(row: UserDbRow): AuthUser {
   return { id: row.id, username: row.username, isAdmin: Boolean(row.is_admin), mustChangePassword: Boolean(row.must_change_password),
+    passwordChangeReason: passwordChangeReason(row.must_change_password),
     trackerMarkerStyle: row.tracker_marker_style, language: row.language, paginationEnabled: Boolean(row.pagination_enabled), pageSize: row.page_size,
     theme: themePreference(row.theme) };
 }
@@ -41,6 +42,7 @@ export function registerAuthRoutes({ app, db }: RouteServices): void {
       destroyOtherSessions(db, request, userId);
     })();
     request.user.mustChangePassword = false;
+    delete request.user.passwordChangeReason;
     return { user: request.user };
   });
 }

@@ -66,4 +66,27 @@ describe("password change", () => {
     expect((await me(again.cookie)).statusCode).toBe(200);
     expect((await me(current)).statusCode).toBe(200);
   });
+
+  it("reports why a password change is required: first run, created by an administrator, or reset", async () => {
+    const admin = (await login("admin", "admin")).cookie;
+    expect((await me(admin)).json().user).toMatchObject({ mustChangePassword: true, passwordChangeReason: "initial" });
+    expect((await changePassword(admin, "admin", "Admin-Password-2026")).json().user.passwordChangeReason).toBeUndefined();
+    expect((await me(admin)).json().user).toMatchObject({ mustChangePassword: false });
+    expect((await me(admin)).json().user.passwordChangeReason).toBeUndefined();
+
+    const created = await services.app.inject({ method: "POST", url: "/api/admin/users", headers: { cookie: admin }, payload: { username: "nina", password: "Temporary-1", isAdmin: true } });
+    expect(created.statusCode).toBe(201);
+    const nina = (await login("nina", "Temporary-1")).cookie;
+    expect((await me(nina)).json().user).toMatchObject({ isAdmin: true, mustChangePassword: true, passwordChangeReason: "created" });
+
+    const reset = await services.app.inject({ method: "POST", url: "/api/admin/users/member/reset-password", headers: { cookie: admin }, payload: { password: "Temporary-2" } });
+    expect(reset.statusCode).toBe(200);
+    const member = (await login("member", "Temporary-2")).cookie;
+    expect((await me(member)).json().user).toMatchObject({ mustChangePassword: true, passwordChangeReason: "reset" });
+    // Every non-zero value still means "must change", so the existing gate applies.
+    expect((await services.app.inject({ url: "/api/collections", headers: { cookie: member } })).statusCode).toBe(428);
+    // Rows written by older releases (value 1) read as the first-run case.
+    services.db.prepare("UPDATE users SET must_change_password = 1 WHERE id = 'member'").run();
+    expect((await me(member)).json().user.passwordChangeReason).toBe("initial");
+  });
 });

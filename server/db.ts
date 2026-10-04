@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 import { nanoid } from "nanoid";
 import { dirname } from "node:path";
 import { config } from "./config.js";
+import { PASSWORD_CHANGE } from "./types.js";
 
 export type SqliteDatabase = Database.Database;
 
@@ -405,7 +406,7 @@ function seed(db: SqliteDatabase): void {
     db.prepare(`
       INSERT INTO users (
         id, username, password_hash, is_admin, disabled, must_change_password, created_at, updated_at
-      ) VALUES (?, 'admin', ?, 1, 0, 1, ?, ?)
+      ) VALUES (?, 'admin', ?, 1, 0, ${PASSWORD_CHANGE.initial}, ?, ?)
     `).run(userId, hashSync("admin", 12), timestamp, timestamp);
     db.prepare(`
       INSERT INTO collections (id, user_id, name, created_at, updated_at)

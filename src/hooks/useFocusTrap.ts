@@ -14,6 +14,12 @@ export function focusableElements(container: HTMLElement): HTMLElement[] {
 export function useFocusTrap(ref: RefObject<HTMLElement | null>, initialFocus?: (container: HTMLElement) => void): void {
   // Read during the first render: an autoFocus field inside takes focus before any effect runs.
   const [opener] = useState(() => document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  // Where the opener sits in a list marked with data-focus-list, in case it disappears while the modal is
+  // open (for example, a read entry leaving an Unread list).
+  const [origin] = useState(() => {
+    const item = opener?.closest<HTMLElement>("[data-focus-item]"), list = item?.closest<HTMLElement>("[data-focus-list]");
+    return item && list ? { list, index: listItems(list).indexOf(item) } : null;
+  });
   const focusInitial = useRef(initialFocus);
   useLayoutEffect(() => { focusInitial.current = initialFocus; });
   useEffect(() => {
@@ -43,6 +49,14 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, initialFocus?: 
       openModals.splice(openModals.indexOf(modal), 1);
       document.body.style.overflow = previousOverflow;
       if (opener?.isConnected) opener.focus({ preventScroll: true });
+      else if (origin) focusNearest(origin);
     };
-  }, [ref, opener]);
+  }, [ref, opener, origin]);
+}
+function listItems(list: HTMLElement): HTMLElement[] { return [...list.querySelectorAll<HTMLElement>("[data-focus-item]")]; }
+// The item now at the opener's position (or the last one), else the selected filter of the view.
+function focusNearest(origin: { list: HTMLElement; index: number }): void {
+  const items = origin.list.isConnected ? listItems(origin.list) : [];
+  const target = items[Math.min(origin.index, items.length - 1)] ?? document.querySelector<HTMLElement>("[data-focus-fallback] [aria-pressed='true']");
+  target?.focus({ preventScroll: true });
 }

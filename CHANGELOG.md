@@ -2,6 +2,15 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- The password change screen explains why a change is needed: after an administrator reset it says so and asks for the temporary password, and administrators created with a temporary password no longer see the first-run "Secure the admin account" wording. `GET /api/auth/me` returns `passwordChangeReason` (`initial`, `created`, or `reset`) while a change is required. The reason is stored in the existing `must_change_password` column, so there is no database change and earlier releases read it as before.
+- Back/Forward and reloads return a long collection list (and other pages) to where you were, instead of near the top while the list is still loading.
+- Closing details opened from an Unread list moves focus to the entry that took its place (or the selected filter) when the opened entry is no longer listed, instead of losing focus.
+- Tracker icons in Diagnostics, Settings, and Administration keep their full width, so they line up across rows.
+
 ## [0.9.0] - 2026-10-04
 
 ### Added

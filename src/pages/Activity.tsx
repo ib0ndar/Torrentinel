@@ -76,9 +76,9 @@ export function Activity({ user, notify, filter, onFilterChange, collections, on
     {loading ? <ListSkeleton /> : events.length === 0 && reminders.length === 0 ? (filter === "unread"
       ? <EmptyState icon="check" title={t("You’re all caught up")} text={t("New changes from all your collections will appear here.")} action={<button className="button button--quiet" onClick={() => onFilterChange("all")}>{t("Show all changes")}</button>} />
       : <EmptyState icon="clock" title={t("No changes yet")} text={t("Changes will appear here after the baseline.")} />)
-      : <>{reminders.length > 0 && <section className="activity-day activity-reminders"><h2>{t("Marked unread")}</h2><div className="activity-list">{reminders.map((reminder) => <ReminderEntry key={reminder.subscription.id} reminder={reminder} onOpen={() => setOpenId(reminder.subscription.id)} />)}</div></section>}
+      : <div data-focus-list>{reminders.length > 0 && <section className="activity-day activity-reminders"><h2>{t("Marked unread")}</h2><div className="activity-list">{reminders.map((reminder) => <ReminderEntry key={reminder.subscription.id} reminder={reminder} onOpen={() => setOpenId(reminder.subscription.id)} />)}</div></section>}
         {groups.map((group) => <section className="activity-day" key={group.key}><h2>{group.label}</h2><div className="activity-list">{group.events.map((event) => <ActivityEntry key={event.id} event={event} onOpen={() => setOpenId(event.subscription.id)} />)}</div></section>)}
-        {events.length < total && <div className="activity-more"><button className="button button--quiet" disabled={loadingMore} onClick={() => void loadMore()}>{t("Load more")}</button></div>}</>}
+        {events.length < total && <div className="activity-more"><button className="button button--quiet" disabled={loadingMore} onClick={() => void loadMore()}>{t("Load more")}</button></div>}</div>}
     {openId && <SubscriptionInspector key={openId} id={openId} collections={collections} onClose={() => setOpenId(null)} onChanged={changed} notify={notify} />}
   </Page>;
   function dayLabel(value: string): string {
@@ -98,7 +98,7 @@ function ReminderEntry({ reminder, onOpen }: { reminder: ActivityReminder; onOpe
 }
 function ActivityRow({ item, unread, summary, time, onOpen }: { item: Pick<ActivityEvent, "subscription" | "collection">; unread: boolean; summary: ReactNode; time?: string; onOpen: () => void }) {
   const { t } = useI18n(), { subscription } = item;
-  return <button type="button" className={`activity-entry ${unread ? "activity-entry--unread" : ""}`} onClick={onOpen}>
+  return <button type="button" className={`activity-entry ${unread ? "activity-entry--unread" : ""}`} data-focus-item onClick={onOpen}>
     <SubscriptionTypeIcon type={subscription.type} unread={unread} />
     <span className="activity-entry__main">
       <span className="activity-entry__label">{subscription.type === "rule" ? <PhraseDisplay phrases={subscription.requiredTerms} /> : <strong>{subscription.label === "Direct subscription" ? t(subscription.label) : subscription.label}</strong>}</span>

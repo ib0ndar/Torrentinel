@@ -69,6 +69,7 @@ it("groups unread changes by day, loads more pages, and opens an entry in the in
     expect(view.container.querySelectorAll(".activity-day h2")).toHaveLength(3);
     expect(view.container.querySelector(".activity-more")).toBeNull();
 
+    second.focus();
     await act(async () => second.click());
     expect(api).toHaveBeenCalledWith("/api/subscriptions/r1/open", expect.objectContaining({ method: "POST" }));
     expect(document.querySelector(".drawer h2")?.textContent).toBe("Dune + 2160p");
@@ -77,6 +78,8 @@ it("groups unread changes by day, loads more pages, and opens an entry in the in
     expect(view.container.querySelector(".activity-count")?.textContent).toBe("2 unread changes");
     await act(async () => document.querySelector<HTMLButtonElement>('.drawer button[aria-label="Close"]')!.click());
     expect(document.querySelector(".drawer")).toBeNull();
+    // The opened entry left the Unread list, so focus moves to the entry now in its place.
+    expect((document.activeElement as HTMLElement | null)?.querySelector(".activity-entry__label")?.textContent).toBe("Archived");
 
     await act(async () => setLanguage("ru"));
     expect(view.container.querySelector("h1")?.textContent).toBe("Активность");

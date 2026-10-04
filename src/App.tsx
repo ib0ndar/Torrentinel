@@ -21,9 +21,10 @@ import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
 import { activityPath, adminPath, DEFAULT_MONITOR_VIEW, isPlainClick, monitorPath, type MonitorView, type Navigate, parseRoute, storeCollectionId, storedCollectionId } from "./routing";
 import { applyTheme } from "./theme";
+import { entryKey, newEntryState, rememberScroll, replacedEntryState, restoreScroll, savedScroll } from "./scrollMemory";
 import type { Collection, Notify, User } from "./types";
 
-// `restored` marks Back/Forward, where the browser restores the scroll position.
+// `restored` marks Back/Forward, where the entry's saved scroll position is restored.
 type BrowserLocation = { pathname: string; search: string; restored: boolean };
 const APP_VERSION = packageManifest.version;
 const APP_REVISION = import.meta.env.VITE_APP_REVISION?.trim();
@@ -87,13 +88,24 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   // "/", unknown or deleted collections and (for members) stale /admin addresses, including ones reached
   // with Back/Forward, resolve to a collection without adding a history entry.
   useLayoutEffect(() => { if (monitorVisible && resolvedPath && resolvedPath !== currentPath) navigate(resolvedPath, { replace: true }); }, [monitorVisible, resolvedPath, currentPath, navigate]);
-  // Another page starts at the top; filter, page and sort changes keep the position, and Back/Forward
-  // leave it to the browser's default scroll restoration.
-  const shownPath = useRef(location.pathname);
+  // Another page starts at the top; filter, page and sort changes keep the position. Back/Forward and
+  // reloads restore the entry's saved position, retrying while the list is still loading.
+  const shownPath = useRef(location.pathname), cancelRestore = useRef<(() => void) | null>(null);
   useLayoutEffect(() => {
+    const target = savedScroll();
+    if (target) cancelRestore.current = restoreScroll(target);
+    return () => cancelRestore.current?.();
+  }, []);
+  useLayoutEffect(() => {
+    if (location.restored) {
+      cancelRestore.current?.();
+      cancelRestore.current = restoreScroll(savedScroll() ?? 0);
+      shownPath.current = location.pathname;
+      return;
+    }
     if (shownPath.current === location.pathname) return;
     shownPath.current = location.pathname;
-    if (!location.restored && (window.scrollY || window.scrollX)) window.scrollTo(0, 0);
+    if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
   }, [location]);
   // "/admin", unknown sections and invalid or default query values resolve to the canonical address in place.
   const adminCanonical = route.name === "admin" ? adminPath(route.tab, route.diagnostics) : null;
@@ -170,10 +182,26 @@ function NavItem({ to, icon, label, active, navigate, badge = 0 }: { to: string;
 function useBrowserLocation(): [BrowserLocation, Navigate] {
   const read = (restored: boolean) => ({ pathname: window.location.pathname, search: window.location.search, restored });
   const [location, setLocation] = useState<BrowserLocation>(() => read(false));
-  useEffect(() => { const handlePopState = () => setLocation(read(true)); window.addEventListener("popstate", handlePopState); return () => window.removeEventListener("popstate", handlePopState); }, []);
+  useEffect(() => {
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    entryKey();
+    let frame = 0;
+    const scroll = () => { if (!frame) frame = window.requestAnimationFrame(() => { frame = 0; rememberScroll(); }); };
+    const handlePopState = () => setLocation(read(true));
+    window.addEventListener("scroll", scroll, { passive: true });
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", scroll);
+      window.removeEventListener("popstate", handlePopState);
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
   const navigate = useCallback<Navigate>((path, options) => {
     if (path === window.location.pathname + window.location.search) return;
-    window.history[options?.replace ? "replaceState" : "pushState"]({}, "", path);
+    if (options?.replace) window.history.replaceState(replacedEntryState(), "", path);
+    else { rememberScroll(); window.history.pushState(newEntryState(), "", path); }
     setLocation(read(false));
   }, []);
   return [location, navigate];
