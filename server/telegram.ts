@@ -270,7 +270,7 @@ export class TelegramService {
 
     const language = this.languageForUser(userId);
     const caption = releaseCaption(notification, language);
-    const replyMarkup = releaseKeyboard(notification.release, this.publicUrl, language);
+    const replyMarkup = releaseKeyboard(notification, this.publicUrl, language);
     let artworkError: string | undefined;
     try {
       const token = this.vault.decrypt(destination.tokenEncrypted, telegramTokenAad(userId));
@@ -610,19 +610,23 @@ function releaseCaption(notification: ReleaseNotification, language: Notificatio
   return lines.join("\n");
 }
 
-function releaseKeyboard(release: Release, publicUrl: string | undefined, language: NotificationLanguage = "en") {
+function releaseKeyboard({ release, subscriptionId }: ReleaseNotification, publicUrl: string | undefined, language: NotificationLanguage = "en") {
   const buttons: Array<{ text: string; url: string }> = [];
+  const deploymentUrl = publicUrl?.replace(/\/+$/, "");
   const trackerUrl = httpUrl(release.url);
   if (trackerUrl) buttons.push({ text: notificationText(language, "Tracker page"), url: trackerUrl });
 
   const infoHash = magnetInfoHash(release.magnet);
-  if (infoHash && publicUrl) {
-    buttons.push({ text: "Magnet", url: `${publicUrl}/magnet/${encodeURIComponent(infoHash)}` });
+  if (infoHash && deploymentUrl) {
+    buttons.push({ text: "Magnet", url: `${deploymentUrl}/magnet/${encodeURIComponent(infoHash)}` });
   } else {
     const torrentUrl = httpUrl(release.torrentUrl);
     if (torrentUrl) buttons.push({ text: notificationText(language, "Torrent file"), url: torrentUrl });
   }
-  return { inline_keyboard: [buttons.slice(0, 2)] };
+  if (subscriptionId && deploymentUrl) {
+    buttons.push({ text: notificationText(language, "Subscription"), url: `${deploymentUrl}/subscriptions/${encodeURIComponent(subscriptionId)}` });
+  }
+  return { inline_keyboard: [buttons] };
 }
 
 function magnetInfoHash(magnet: string | undefined): string | undefined {

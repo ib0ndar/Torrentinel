@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { DialogProvider } from "../components/Dialogs";
 import { setLanguage } from "../i18n";
 import type { RuleMatch, Subscription, SubscriptionEvent } from "../types";
@@ -22,6 +22,22 @@ async function open(details: { subscription: Subscription; events: SubscriptionE
   return { root, drawer: document.querySelector<HTMLElement>(".drawer")! };
 }
 const event = (id: string, kind: string, summary: string, payload: Record<string, unknown> | null): SubscriptionEvent => ({ id, kind, summary, payload, createdAt: new Date(Date.now() - 3_600_000).toISOString(), readAt: null });
+
+it("shows a persistent error for missing or inaccessible subscriptions instead of a loading skeleton", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.mocked(api).mockRejectedValue(new ApiError("Subscription not found", 404));
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), onClose = vi.fn();
+  try {
+    await act(async () => root.render(<DialogProvider><SubscriptionInspector id="missing /?#" collections={[]} onClose={onClose} onChanged={vi.fn()} notify={vi.fn()} standalone /></DialogProvider>));
+    expect(api).toHaveBeenCalledWith("/api/subscriptions/missing%20%2F%3F%23/open", expect.objectContaining({ method: "POST" }));
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Subscription not found");
+    expect(container.querySelector(".skeleton")).toBeNull();
+    expect(document.querySelector(".drawer")).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>(".page-header button")!.click());
+    expect(onClose).toHaveBeenCalledOnce();
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
 
 it("shows what changed in direct events, with old and new titles and links, and falls back for older events", async () => {
   const snapshot = (title: string, magnet: string, torrentUrl: string) => ({ title, url: "https://rutor.info/torrent/1", magnet, torrentUrl, coverUrl: `https://img/${title}.jpg`, metadata: { size: title } });

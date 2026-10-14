@@ -17,6 +17,7 @@ import { Admin } from "./pages/Administration";
 import { BootScreen, ChangePassword, Login } from "./pages/Authentication";
 import { Settings } from "./pages/Settings";
 import { Workspace } from "./pages/Workspace";
+import { SubscriptionInspector } from "./pages/SubscriptionInspector";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
 import { activityPath, adminPath, collectionDefaultFilter, DEFAULT_MONITOR_VIEW, isPlainClick, MONITOR_HOME, monitorPath, type MonitorView, type Navigate, parseRoute, type Route, storeCollectionId, storedCollectionId } from "./routing";
@@ -149,6 +150,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} accountFocusRequest={accountFocusRequest} onAccountFocused={() => setAccountFocusRequest(0)} />
     : route.name === "admin" ? <Admin notify={notify} tab={route.tab} diagnostics={route.diagnostics} pageSize={user.pageSize} navigate={navigate} />
     : route.name === "activity" ? <Activity key={route.filter} user={user} notify={notify} filter={route.filter} onFilterChange={(filter) => navigate(activityPath(filter))} collections={data.collections} onCollectionsChanged={loadCollections} onShowShortcuts={showShortcuts} />
+    : route.name === "subscription" ? <SubscriptionInspector key={route.id} id={route.id} collections={data.collections} onClose={() => navigate(resolvedPath ?? MONITOR_HOME)} onChanged={loadCollections} notify={notify} standalone />
     : <Workspace user={user} onUserChange={setUser} notify={notify} data={data} onNewCollection={() => setNewCollection(true)} onShowShortcuts={showShortcuts} />;
   return <div className="app-shell">
     <aside className="app-nav">

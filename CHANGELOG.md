@@ -2,6 +2,16 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [0.9.8] - 2026-10-14
+
+### Added
+
+- Telegram release notifications include a **Subscription** button alongside the tracker and download buttons, linking to `/subscriptions/<id>` on the deployment configured by `PUBLIC_URL`. Direct and rule subscription pages retain their address through sign-in and show configuration and change history with the existing account access checks.
+
+### Upgrade notes
+
+- Set `PUBLIC_URL` to the domain or IP address (including any custom port) reachable from your Telegram client, then restart Torrentinel. If it is unset, the Subscription button is omitted.
+
 ## [0.9.7] - 2026-10-04
 
 ### Added
@@ -556,7 +566,8 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
-[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.9.7...HEAD
+[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.9.8...HEAD
+[0.9.8]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.8
 [0.9.7]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.7
 [0.9.6]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.6
 [0.9.5]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.5

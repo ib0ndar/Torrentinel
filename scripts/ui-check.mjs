@@ -24,6 +24,8 @@ const ROUTES = [
   { name: "monitor-paged", path: "/collections/archive", heading: "Archive" },
   { name: "monitor-empty-view", path: "/collections/films?filter=errors", heading: "Films" },
   { name: "activity", path: "/activity", heading: "Activity" },
+  { name: "subscription-direct", path: "/subscriptions/d0", heading: "Severance / Разделение (Сезон 2, Серии 1-10 из 10) WEB-DL 2160p HDR" },
+  { name: "subscription-rule", path: "/subscriptions/r0", heading: "Severance + 2160p" },
   { name: "settings", path: "/settings", heading: "Settings" },
   { name: "admin-overview", path: "/admin/overview", heading: "Administration" },
   { name: "admin-users", path: "/admin/users", heading: "Administration" },

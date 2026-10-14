@@ -326,7 +326,7 @@ Runtime settings are read from the process environment. The direct systemd insta
 | `PORT` | `8080`, editable | Internal port `8080` | Internal port `8080` | Application container/process port |
 | `TORRENTINEL_PORT` | Not used | `8080`, editable | Not used | Docker host port mapped to internal `8080` |
 | `TORRENTINEL_BIND_ADDRESS` | Not used | `127.0.0.1`, editable | `PublishPort` in `torrentinel.container`, default `127.0.0.1` | Host address the published port listens on; `0.0.0.0` opens it to other devices |
-| `PUBLIC_URL` | Editable | Editable | Editable | Externally reachable URL without a trailing slash |
+| `PUBLIC_URL` | Editable | Editable | Editable | Deployment URL used by Telegram Magnet and Subscription buttons; reachable from your Telegram client |
 | `ALLOWED_HOSTS` | Editable, empty | Editable, empty | Editable, empty | Further domain names Torrentinel is opened under, comma-separated (a leading `.` includes subdomains); see [Host names](#host-names) |
 | `INITIAL_ADMIN_PASSWORD` | Optional | Optional | Optional | Password for the first administrator account; generated when empty, see [First sign-in](#first-sign-in) |
 | `DATA_DIR` | `/var/lib/torrentinel/database` | Fixed volume path `/data` | Fixed volume path `/data` | SQLite database directory |
@@ -378,7 +378,9 @@ Each Torrentinel user can connect a separate Telegram bot and account:
 2. Save the bot token in Torrentinel under **Settings**.
 3. Generate a linking code and send the displayed `/start` command to the bot.
 
-`PUBLIC_URL` must be reachable from the Telegram client for Torrentinel-hosted Magnet buttons to work.
+Release notifications include a **Subscription** button that opens the subscription's details, configuration, and change history in Torrentinel, alongside the existing **Tracker page** and **Magnet** (or **Torrent file**) buttons. Rule notifications link to the rule subscription that matched the release. Sign in to the owning Torrentinel account if prompted; the subscription URL is kept through sign-in.
+
+Set `PUBLIC_URL` to your deployment's complete HTTP or HTTPS address, including any custom port, without a trailing slash. For example, use `https://torrentinel.example.com` behind a reverse proxy or `http://192.168.1.50:8080` for a LAN deployment. Restart Torrentinel after changing this setting. Both **Magnet** and **Subscription** buttons use this address, which must be reachable from the device running your Telegram client; `localhost` points to that device, not your server. A LAN address requires access to that network (directly or through a VPN). If `PUBLIC_URL` is unset, Torrentinel omits the **Subscription** button and uses the existing torrent-file fallback for **Magnet**.
 
 ## Architecture
 

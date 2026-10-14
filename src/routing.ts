@@ -15,6 +15,7 @@ export type Route =
   | { name: "home" }
   | { name: "monitor"; view: MonitorView; explicit: boolean }
   | { name: "activity"; filter: ActivityFilter }
+  | { name: "subscription"; id: string }
   | { name: "settings" }
   | { name: "admin"; tab: AdminTab; explicit: boolean; diagnostics: DiagnosticsView };
 export type Navigate = (path: string, options?: { replace?: boolean }) => void;
@@ -34,6 +35,14 @@ function pageParameter(value: string | null): number {
 export function parseRoute(pathname: string, search: string): Route {
   const query = new URLSearchParams(search);
   if (pathname === "/settings") return { name: "settings" };
+  const subscription = /^\/subscriptions\/([^/]+)\/?$/.exec(pathname);
+  if (subscription) {
+    try {
+      const id = decodeURIComponent(subscription[1]);
+      if (id) return { name: "subscription", id };
+    } catch { /* Malformed addresses fall back to the account's start page. */ }
+    return { name: "home" };
+  }
   // "/admin" and unknown sub-paths are unresolved and rewritten to the Overview tab.
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     const tab = pathname.slice("/admin/".length).replace(/\/$/, "") as AdminTab;

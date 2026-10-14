@@ -3,6 +3,19 @@ import { ADMIN_TABS, adminPath, DEFAULT_DIAGNOSTICS_VIEW, DEFAULT_MONITOR_VIEW, 
 
 const diagnostics = (path: string, search: string) => { const route = parseRoute(path, search); return route.name === "admin" ? route.diagnostics : undefined; };
 
+describe("Subscription addresses", () => {
+  it("opens a subscription independently of the current collection or start page", () => {
+    expect(parseRoute("/subscriptions/42", "")).toEqual({ name: "subscription", id: "42" });
+    expect(parseRoute("/subscriptions/42/", "")).toEqual({ name: "subscription", id: "42" });
+    expect(parseRoute("/subscriptions/rule%20%2F%3F%23", "")).toEqual({ name: "subscription", id: "rule /?#" });
+  });
+
+  it("falls back for malformed or incomplete subscription addresses", () => {
+    for (const path of ["/subscriptions", "/subscriptions/", "/subscriptions/1/extra", "/subscriptions/%E0%A4%A"])
+      expect(parseRoute(path, "")).toEqual({ name: "home" });
+  });
+});
+
 describe("Administration routes", () => {
   it("parses each section and treats /admin and unknown sections as unresolved Overview", () => {
     for (const tab of ADMIN_TABS) expect(parseRoute(`/admin/${tab}`, "")).toEqual({ name: "admin", tab, explicit: true, diagnostics: DEFAULT_DIAGNOSTICS_VIEW });

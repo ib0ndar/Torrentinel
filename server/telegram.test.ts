@@ -16,11 +16,51 @@ afterEach(() => {
 });
 
 describe("rich Telegram release notifications", () => {
+  it.each([
+    "https://torrentinel.example:8443",
+    "http://192.168.1.50:8999",
+    "http://[2001:db8::1]:8080",
+    "https://torrentinel.example/",
+  ])("uses deployment URL %s and encodes the rule subscription ID in text notifications", async (publicUrl) => {
+    const calls: TelegramCall[] = [];
+    const subscriptionId = "rule /?#";
+    const { db, vault, userId } = notificationDatabase(subscriptionId);
+    const result = await new TelegramService(db, vault, telegramFetcher(calls), publicUrl).notifyRelease(userId, {
+      subscriptionId, trackerName: "Rutor", ruleTerms: ["Dune"],
+      release: { trackerKey: "rutor", externalId: "42", title: "Dune", url: "https://rutor.is/torrent/42" },
+    });
+    expect(result).toEqual({ delivered: true });
+    expect(calls[0].method).toBe("sendMessage");
+    expect(calls[0].body.reply_markup).toEqual({ inline_keyboard: [[
+      { text: "Tracker page", url: "https://rutor.is/torrent/42" },
+      { text: "Subscription", url: `${publicUrl.replace(/\/$/, "")}/subscriptions/rule%20%2F%3F%23` },
+    ]] });
+  });
+
+  it.each(["no public URL", "no subscription ID"])("keeps existing buttons when there is %s", async (missing) => {
+    const calls: TelegramCall[] = [];
+    const { db, vault, userId } = notificationDatabase("1");
+    // An empty URL explicitly overrides the constructor's environment default.
+    const publicUrl = missing === "no public URL" ? "" : "https://torrentinel.example";
+    const result = await new TelegramService(db, vault, telegramFetcher(calls), publicUrl).notifyRelease(userId, {
+      subscriptionId: missing === "no subscription ID" ? undefined : "1", trackerName: "Rutor",
+      release: { trackerKey: "rutor", externalId: "42", title: "Dune", url: "https://rutor.is/torrent/42",
+        magnet: `magnet:?xt=urn:btih:${"a".repeat(40)}`, torrentUrl: "https://rutor.is/download/42" },
+    });
+    expect(result).toEqual({ delivered: true });
+    expect(calls[0].body.reply_markup).toEqual({ inline_keyboard: [[
+      { text: "Tracker page", url: "https://rutor.is/torrent/42" },
+      publicUrl ? { text: "Magnet", url: `https://torrentinel.example/magnet/${"A".repeat(40)}` }
+        : { text: "Torrent file", url: "https://rutor.is/download/42" },
+    ]] });
+  });
+
   it("uses the account's Russian language without translating the release title", async () => {
     const calls: TelegramCall[] = [];
-    const { db, vault, userId } = notificationDatabase();
+    const { db, vault, userId } = notificationDatabase("1");
     db.prepare("UPDATE users SET language = 'ru' WHERE id = ?").run(userId);
-    const result = await new TelegramService(db, vault, telegramFetcher(calls)).notifyRelease(userId, {
+    const result = await new TelegramService(db, vault, telegramFetcher(calls), "https://torrentinel.example").notifyRelease(userId, {
+      subscriptionId: "1",
       trackerName: "Rutor", changes: ["title changed", "metadata changed"],
       release: { trackerKey: "rutor", externalId: "42", title: "Original English title", url: "https://rutor.is/torrent/42", metadata: { size: "2 GB" } },
     });
@@ -29,6 +69,7 @@ describe("rich Telegram release notifications", () => {
     expect(calls[0].body.text).toContain("Трекер: Rutor");
     expect(calls[0].body.text).toContain("Изменения: изменено название, изменены метаданные");
     expect(JSON.stringify(calls[0].body.reply_markup)).toContain("Страница трекера");
+    expect(calls[0].body.reply_markup.inline_keyboard[0]).toContainEqual({ text: "Подписка", url: "https://torrentinel.example/subscriptions/1" });
   });
 
   it("returns rate-limit timing without trying artwork fallback or text delivery", async () => {
@@ -94,6 +135,7 @@ describe("rich Telegram release notifications", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ method: "sendPhoto", multipart: true });
     expect(calls[0].body.photo).toBe("image/jpeg:4");
+    expect(calls[0].body.reply_markup.inline_keyboard[0]).toContainEqual({ text: "Subscription", url: "https://torrentinel.example/subscriptions/cached-cover" });
     expect(db.prepare(`
       SELECT outcome, delivery_method, artwork_error_message FROM telegram_deliveries
     `).get()).toEqual({
@@ -103,13 +145,14 @@ describe("rich Telegram release notifications", () => {
     });
   });
 
-  it("sends artwork, release details, and only tracker and magnet buttons", async () => {
+  it("sends artwork, release details, and tracker, magnet and subscription buttons", async () => {
     const calls: TelegramCall[] = [];
-    const { db, vault, userId } = notificationDatabase();
+    const { db, vault, userId } = notificationDatabase("1");
     const telegram = new TelegramService(db, vault, telegramFetcher(calls), "https://torrentinel.example");
     const hash = "a".repeat(40);
 
     await telegram.notifyRelease(userId, {
+      subscriptionId: "1",
       trackerName: "RuTracker",
       ruleTerms: ["The <Show>", "2160p"],
       release: {
@@ -141,6 +184,7 @@ describe("rich Telegram release notifications", () => {
       inline_keyboard: [[
         { text: "Tracker page", url: "https://rutracker.org/forum/viewtopic.php?t=42" },
         { text: "Magnet", url: `https://torrentinel.example/magnet/${hash.toUpperCase()}` },
+        { text: "Subscription", url: "https://torrentinel.example/subscriptions/1" },
       ]],
     });
     expect(db.prepare("SELECT outcome, delivery_method, telegram_message_id, tracker_key, external_id FROM telegram_deliveries").get()).toEqual({
@@ -154,7 +198,7 @@ describe("rich Telegram release notifications", () => {
 
   it("uploads the artwork when Telegram cannot fetch its URL directly", async () => {
     const calls: TelegramCall[] = [];
-    const { db, vault, userId } = notificationDatabase();
+    const { db, vault, userId } = notificationDatabase("1");
     const mediaFetcher: typeof fetch = async () => new Response(Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]), {
       status: 200,
       headers: { "content-type": "image/jpeg", "content-length": "4" },
@@ -168,6 +212,7 @@ describe("rich Telegram release notifications", () => {
     );
 
     await telegram.notifyRelease(userId, {
+      subscriptionId: "1",
       trackerName: "Rutor",
       changes: ["torrent file changed"],
       release: {
@@ -188,6 +233,7 @@ describe("rich Telegram release notifications", () => {
       inline_keyboard: [[
         { text: "Tracker page", url: "https://rutor.is/torrent/88" },
         { text: "Torrent file", url: "https://rutor.is/download/88" },
+        { text: "Subscription", url: "https://torrentinel.example/subscriptions/1" },
       ]],
     });
     expect(db.prepare("SELECT outcome, delivery_method, telegram_message_id FROM telegram_deliveries").get()).toEqual({
@@ -349,13 +395,19 @@ interface TelegramCall {
   multipart?: boolean;
 }
 
-function notificationDatabase(): { db: SqliteDatabase; vault: SecretVault; userId: string } {
+function notificationDatabase(subscriptionId?: string): { db: SqliteDatabase; vault: SecretVault; userId: string } {
   const directory = mkdtempSync(join(tmpdir(), "torrentinel-telegram-test-"));
   cleanup.push(directory);
   const db = createDatabase(join(directory, "test.db"));
   const vault = createSecretVault(join(directory, "master.key"));
   const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
   const timestamp = nowIso();
+  if (subscriptionId) {
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    db.prepare(`INSERT INTO subscriptions (id, user_id, collection_id, type, name, created_at, updated_at)
+      VALUES (?, ?, ?, 'rule', 'Test rule', ?, ?)`)
+      .run(subscriptionId, user.id, collection.id, timestamp, timestamp);
+  }
   db.prepare(`
     INSERT INTO telegram_bots
       (user_id, token_encrypted, bot_username, update_offset, configured_at, updated_at)

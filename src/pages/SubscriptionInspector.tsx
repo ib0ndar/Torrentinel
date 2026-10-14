@@ -6,7 +6,7 @@ import { CheckActivityContext } from "../components/contexts";
 import { Icon } from "../components/Icon";
 import { useTrackers } from "../hooks/useTrackers";
 import { useVisibleInterval } from "../hooks/useVisibleInterval";
-import { Drawer, EmptyCompact, Field, ListSkeleton, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
+import { Drawer, EmptyCompact, Field, ListSkeleton, Page, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
 import { absoluteTime, errorMessage, magnetHref, relativeTime, webHref } from "../format";
 import { useI18n } from "../i18n";
 import type { Collection, Notify, RuleMatch, Subscription, SubscriptionEvent, TrackerKey } from "../types";
@@ -16,19 +16,21 @@ function withSafeLinks(subscription: Subscription): Subscription {
   return snapshot ? { ...subscription, currentSnapshot: { ...snapshot, url: webHref(snapshot.url), coverUrl: webHref(snapshot.coverUrl), magnet: magnetHref(snapshot.magnet), torrentUrl: webHref(snapshot.torrentUrl) } } : subscription;
 }
 
-export function SubscriptionInspector({ id, collections, onClose, onChanged, notify }: { id: string; collections: Collection[]; onClose: () => void; onChanged: () => Promise<void>; notify: Notify }) {
+export function SubscriptionInspector({ id, collections, onClose, onChanged, notify, standalone = false }: { id: string; collections: Collection[]; onClose: () => void; onChanged: () => Promise<void>; notify: Notify; standalone?: boolean }) {
   const { t } = useI18n(), dialog = useDialog(), trackCheck = useContext(CheckActivityContext);
   const [item, setItem] = useState<Subscription | null>(null), [events, setEvents] = useState<SubscriptionEvent[]>([]), [matches, setMatches] = useState<RuleMatch[]>([]);
   const [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const endpoint = `/api/subscriptions/${encodeURIComponent(id)}`;
   // Fixed action columns: a column exists when any match has that action, so icons line up across rows.
   const actionSlots = { magnet: matches.some((match) => match.magnet), torrent: matches.some((match) => match.torrentUrl) };
   const load = useCallback(async (opening = false, signal?: AbortSignal) => {
-    const result = await api<{ subscription: Subscription; events: SubscriptionEvent[]; matches: RuleMatch[] }>(`/api/subscriptions/${id}${opening ? "/open" : ""}`, { ...(opening ? { method: "POST" } : {}), signal });
+    const result = await api<{ subscription: Subscription; events: SubscriptionEvent[]; matches: RuleMatch[] }>(`${endpoint}${opening ? "/open" : ""}`, { ...(opening ? { method: "POST" } : {}), signal });
     if (signal?.aborted) return;
-    setItem(withSafeLinks(result.subscription)); setEvents(result.events);
+    setLoadError(null); setItem(withSafeLinks(result.subscription)); setEvents(result.events);
     setMatches(result.matches.map((match) => ({ ...match, url: webHref(match.url) || "#", magnet: magnetHref(match.magnet), torrentUrl: webHref(match.torrentUrl) })));
-  }, [id]);
-  const onOpened = useEffectEvent(() => onChanged()), onOpenError = useEffectEvent((error: unknown) => notify(errorMessage(error), "bad"));
+  }, [endpoint]);
+  const onOpened = useEffectEvent(() => onChanged()), onOpenError = useEffectEvent((error: unknown) => { setLoadError(errorMessage(error)); notify(errorMessage(error), "bad"); });
   useEffect(() => { const controller = new AbortController(); void load(true, controller.signal).then(() => { if (!controller.signal.aborted) return onOpened(); }).catch((error) => { if (!controller.signal.aborted) onOpenError(error); }); return () => controller.abort(); }, [load]);
   const poll = useRef<AbortController | null>(null);
   const refreshDetails = useCallback(() => { poll.current?.abort(); const controller = new AbortController(); poll.current = controller; void load(false, controller.signal).catch(() => undefined); }, [load]);
@@ -36,18 +38,18 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
   useEffect(() => () => poll.current?.abort(), [load]);
   async function update(payload: Record<string, unknown>, message: string) {
     setBusy(true);
-    try { await api(`/api/subscriptions/${id}`, { method: "PATCH", ...jsonBody(payload) }); await Promise.all([load(), onChanged()]); notify(message); return true; }
+    try { await api(endpoint, { method: "PATCH", ...jsonBody(payload) }); await Promise.all([load(), onChanged()]); notify(message); return true; }
     catch (error) { notify(errorMessage(error), "bad"); return false; } finally { setBusy(false); }
   }
   async function checkNow() {
     setBusy(true);
-    try { await trackCheck(api(`/api/subscriptions/${id}/check`, { method: "POST" })); await Promise.all([load(), onChanged()]); notify(t("Tracker check completed")); }
+    try { await trackCheck(api(`${endpoint}/check`, { method: "POST" })); await Promise.all([load(), onChanged()]); notify(t("Tracker check completed")); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
   async function markRead() {
     if (!item) return;
     setBusy(true);
-    try { await api(`/api/subscriptions/${id}/read`, { method: "POST", ...jsonBody({ read: item.isUnread }) }); await Promise.all([load(), onChanged()]); }
+    try { await api(`${endpoint}/read`, { method: "POST", ...jsonBody({ read: item.isUnread }) }); await Promise.all([load(), onChanged()]); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
   async function remove() {
@@ -56,12 +58,10 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
       title: item.type === "rule" ? t("Delete this rule?") : t("Delete “{name}”?", { name: item.label }),
       description: t(item.type === "rule" ? "This permanently removes the rule, its matches, and its change history. This action cannot be undone." : "This permanently removes the subscription and its change history. This action cannot be undone."),
       confirmLabel: t(item.type === "rule" ? "Delete rule" : "Delete subscription"), tone: "danger" })) return;
-    try { await api(`/api/subscriptions/${id}`, { method: "DELETE" }); await onChanged(); onClose(); notify(t("Subscription deleted")); }
+    try { await api(endpoint, { method: "DELETE" }); await onChanged(); onClose(); notify(t("Subscription deleted")); }
     catch (error) { notify(errorMessage(error), "bad"); }
   }
-  return <Drawer title={item?.label || t("Subscription")} subtitle={item ? t(item.type === "direct" ? "Direct subscription" : "Rule subscription") : t("Loading details")} onClose={onClose} extraWide
-    headerMedia={item?.type === "direct" && item.currentSnapshot?.coverUrl ? <ReleaseCover key={item.currentSnapshot.coverUrl} url={item.currentSnapshot.coverUrl} title={item.currentSnapshot.title || item.label} thumbnail /> : undefined}>
-    {!item ? <ListSkeleton /> : <div className="inspector">
+  const content = !item ? loadError ? <div className="error-strip" role="alert"><Icon name="alert" />{loadError}</div> : <ListSkeleton /> : <div className="inspector">
       <div className="inspector-status"><span className={`status-dot ${item.enabled && !item.lastError ? "status-dot--live" : ""}`} /><div><strong>{t(item.lastError ? "Check failed" : item.enabled ? "Monitoring" : "Paused")}</strong><span>{item.lastCheckedAt ? t("Last checked {time}", { time: relativeTime(item.lastCheckedAt) }) : t("Waiting for first check")}</span></div><button className="button button--quiet" disabled={busy} onClick={checkNow}><Icon name="refresh" />{t("Check now")}</button></div>
       {item.lastError && <div className="error-strip"><Icon name="alert" />{item.lastError}</div>}
       <section className="detail-section"><div className="section-heading"><h3>{t("Configuration")}</h3><button className="text-button" onClick={() => setEditing((value) => !value)}>{t(editing ? "Cancel" : "Edit")}</button></div>{editing ? <EditSubscriptionForm item={item} busy={busy} notify={notify} onCancel={() => setEditing(false)} onSave={async (payload) => { if (await update(payload, t("Subscription configuration saved"))) setEditing(false); }} /> : <dl className="detail-grid">
@@ -75,7 +75,16 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
         {actionSlots.magnet || actionSlots.torrent ? <span className="match-row__actions">{actionSlots.magnet && (match.magnet ? <a href={match.magnet} aria-label={t("Open magnet for {title}", { title: match.title })} title={t("Magnet")}><Icon name="magnet" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}{actionSlots.torrent && (match.torrentUrl ? <a href={match.torrentUrl} target="_blank" rel="noreferrer" aria-label={t("Download torrent file for {title}", { title: match.title })} title={t("Torrent file")}><Icon name="download" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}</span> : null}</div>)}</div> : <EmptyCompact text={t(item.initialized ? "No new releases matched this rule yet." : "The first baseline scan is pending.")} />}</section>}
       <section className="detail-section"><div className="section-heading"><h3>{t("Change history")}</h3><span>{events.length}</span></div>{events.length ? <div className="timeline">{events.map((event) => <div className="timeline-item" key={event.id}><span className={!event.readAt ? "timeline-dot timeline-dot--new" : "timeline-dot"} /><div><ChangeDetails event={event} /><small title={absoluteTime(event.createdAt)}>{relativeTime(event.createdAt)}</small></div></div>)}</div> : <EmptyCompact text={t("Changes will appear here after the baseline.")} />}</section>
       <section className="detail-section detail-section--actions"><button className="button button--quiet" disabled={busy} onClick={markRead}>{t(item.isUnread ? "Mark read" : "Mark unread")}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, t(item.enabled ? "Subscription paused" : "Subscription resumed"))}>{t(item.enabled ? "Pause" : "Resume")}</button><button className="button button--danger" disabled={busy} onClick={() => void remove()}><Icon name="trash" />{t("Delete")}</button></section>
-    </div>}
+    </div>;
+  const title = item?.label || t("Subscription");
+  const subtitle = item ? t(item.type === "direct" ? "Direct subscription" : "Rule subscription") : loadError ? t("Subscription") : t("Loading details");
+  const cover = item?.type === "direct" && item.currentSnapshot?.coverUrl ? <ReleaseCover key={item.currentSnapshot.coverUrl} url={item.currentSnapshot.coverUrl} title={item.currentSnapshot.title || item.label} thumbnail /> : undefined;
+  if (standalone) return <Page title={title} eyebrow={t("Subscription")} description={subtitle}
+    actions={<button className="button button--quiet" onClick={onClose}><Icon name="monitor" />{t("Monitor")}</button>}>
+    {cover}{content}
+  </Page>;
+  return <Drawer title={title} subtitle={subtitle} onClose={onClose} extraWide headerMedia={cover}>
+    {content}
   </Drawer>;
 }
 function EditSubscriptionForm({ item, busy, notify, onCancel, onSave }: { item: Subscription; busy: boolean; notify: Notify; onCancel: () => void; onSave: (payload: Record<string, unknown>) => Promise<void> }) {

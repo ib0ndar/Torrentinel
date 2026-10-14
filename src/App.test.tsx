@@ -11,6 +11,53 @@ vi.mock("./pages/Settings", () => ({ Settings: () => <h1>Settings page</h1> }));
 vi.mock("./pages/Administration", () => ({ Admin: () => <h1>Administration page</h1> }));
 afterEach(() => { vi.resetAllMocks(); setLanguage("en"); window.history.replaceState({}, "", "/"); });
 
+it.each([
+  { type: "direct", signIn: false }, { type: "rule", signIn: false },
+  { type: "direct", signIn: true }, { type: "rule", signIn: true },
+])("opens a $type subscription URL with sign-in required: $signIn", async ({ type, signIn }) => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const user = { id: "deep-link-user", username: "alice", isAdmin: false, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "activity" };
+  const subscription = { id: "42", collectionId: "films", type, label: "Subscription from Telegram", requiredTerms: type === "rule" ? ["Dune"] : [], ignoredTerms: [], trackerKeys: [], enabled: true, initialized: true, isUnread: false, unreadCount: 0, eventCount: 0, matchCount: 0 };
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/auth/me") { if (signIn) throw new SessionExpiredError(); return { user }; }
+    if (path === "/api/auth/login") return { user };
+    if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
+    if (path === "/api/collections") return { collections: [{ id: "films", name: "Films", subscriptionCount: 1, unreadCount: 0, activityCount: 0 }] };
+    if (path === "/api/subscriptions/42/open") return { subscription, events: [], matches: [] };
+    if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  window.history.replaceState({}, "", "/subscriptions/42");
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<App />));
+    if (signIn) {
+      expect(container.querySelector(".login-form")).not.toBeNull();
+      expect(window.location.pathname).toBe("/subscriptions/42");
+      expect(vi.mocked(api).mock.calls.some(([path]) => path === "/api/subscriptions/42/open")).toBe(false);
+      const typeInput = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
+      await act(async () => {
+        typeInput(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!, "alice");
+        typeInput(container.querySelector<HTMLInputElement>('input[autocomplete="current-password"]')!, "password");
+      });
+      await act(async () => container.querySelector<HTMLFormElement>(".login-form")!.requestSubmit());
+    }
+    expect(window.location.pathname).toBe("/subscriptions/42");
+    expect(container.querySelector("h1")?.textContent).toBe("Subscription from Telegram");
+    expect(container.querySelector(".page-header > div > p:last-child")?.textContent).toBe(type === "direct" ? "Direct subscription" : "Rule subscription");
+    expect(api).toHaveBeenCalledWith("/api/subscriptions/42/open", expect.objectContaining({ method: "POST" }));
+    expect(document.querySelector(".drawer")).toBeNull();
+    expect(vi.mocked(api).mock.calls.some(([path]) => path.startsWith("/api/subscriptions?") || path.startsWith("/api/activity?"))).toBe(false);
+    await act(async () => container.querySelector<HTMLButtonElement>(".page-header button")!.click());
+    expect(window.location.pathname).toBe("/collections/films");
+    expect(container.querySelector("h1")?.textContent).toBe("Films");
+    await popState(() => window.history.back());
+    expect(window.location.pathname).toBe("/subscriptions/42");
+    expect(container.querySelector("h1")?.textContent).toBe("Subscription from Telegram");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
 it("keeps collections available across pages and returns to the chosen collection without background subscription polling", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();
