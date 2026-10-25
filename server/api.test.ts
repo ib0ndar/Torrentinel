@@ -90,7 +90,7 @@ describe("authenticated API", () => {
         username: "EncryptedTrackerUser",
         credentialsConfigured: true,
         baseUrl: "https://rutracker.net",
-        snapshotVersion: 1,
+        snapshotVersion: 2,
         capabilities: {
           authentication: "optional",
           customMirrors: true,

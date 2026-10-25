@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   Scheduler,
@@ -347,6 +348,56 @@ describe("change and notification helpers", () => {
   it("changes the fingerprint when monitored release fields change", () => {
     const release = { trackerKey: "rutor" as const, externalId: "1", title: "One", url: "https://rutor.is/torrent/1" };
     expect(fingerprintRelease(release)).not.toBe(fingerprintRelease({ ...release, title: "Two" }));
+  });
+
+  it("keeps the fingerprint when only the mirror changes", () => {
+    const onMirror = (origin: string) => ({
+      trackerKey: "kinozal" as const,
+      externalId: "71",
+      title: "Release",
+      url: `${origin}/details.php?id=71`,
+      coverUrl: `${origin}/i/poster/71.jpg`,
+      torrentUrl: `${origin}/download.php?id=71`,
+    });
+    expect(fingerprintRelease(onMirror("https://kinozal.guru"))).toBe(fingerprintRelease(onMirror("http://kinozal.me")));
+    expect(fingerprintRelease(onMirror("https://kinozal.guru"))).not.toBe(fingerprintRelease({
+      ...onMirror("https://kinozal.guru"),
+      coverUrl: "https://kinozal.guru/i/poster/72.jpg",
+    }));
+    // Links on another host stay whole, including a fixed download host that looks like a subdomain.
+    const offSite = { ...onMirror("https://kinozal.guru"), coverUrl: "https://images.example/71.jpg" };
+    expect(fingerprintRelease(offSite)).not.toBe(fingerprintRelease({ ...offSite, coverUrl: "https://other.example/71.jpg" }));
+    const download = (origin: string) => ({ ...onMirror(origin), torrentUrl: "https://dl.kinozal.guru/download.php?id=71" });
+    expect(fingerprintRelease(download("https://kinozal.guru"))).toBe(fingerprintRelease(download("https://kinozal.me")));
+  });
+
+  it("does not report a change when only the mirror is switched, and moves stored links to the new mirror", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO subscriptions (id, user_id, collection_id, type, name, direct_url, created_at, updated_at)
+      VALUES ('direct', ?, ?, 'direct', '', 'https://rutor.is/torrent/472', ?, ?)
+    `).run(user.id, collection.id, timestamp, timestamp);
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES ('direct', 'rutor')").run();
+    const page = readFileSync(new URL("./trackers/plugins/rutor/fixtures/direct.html", import.meta.url), "utf8");
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => (
+      new Response(page, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } })
+    ));
+    const telegram = { canNotify: () => false, notifyRelease: vi.fn() } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 9)));
+    try {
+      await scheduler.run("baseline");
+      db.prepare("UPDATE tracker_mirrors SET base_url = 'https://rutor.info' WHERE tracker_key = 'rutor'").run();
+      await scheduler.run("mirror switched");
+      expect(db.prepare("SELECT COUNT(*) AS count FROM subscription_events").get()).toEqual({ count: 0 });
+      const stored = db.prepare("SELECT current_snapshot FROM subscriptions WHERE id = 'direct'").get() as { current_snapshot: string };
+      expect(JSON.parse(stored.current_snapshot).url).toBe("https://rutor.info/torrent/472");
+    } finally {
+      fetch.mockRestore();
+      db.close();
+    }
   });
 
   it("escapes Telegram HTML", () => {

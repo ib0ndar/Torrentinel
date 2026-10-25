@@ -53,13 +53,28 @@ export function fingerprintRelease(release: Omit<Release, "trackerKey"> & { trac
   const stable = JSON.stringify({
     externalId: release.externalId,
     title: release.title,
-    url: release.url,
-    coverUrl: release.coverUrl || null,
+    url: mirrorIndependentUrl(release.url, release.url),
+    coverUrl: mirrorIndependentUrl(release.coverUrl, release.url),
     magnet: release.magnet || null,
-    torrentUrl: release.torrentUrl || null,
+    torrentUrl: mirrorIndependentUrl(release.torrentUrl, release.url),
     metadata: release.metadata || null,
   });
   return createHash("sha256").update(stable).digest("hex");
+}
+
+/**
+ * The part of a link that stays the same when the tracker is reached through another mirror. Links on
+ * the page's own host (relative links on the page) move with the mirror, so only their path and query
+ * count. Links to any other host, including the tracker's fixed download and image hosts, stay whole.
+ */
+function mirrorIndependentUrl(value: string | undefined, pageUrl: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.host === new URL(pageUrl).host ? `${url.pathname}${url.search}` : value;
+  } catch {
+    return value;
+  }
 }
 
 export function uniqueReleases(releases: Release[]): Release[] {

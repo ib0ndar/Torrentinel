@@ -4,7 +4,7 @@ export const rutorManifest: TrackerManifest = {
   key: "rutor",
   displayName: "Rutor",
   canonicalHosts: ["rutor.is", "rutor.info"],
-  snapshotVersion: 1,
+  snapshotVersion: 2,
   capabilities: {
     authentication: "none",
     customMirrors: true,

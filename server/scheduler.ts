@@ -406,9 +406,10 @@ export class Scheduler {
         status.changed += 1;
       } else {
         outcome = "unchanged";
+        // The fingerprint ignores the mirror, so keep the stored links on the one requests now use.
         this.db.prepare(`
-          UPDATE subscriptions SET name = ?, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
-        `).run(snapshot.title, checkedAt, checkedAt, row.id);
+          UPDATE subscriptions SET name = ?, current_snapshot = ?, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
+        `).run(snapshot.title, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
       }
     } catch (error) {
       observationError = error;

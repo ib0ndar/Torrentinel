@@ -4,7 +4,7 @@ export const kinozalManifest: TrackerManifest = {
   key: "kinozal",
   displayName: "Kinozal",
   canonicalHosts: ["kinozal.tv", "kinozal.me", "kinozal.guru"],
-  snapshotVersion: 2,
+  snapshotVersion: 3,
   ruleDiscoveryRevision: "kinozal-search-uploaded-v2",
   capabilities: {
     authentication: "required",

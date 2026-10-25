@@ -4,7 +4,7 @@ export const rutrackerManifest: TrackerManifest = {
   key: "rutracker",
   displayName: "RuTracker",
   canonicalHosts: ["rutracker.org", "rutracker.net"],
-  snapshotVersion: 1,
+  snapshotVersion: 2,
   capabilities: {
     authentication: "optional",
     customMirrors: true,
