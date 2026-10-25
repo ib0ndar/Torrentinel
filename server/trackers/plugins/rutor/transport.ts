@@ -11,7 +11,7 @@ export interface RutorHttpSession {
 }
 
 export interface RutorBrowserSession {
-  get(url: string, signal?: AbortSignal): Promise<BrowserPage>;
+  get(url: string, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage>;
   close?(): Promise<void>;
 }
 
@@ -69,7 +69,7 @@ export class RutorTransport {
     signal?: AbortSignal,
   ): Promise<HttpResult> {
     session.browser ||= this.browserFactory(`torrentinel-rutor-${new URL(origin).host}`);
-    const page = await session.browser.get(url, signal);
+    const page = await session.browser.get(url, signal, origin);
     if (challengeDetected(page.body)) {
       throw new TrackerError("challenge", "Rutor returned an interactive verification challenge", { trackerKey: "rutor" });
     }

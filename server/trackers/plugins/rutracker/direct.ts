@@ -7,7 +7,7 @@ import type { Release } from "../../../types.js";
 import { rutrackerManifest } from "./manifest.js";
 
 export interface RutrackerDetailProvider {
-  get(url: string, signal?: AbortSignal): Promise<BrowserPage>;
+  get(url: string, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage>;
   close?(): Promise<void>;
 }
 
@@ -20,7 +20,7 @@ export class RutrackerDirectMonitor implements DirectMonitor {
   async fetchSnapshot(url: string, context: Parameters<DirectMonitor["fetchSnapshot"]>[1]) {
     const normalized = this.normalizeUrl(new URL(url), context.baseUrl);
     const externalId = externalIdFromUrl(normalized, [/[?&]t=(\d+)/i]);
-    const page = await this.detailProvider.get(normalized, context.signal);
+    const page = await this.detailProvider.get(normalized, context.signal, context.baseUrl);
     const $ = cheerio.load(page.body);
     const title = cleanText($("h1.maintitle, .maintitle, h1").first().text());
     if (!title) throw new TrackerError("parse", "RuTracker topic page did not contain a title", { trackerKey: "rutracker" });

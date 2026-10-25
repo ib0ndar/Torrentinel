@@ -17,8 +17,8 @@ export interface KinozalPageSession {
 }
 
 export interface KinozalBrowserSession {
-  get(url: string, signal?: AbortSignal): Promise<BrowserPage>;
-  submitForm(submission: BrowserFormSubmission, signal?: AbortSignal): Promise<BrowserPage>;
+  get(url: string, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage>;
+  submitForm(submission: BrowserFormSubmission, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage>;
   close?(): Promise<void>;
 }
 
@@ -55,12 +55,12 @@ export class KinozalSessionManager {
     const entry = await this.entry(context);
     this.rejectDuringBackoff(entry);
     await this.ensureAuthenticated(entry, context);
-    let result = await this.request(entry, () => entry.client.get(url, context.signal));
+    let result = await this.request(entry, () => entry.client.get(url, context.signal, context.baseUrl));
     if (!looksLikeLoginPage(result.body)) return result;
 
     entry.authenticated = false;
     await this.ensureAuthenticated(entry, context);
-    result = await this.request(entry, () => entry.client.get(url, context.signal));
+    result = await this.request(entry, () => entry.client.get(url, context.signal, context.baseUrl));
     if (looksLikeLoginPage(result.body)) {
       const error = new TrackerError("authentication", "Kinozal session expired and could not be refreshed", {
         trackerKey: "kinozal",
@@ -112,7 +112,7 @@ export class KinozalSessionManager {
     if (entry.authenticated) return;
     this.rejectDuringBackoff(entry);
     try {
-      const landing = await entry.client.get(context.baseUrl, context.signal);
+      const landing = await entry.client.get(context.baseUrl, context.signal, context.baseUrl);
       this.rejectChallenge(landing.body);
       if (!looksLikeLoginPage(landing.body)) {
         entry.authenticated = true;
@@ -127,7 +127,7 @@ export class KinozalSessionManager {
           username: context.username!,
           password: context.password!,
         },
-      }, context.signal);
+      }, context.signal, context.baseUrl);
       this.rejectChallenge(result.body);
       if (/Превышен лимит попыток|Попробуйте через \d+ (?:час|минут)/iu.test(result.body)) {
         throw new TrackerError("rate-limit", "Kinozal temporarily blocked additional login attempts", {

@@ -44,7 +44,7 @@ describe("RuTracker authenticated search recovery", () => {
 
     expect(result.coverage.complete).toBe(true);
     expect(result.releases.map((release) => release.externalId)).toEqual(["301", "300"]);
-    expect(clearance.get).toHaveBeenCalledWith("https://rutracker.org/forum/login.php", undefined);
+    expect(clearance.get).toHaveBeenCalledWith("https://rutracker.org/forum/login.php", undefined, "https://rutracker.org");
     expect(http.seedCookies).toHaveBeenCalledWith(
       [{ name: "cf_clearance", value: "clearance" }],
       "Validated browser agent",

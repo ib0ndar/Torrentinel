@@ -26,6 +26,23 @@ describe("tracker plugin contract", () => {
     expect(registry.forUrl("https://rutracker.net/forum/viewtopic.php?t=1")?.manifest.key).toBe("rutracker");
   });
 
+  it("keeps tracker page addresses on the configured mirror", () => {
+    const mirror = "http://mirror.example:8080";
+    for (const plugin of [createKinozalPlugin(), createRutorPlugin(), createRutrackerPlugin(fakeDetailProvider())]) {
+      const host = plugin.manifest.canonicalHosts[0];
+      // Resolved against the mirror as relative references, these paths would name another host.
+      for (const path of ["//127.0.0.1:6379/admin", "/\\169.254.169.254/latest/meta-data/", "//evil.example/details.php"]) {
+        const normalized = new URL(plugin.normalizeUrl(new URL(`https://${host}${path}?id=1`), mirror));
+        expect(normalized.origin).toBe(mirror);
+        expect(normalized.search).toBe("?id=1");
+      }
+    }
+    expect(createRutorPlugin().normalizeUrl(new URL("https://rutor.info/torrent/123/name?x=1"), "https://rutor.is"))
+      .toBe("https://rutor.is/torrent/123/name?x=1");
+    expect(createRutrackerPlugin(fakeDetailProvider()).normalizeUrl(new URL("https://rutracker.net/viewtopic.php?t=5"), "https://rutracker.org"))
+      .toBe("https://rutracker.org/forum/viewtopic.php?t=5");
+  });
+
   it("rejects inconsistent plugin declarations", () => {
     const plugin = createRutorPlugin();
     expect(() => new TrackerPluginRegistry([{ ...plugin, direct: undefined }]))
@@ -197,6 +214,20 @@ describe("Rutor plugin", () => {
     expect(batch.coverage).toEqual({ source: "recent-list", complete: false });
     expect(batch.releases[0]).toMatchObject({ externalId: "901", title: "Release One" });
   });
+
+  it("requests a direct subscription from the mirror even when its path names another host", async () => {
+    const plugin = createRutorPlugin();
+    const fetch = vi.fn(async () => new Response(fixture("rutor/fixtures/direct.html"), {
+      status: 200, headers: { "content-type": "text/html; charset=utf-8" },
+    }));
+    vi.stubGlobal("fetch", fetch);
+
+    const direct = await plugin.direct!.fetchSnapshot("https://rutor.info//127.0.0.1:6379/admin", { baseUrl: "http://rutor.is" });
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(String((fetch.mock.calls[0] as unknown[])[0])).toBe("http://rutor.is//127.0.0.1:6379/admin");
+    expect(direct.url).toBe("http://rutor.is//127.0.0.1:6379/admin");
+  });
 });
 
 describe("RuTracker plugin", () => {
@@ -224,6 +255,8 @@ describe("RuTracker plugin", () => {
     expect(batch.releases[0].magnet).toBe("magnet:?xt=urn:btih:FEED88");
     expect(batch.coverage).toMatchObject({ source: "feed", complete: false, oldestObservedAt: "2026-08-08T08:20:00Z" });
     expect(batch.cursor).toBe("2026-08-08T08:30:00Z");
+    // The browser trusts the mirror it is told about, never the host of the page it opens.
+    expect(detailProvider.get).toHaveBeenCalledWith("https://rutracker.net/forum/viewtopic.php?t=999", undefined, "https://rutracker.net");
     expect(detailProvider.close).toHaveBeenCalledOnce();
   });
 });

@@ -20,7 +20,7 @@ import { rutrackerManifest } from "./manifest.js";
 const MAX_RECOVERY_PAGES = 20;
 
 export interface RutrackerClearanceProvider {
-  get(url: string, signal?: AbortSignal): Promise<BrowserPage>;
+  get(url: string, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage>;
   close?(): Promise<void>;
 }
 
@@ -156,7 +156,7 @@ export class RutrackerSearchRecovery {
     searchUrl: URL,
   ): Promise<HttpResult> {
     const loginUrl = new URL("/forum/login.php", context.baseUrl);
-    const clearance = await client.clearance.get(loginUrl.toString(), context.signal);
+    const clearance = await client.clearance.get(loginUrl.toString(), context.signal, context.baseUrl);
     if (!clearance.cookies?.length || !clearance.userAgent) {
       throw new TrackerError("challenge", "RuTracker detail resolver did not return reusable clearance cookies", {
         trackerKey: "rutracker",

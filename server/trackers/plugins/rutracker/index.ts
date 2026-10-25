@@ -1,5 +1,5 @@
 import type { TrackerPlugin } from "../../core/contracts.js";
-import { hostMatchesManifest } from "../../core/contracts.js";
+import { hostMatchesManifest, urlOnMirror } from "../../core/contracts.js";
 import { IntegratedBrowserClient } from "../../core/transport/browser.js";
 import { RutrackerDirectMonitor, type RutrackerDetailProvider } from "./direct.js";
 import { rutrackerManifest } from "./manifest.js";
@@ -7,10 +7,9 @@ import { RutrackerRuleDiscovery } from "./rules.js";
 import { RutrackerSearchRecovery } from "./search.js";
 
 export function createRutrackerPlugin(detailProvider?: RutrackerDetailProvider): TrackerPlugin {
-  const normalizeUrl = (url: URL, baseUrl: string) => {
-    const path = url.pathname.startsWith("/forum/") ? url.pathname : `/forum${url.pathname}`;
-    return new URL(`${path}${url.search}`, baseUrl).toString();
-  };
+  const normalizeUrl = (url: URL, baseUrl: string) => (
+    urlOnMirror(url, baseUrl, url.pathname.startsWith("/forum/") ? url.pathname : `/forum${url.pathname}`)
+  );
   const sharedBrowser = detailProvider || new IntegratedBrowserClient(undefined, { allowedHosts: rutrackerManifest.canonicalHosts });
   const direct = new RutrackerDirectMonitor(normalizeUrl, sharedBrowser);
   const searchRecovery = new RutrackerSearchRecovery(() => sharedBrowser);

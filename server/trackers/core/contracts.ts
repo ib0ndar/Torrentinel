@@ -66,3 +66,15 @@ export function hostMatchesManifest(hostname: string, manifest: TrackerManifest)
   const normalized = hostname.toLocaleLowerCase("en-US");
   return manifest.canonicalHosts.some((host) => normalized === host || normalized.endsWith(`.${host}`));
 }
+
+/**
+ * Moves a tracker page address onto the mirror requests go to. Only the path and query are kept,
+ * so the mirror's scheme, host and port always apply. Resolving the path against the mirror instead
+ * would read a path such as "//127.0.0.1:6379/" as a different host.
+ */
+export function urlOnMirror(url: URL, baseUrl: string, pathname = url.pathname): string {
+  const target = new URL(baseUrl);
+  target.pathname = pathname;
+  target.search = url.search;
+  return target.toString();
+}

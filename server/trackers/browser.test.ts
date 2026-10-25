@@ -27,6 +27,7 @@ describe("integrated browser client", () => {
       launchContext: launch,
       profileRoot: root,
       timeoutMs: 50,
+      allowedHosts: ["rutracker.org"],
     });
 
     const first = await client.get("https://rutracker.org/forum/viewtopic.php?t=1");
@@ -64,6 +65,7 @@ describe("integrated browser client", () => {
       launchContext: launch,
       profileRoot: root,
       timeoutMs: 50,
+      allowedHosts: ["rutracker.org"],
     });
 
     await expect(client.get("https://rutracker.org/forum/viewtopic.php?t=6"))
@@ -87,6 +89,7 @@ describe("integrated browser client", () => {
       launchContext: launch,
       profileRoot: root,
       timeoutMs: 50,
+      allowedHosts: ["rutracker.org"],
     });
 
     await expect(client.get("https://rutracker.org/forum/viewtopic.php?t=7"))
@@ -107,6 +110,7 @@ describe("integrated browser client", () => {
       launchContext: async () => fixture.context,
       profileRoot: await tempDirectory(),
       timeoutMs: 30,
+      allowedHosts: ["rutracker.org"],
     });
 
     const page = await client.get("https://rutracker.org/forum/viewtopic.php?t=3");
@@ -125,6 +129,7 @@ describe("integrated browser client", () => {
       launchContext: async () => fixture.context,
       profileRoot: await tempDirectory(),
       timeoutMs: 100,
+      allowedHosts: ["kinozal.me"],
       trackerKey: "kinozal",
       trackerName: "Kinozal",
     });
@@ -157,6 +162,7 @@ describe("integrated browser client", () => {
       launchContext: async () => fixture.context,
       profileRoot: await tempDirectory(),
       timeoutMs: 200,
+      allowedHosts: ["rutracker.org"],
     });
 
     const page = await client.get("https://rutracker.org/forum/viewtopic.php?t=5");
@@ -173,6 +179,7 @@ describe("integrated browser client", () => {
       launchContext: async () => fixture.context,
       profileRoot: await tempDirectory(),
       timeoutMs: 10,
+      allowedHosts: ["rutracker.org"],
     });
 
     await expect(client.get("https://rutracker.org/forum/viewtopic.php?t=4"))
@@ -203,7 +210,7 @@ describe("integrated browser navigation guard", () => {
       timeoutMs: 50,
       allowedHosts: ["rutracker.org"],
     });
-    await client.get("https://mirror.example/forum/viewtopic.php?t=1");
+    await client.get("https://mirror.example/forum/viewtopic.php?t=1", undefined, "https://mirror.example");
     expect(launch.mock.calls[0][1]).toMatch(/^socks5:\/\/127\.0\.0\.1:\d+$/u);
     // WebRTC is limited through the profile preference, keeping the rest of the profile's settings.
     expect(JSON.parse(await readFile(join(profileDirectory(root, "guarded-session"), "Default", "Preferences"), "utf8"))).toEqual({
@@ -225,6 +232,28 @@ describe("integrated browser navigation guard", () => {
     const popup = { isClosed: () => false, close: vi.fn(async () => undefined) };
     fixture.openPage(popup);
     expect(popup.close).toHaveBeenCalledOnce();
+    await client.close();
+  });
+
+  it("refuses other hosts before starting Chrome and never trusts a host it was asked to open", async () => {
+    const fixture = fakeBrowser([["<html><h1>Ready</h1></html>"]]);
+    const launch = vi.fn(async (_profile: string, _proxyServer: string) => fixture.context);
+    const client = new IntegratedBrowserClient("refusing-session", {
+      launchContext: launch,
+      profileRoot: await tempDirectory(),
+      timeoutMs: 50,
+      allowedHosts: ["rutor.is"],
+      trackerName: "Rutor",
+    });
+    await expect(client.get("http://127.0.0.1:6379/admin", undefined, "https://rutor.is"))
+      .rejects.toThrow("Rutor integrated browser refused to leave the tracker for 127.0.0.1:6379");
+    await expect(client.submitForm({ pageUrl: "http://192.168.1.1/login.php", formSelector: "form", values: {} }))
+      .rejects.toThrow("refused to leave the tracker for 192.168.1.1");
+    expect(launch).not.toHaveBeenCalled();
+
+    await client.get("https://rutor.is/torrent/1", undefined, "https://rutor.is");
+    const loopback = fixture.pauseRequest("http://127.0.0.1:6379/admin", "Document");
+    await vi.waitFor(() => expect(fixture.cdpSend).toHaveBeenCalledWith("Fetch.failRequest", { requestId: loopback, errorReason: "Aborted" }));
     await client.close();
   });
 });

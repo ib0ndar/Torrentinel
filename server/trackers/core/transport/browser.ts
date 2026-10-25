@@ -23,7 +23,7 @@ export interface IntegratedBrowserOptions {
   timeoutMs?: number;
   trackerKey?: TrackerKey;
   trackerName?: string;
-  /** The tracker's own domains; the page may navigate within them and the hosts it was asked to open. */
+  /** The tracker's own domains; the page may navigate within them and the mirror each request names. */
   allowedHosts?: readonly string[];
 }
 
@@ -75,13 +75,16 @@ export class IntegratedBrowserClient {
     for (const host of options.allowedHosts || []) this.trustedHosts.add(host.toLocaleLowerCase("en-US"));
   }
 
-  get(url: string, signal?: AbortSignal): Promise<BrowserPage> {
-    this.trust(url);
+  /** Opens url, which must be on the tracker's own domains or on mirrorUrl, the mirror the request is made for. */
+  get(url: string, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage> {
+    const refused = this.refuseUntrusted(url, mirrorUrl);
+    if (refused) return Promise.reject(refused);
     return this.serialized(() => this.getPage(url, signal));
   }
 
-  submitForm(submission: BrowserFormSubmission, signal?: AbortSignal): Promise<BrowserPage> {
-    this.trust(submission.pageUrl);
+  submitForm(submission: BrowserFormSubmission, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage> {
+    const refused = this.refuseUntrusted(submission.pageUrl, mirrorUrl);
+    if (refused) return Promise.reject(refused);
     return this.serialized(() => this.submitFormPage(submission, signal));
   }
 
@@ -269,12 +272,22 @@ export class IntegratedBrowserClient {
     return page;
   }
 
-  private trust(url: string): void {
-    try {
-      this.trustedHosts.add(bareHostname(new URL(url)));
-    } catch {
-      // An invalid URL fails later in navigation.
+  /**
+   * Trusts the mirror's host, which an administrator may have put on the local network, and refuses
+   * a URL on any other host before Chrome starts. The requested URL itself never becomes trusted:
+   * that would let it widen where the page and the egress proxy may connect.
+   */
+  private refuseUntrusted(url: string, mirrorUrl: string | undefined): IntegratedBrowserError | undefined {
+    if (mirrorUrl) {
+      try {
+        this.trustedHosts.add(bareHostname(new URL(mirrorUrl)));
+      } catch {
+        // An invalid mirror adds nothing; the URL is then checked against the tracker's own domains.
+      }
     }
+    return topLevelNavigationAllowed(url, this.isTrustedHost)
+      ? undefined
+      : this.browserError(`refused to leave the tracker for ${hostOf(url)}`);
   }
 
   private readonly isTrustedHost = (hostname: string): boolean => (
