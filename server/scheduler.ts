@@ -4,7 +4,7 @@ import { nowIso } from "./db.js";
 import { config } from "./config.js";
 import type { DirectSnapshot, Release, TrackerKey } from "./types.js";
 import { trackerRegistry } from "./trackers/index.js";
-import type { DiscoveryBatch, TrackerContext, TrackerPlugin } from "./trackers/core/contracts.js";
+import type { TrackerContext, TrackerPlugin } from "./trackers/core/contracts.js";
 import { TrackerError } from "./trackers/core/errors.js";
 import type { TelegramService } from "./telegram.js";
 import { readTrackerCredentials, type SecretVault } from "./secrets.js";
@@ -24,10 +24,10 @@ import { directBaselineOutcome, directSnapshotIsTemporarilyUnavailable } from ".
 import { enqueueNotification, NotificationQueue } from "./notification-queue.js";
 import {
   bufferReleases,
-  bufferedReleases,
   feedHealth,
   ingestRollingFeedBatch,
   markFeedRecovery,
+  ReleaseBufferView,
   type FeedHealth,
   type RollingFeedResult,
 } from "./release-buffer.js";
@@ -90,6 +90,13 @@ interface RunState {
   // Keep authenticated detail responses scoped to this run, user, and mirror.
   enrichedReleases: Map<string, DirectSnapshot>;
 }
+
+/** The feed a lane read for its rules: the result shared by every rule group, or why it failed. */
+type FeedPoll =
+  | { ok: true; rollingFeed: RollingFeedResult; requestedUrl: string; releaseCount: number; view: ReleaseBufferView }
+  | { ok: false; error: unknown };
+
+type RowSource = Pick<RuleRow, "user_id" | "tracker_key" | "base_url">;
 
 interface TrackerLane {
   trackerKey: TrackerKey;
@@ -312,8 +319,12 @@ export class Scheduler {
   }
 
   private async pollTrackerLane(lane: TrackerLane, run: RunState): Promise<void> {
+    const plugin = trackerRegistry.get(lane.trackerKey);
+    const feed = plugin?.rules && plugin.manifest.capabilities.ruleDiscovery === "feed" && lane.ruleRows.length > 0
+      ? await this.pollFeed(plugin, lane.ruleRows[0], run.runId)
+      : undefined;
     for (const row of lane.directRows) await this.checkDirect(row, run.status, run.runId);
-    if (lane.ruleRows.length > 0) await this.pollRules(lane.trackerKey, lane.ruleRows, run);
+    if (lane.ruleRows.length > 0) await this.pollRules(lane.trackerKey, lane.ruleRows, run, feed);
   }
 
   private checkDirect(row: DirectRow, status: SchedulerStatus, runId: string): Promise<string> {
@@ -500,7 +511,64 @@ export class Scheduler {
     `).all(...(scope ? [scope.subscriptionId, scope.userId] : [])) as Array<Omit<RuleRow, "base_url"> & MirrorColumns>).map(withBaseUrl);
   }
 
-  private async pollRules(trackerKey: TrackerKey, rows: RuleRow[], run: RunState): Promise<void> {
+  /**
+   * Reads a feed tracker's feed once for the whole lane. Every rule group uses this one result, and a
+   * failed fetch is reported to each group instead of being requested again by every one of them.
+   */
+  private async pollFeed(plugin: TrackerPlugin, sample: RowSource, runId: string): Promise<FeedPoll> {
+    const startedMs = Date.now();
+    try {
+      if (!plugin.rules) throw new TrackerError("unsupported", `${plugin.manifest.displayName} has no feed`, { trackerKey: sample.tracker_key });
+      const batch = await plugin.rules.discover(this.context(sample.user_id, sample.tracker_key, sample.base_url));
+      const rollingFeed = ingestRollingFeedBatch(this.db, sample.tracker_key, batch);
+      const requestedUrl = batch.sourceUrl || sample.base_url;
+      this.recordObservation({
+        runId,
+        userId: sample.user_id,
+        trackerKey: sample.tracker_key,
+        operation: "feed-poll",
+        outcome: rollingFeed.gapDetected
+          ? "coverage-gap"
+          : rollingFeed.coverageStatus === "baseline"
+            ? "baseline"
+            : "continuous",
+        requestedUrl,
+        releaseCount: batch.releases.length,
+        durationMs: Date.now() - startedMs,
+        details: {
+          feedEntryCount: rollingFeed.entryCount,
+          feedNewEntryCount: rollingFeed.newEntryCount,
+          feedOverlapCount: rollingFeed.overlapCount ?? null,
+          feedBufferedCount: rollingFeed.bufferedCount,
+          feedCoverageMinutes: rollingFeed.coverageMinutes ?? null,
+          feedCoverageStatus: rollingFeed.coverageStatus,
+          feedOldestEntryAt: rollingFeed.oldestEntryAt || null,
+          feedNewestEntryAt: rollingFeed.newestEntryAt || null,
+        },
+      });
+      return {
+        ok: true,
+        rollingFeed,
+        requestedUrl,
+        releaseCount: batch.releases.length,
+        view: new ReleaseBufferView(this.db, sample.tracker_key, (release, baseUrl) => releaseOnMirror(release, plugin, baseUrl)),
+      };
+    } catch (error) {
+      this.recordObservation({
+        runId,
+        userId: sample.user_id,
+        trackerKey: sample.tracker_key,
+        operation: "feed-poll",
+        outcome: diagnosticOutcome(error),
+        requestedUrl: error instanceof TrackerError && error.url ? error.url : sample.base_url,
+        durationMs: Date.now() - startedMs,
+        error,
+      });
+      return { ok: false, error };
+    }
+  }
+
+  private async pollRules(trackerKey: TrackerKey, rows: RuleRow[], run: RunState, feed?: FeedPoll): Promise<void> {
     const { runId, status, scope, newByRule, enrichedReleases } = run;
     const groups = new Map<string, RuleRow[]>();
     for (const row of rows) {
@@ -510,8 +578,7 @@ export class Scheduler {
       else groups.set(key, [row]);
     }
 
-    const feedDiscoveryBatches = new Map<TrackerKey, DiscoveryBatch>();
-    const rollingFeeds = new Map<TrackerKey, RollingFeedResult>();
+    const rollingFeed = feed?.ok ? feed.rollingFeed : undefined;
     // Catch-up searches during a feed coverage gap: how many ran, and how many failed in a way a retry could fix.
     let recoveryAttempts = 0;
     let recoveryRetries = 0;
@@ -544,60 +611,22 @@ export class Scheduler {
           ? { requiredTerms: discoveryGroup.requiredTerms }
           : undefined;
         try {
-          const cachedFeedBatch = plugin.manifest.capabilities.ruleDiscovery === "feed"
-            ? feedDiscoveryBatches.get(sample.tracker_key)
-            : undefined;
-          const batch = cachedFeedBatch
-            ? discoveryBatchForBaseUrl(cachedFeedBatch, plugin, sample.base_url)
-            : await plugin.rules.discover(
-              this.context(sample.user_id, sample.tracker_key, sample.base_url),
-              query,
-            );
-          if (!cachedFeedBatch && plugin.manifest.capabilities.ruleDiscovery === "feed") {
-            feedDiscoveryBatches.set(sample.tracker_key, batch);
-          }
-          successfulDiscoveries += 1;
-          let releases = batch.releases;
-          let rollingFeed: RollingFeedResult | undefined;
+          let releases: Release[];
+          let normalizedTitles: string[] | undefined;
+          let requestedUrl: string;
+          let releaseCount: number;
           let recoveryCount = 0;
           let recoveryComplete: boolean | undefined;
           let recoverySkipped = false;
           let recoveryError: unknown;
-          if (batch.coverage.source === "feed") {
-            rollingFeed = rollingFeeds.get(sample.tracker_key);
-            if (!rollingFeed) {
-              rollingFeed = ingestRollingFeedBatch(this.db, sample.tracker_key, batch);
-              rollingFeeds.set(sample.tracker_key, rollingFeed);
-              this.recordObservation({
-                runId,
-                userId: sample.user_id,
-                trackerKey: sample.tracker_key,
-                operation: "feed-poll",
-                outcome: rollingFeed.gapDetected
-                  ? "coverage-gap"
-                  : rollingFeed.coverageStatus === "baseline"
-                    ? "baseline"
-                    : "continuous",
-                requestedUrl: batch.sourceUrl || sample.base_url,
-                releaseCount: batch.releases.length,
-                durationMs: Date.now() - discoveryStartedMs,
-                details: {
-                  feedEntryCount: rollingFeed.entryCount,
-                  feedNewEntryCount: rollingFeed.newEntryCount,
-                  feedOverlapCount: rollingFeed.overlapCount ?? null,
-                  feedBufferedCount: rollingFeed.bufferedCount,
-                  feedCoverageMinutes: rollingFeed.coverageMinutes ?? null,
-                  feedCoverageStatus: rollingFeed.coverageStatus,
-                  feedOldestEntryAt: rollingFeed.oldestEntryAt || null,
-                  feedNewestEntryAt: rollingFeed.newestEntryAt || null,
-                },
-              });
-            }
-            const gapSince = rollingFeed.unresolvedGapSince;
+          if (feed) {
+            if (!feed.ok) throw feed.error;
+            successfulDiscoveries += 1;
+            const gapSince = feed.rollingFeed.unresolvedGapSince;
             if (gapSince) {
               const recoveryStartedAt = nowIso();
               // A rule that caught up after the latest gap, or one on its silent baseline, has nothing to recover.
-              const caughtUpAfter = rollingFeed.lastGapAt || gapSince;
+              const caughtUpAfter = feed.rollingFeed.lastGapAt || gapSince;
               const pending = discoveryGroup.rows.filter((row) => (
                 !ruleIsBaseline(row, plugin) && !(row.gap_recovered_at && row.gap_recovered_at >= caughtUpAfter)
               ));
@@ -638,11 +667,24 @@ export class Scheduler {
                   failedDiscoveries += 1;
                   if (!recoveryFinal && !recoveryCannotSucceed(error)) recoveryRetries += 1;
                 }
+                // Later groups match against what this search found, as they would after reading the buffer.
+                if (recoveryCount > 0) feed.view.reload();
               }
               // Rules on their silent baseline accept everything up to now, the gap included.
               this.markGapRecovered(discoveryGroup.rows.filter((row) => ruleIsBaseline(row, plugin)), recoveryStartedAt);
             }
-            releases = releasesForBaseUrl(bufferedReleases(this.db, sample.tracker_key), plugin, sample.base_url);
+            ({ releases, normalizedTitles } = feed.view.forMirror(sample.base_url));
+            requestedUrl = feed.requestedUrl;
+            releaseCount = feed.releaseCount;
+          } else {
+            const batch = await plugin.rules.discover(
+              this.context(sample.user_id, sample.tracker_key, sample.base_url),
+              query,
+            );
+            successfulDiscoveries += 1;
+            releases = batch.releases;
+            requestedUrl = batch.sourceUrl || sample.base_url;
+            releaseCount = batch.releases.length;
           }
           const { matchedCount, newMatchCount, baselineCount } = await this.processRuleMatches(
             discoveryGroup.rows,
@@ -651,6 +693,7 @@ export class Scheduler {
             runId,
             newByRule,
             enrichedReleases,
+            normalizedTitles,
           );
           if (recoveryError) {
             const message = errorMessage(recoveryError);
@@ -672,8 +715,8 @@ export class Scheduler {
                   : baselineCount > 0
                     ? "baseline"
                     : "unchanged",
-            requestedUrl: batch.sourceUrl || sample.base_url,
-            releaseCount: batch.releases.length,
+            requestedUrl,
+            releaseCount,
             durationMs: Date.now() - discoveryStartedMs,
             error: recoveryError,
             details: {
@@ -695,7 +738,7 @@ export class Scheduler {
         } catch (error) {
           failedDiscoveries += 1;
           // With the gap still open, this group's catch-up state is unknown, so a later poll must look again.
-          if (rollingFeeds.get(trackerKey)?.unresolvedGapSince) recoveryRetries += 1;
+          if (rollingFeed?.unresolvedGapSince) recoveryRetries += 1;
           const message = errorMessage(error);
           for (const row of discoveryGroup.rows) this.updateTrackerState(row.id, row.tracker_key, false, message);
           this.recordObservation({
@@ -718,7 +761,7 @@ export class Scheduler {
       if (failedDiscoveries > 0) status.errors += 1;
     }
 
-    if (rollingFeeds.get(trackerKey)?.unresolvedGapSince) {
+    if (rollingFeed?.unresolvedGapSince) {
       // Only a full poll can attest that every active rule covered the gap. A rule that can never catch
       // up (no login or search, or more results than the search reads) does not keep it open for the rest.
       if (!scope && recoveryRetries === 0) markFeedRecovery(this.db, trackerKey, true);
@@ -760,11 +803,14 @@ export class Scheduler {
     runId: string,
     newByRule: Map<string, Release[]>,
     enrichedReleases: Map<string, DirectSnapshot>,
+    normalizedTitles = releases.map((release) => normalizeTitle(release.title)),
   ): Promise<{ matchedCount: number; newMatchCount: number; baselineCount: number }> {
     let matchedCount = 0;
     let newMatchCount = 0;
     let baselineCount = 0;
-    const normalizedTitles = releases.map((release) => normalizeTitle(release.title));
+    const recordedMatches = this.db.prepare("SELECT external_id FROM rule_matches WHERE subscription_id = ? AND tracker_key = ?");
+    const stillCurrent = this.db.prepare(`SELECT 1 FROM subscriptions s JOIN subscription_trackers st ON st.subscription_id = s.id
+      WHERE s.id = ? AND s.user_id = ? AND s.enabled = 1 AND s.required_terms = ? AND s.ignored_terms = ? AND st.tracker_key = ?`);
     const insertMatch = this.db.prepare(`
       INSERT OR IGNORE INTO rule_matches
         (id, subscription_id, tracker_key, external_id, title, url, magnet, torrent_url, discovered_at)
@@ -780,15 +826,15 @@ export class Scheduler {
       const discoveryRevision = plugin.manifest.ruleDiscoveryRevision;
       const isBaseline = ruleIsBaseline(row, plugin);
       if (isBaseline) baselineCount += 1;
+      // One query per rule instead of one per candidate: a broad rule can match thousands of buffered releases.
+      const recorded = new Set((recordedMatches.all(row.id, row.tracker_key) as Array<{ external_id: string }>)
+        .map((match) => match.external_id));
       for (const release of matches) {
-        if (this.db.prepare("SELECT 1 FROM rule_matches WHERE subscription_id = ? AND tracker_key = ? AND external_id = ?")
-          .get(row.id, release.trackerKey, release.externalId)) continue;
+        if (recorded.has(release.externalId)) continue;
         // Enrich before persistence: a crash during network work must leave the
         // release discoverable, not a recorded match without an outbox entry.
         const enriched = isBaseline ? release : await this.enrichRuleMatch(release, row, plugin, runId, enrichedReleases);
-        const current = this.db.prepare(`SELECT 1 FROM subscriptions s JOIN subscription_trackers st ON st.subscription_id = s.id
-          WHERE s.id = ? AND s.user_id = ? AND s.enabled = 1 AND s.required_terms = ? AND s.ignored_terms = ? AND st.tracker_key = ?`)
-          .get(row.id, row.user_id, row.required_terms, row.ignored_terms, row.tracker_key);
+        const current = stillCurrent.get(row.id, row.user_id, row.required_terms, row.ignored_terms, row.tracker_key);
         if (!current) continue;
         const matchId = nanoid();
         const result = this.db.transaction(() => {
@@ -809,6 +855,7 @@ export class Scheduler {
           }
           return result;
         })();
+        recorded.add(release.externalId);
         if (!isBaseline && result.changes > 0) {
           newMatchCount += 1;
           const newMatches = newByRule.get(row.id);
@@ -991,18 +1038,12 @@ function ruleDiscoveryGroups(plugin: TrackerPlugin, rows: RuleRow[]): RuleDiscov
   return [...groups.values()];
 }
 
-function releasesForBaseUrl(releases: Release[], plugin: TrackerPlugin, baseUrl: string): Release[] {
-  return releases.map((release) => {
-    try {
-      return { ...release, url: plugin.normalizeUrl(new URL(release.url), baseUrl) };
-    } catch {
-      return release;
-    }
-  });
-}
-
-function discoveryBatchForBaseUrl(batch: DiscoveryBatch, plugin: TrackerPlugin, baseUrl: string): DiscoveryBatch {
-  return { ...batch, releases: releasesForBaseUrl(batch.releases, plugin, baseUrl) };
+function releaseOnMirror(release: Release, plugin: TrackerPlugin, baseUrl: string): Release {
+  try {
+    return { ...release, url: plugin.normalizeUrl(new URL(release.url), baseUrl) };
+  } catch {
+    return release;
+  }
 }
 
 function safeJson(value: string | null): Record<string, unknown> {

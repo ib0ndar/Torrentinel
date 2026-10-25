@@ -17,6 +17,8 @@ import { fingerprintRelease } from "./trackers/core/parsing.js";
 import { trackerRegistry } from "./trackers/index.js";
 import type { DiscoveryBatch } from "./trackers/core/contracts.js";
 import type { CoverCacheStore } from "./cover-cache.js";
+import { ReleaseBufferView } from "./release-buffer.js";
+import { TrackerError } from "./trackers/core/errors.js";
 
 describe("rule matching", () => {
   it("requires every required phrase without case sensitivity", () => {
@@ -254,6 +256,83 @@ describe("RuTracker feed continuity", () => {
       expect(ruleEvaluations).toHaveLength(2);
       expect(ruleEvaluations.map((row) => JSON.parse(row.details).requiredTerms)).toEqual(["needle", "haystack"]);
       expect(ruleEvaluations.every((row) => !("feedEntryCount" in JSON.parse(row.details)))).toBe(true);
+    } finally {
+      discover.mockRestore();
+      db.close();
+    }
+  });
+
+  it("reads the release buffer once per poll and prepares each mirror's copy once", async () => {
+    const db = createDatabase(":memory:");
+    const admin = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const timestamp = new Date().toISOString();
+    db.prepare(`INSERT INTO users (id, username, password_hash, created_at, updated_at)
+      VALUES ('second', 'second', 'x', ?, ?)`).run(timestamp, timestamp);
+    db.prepare("INSERT INTO collections (id, user_id, name, created_at, updated_at) VALUES ('second-collection', 'second', 'Main', ?, ?)")
+      .run(timestamp, timestamp);
+    const adminCollection = (db.prepare("SELECT id FROM collections WHERE user_id = ?").get(admin.id) as { id: string }).id;
+    for (const [id, userId, collectionId, term] of [
+      ["admin-needle", admin.id, adminCollection, "needle"],
+      ["admin-release", admin.id, adminCollection, "release"],
+      ["second-needle", "second", "second-collection", "needle"],
+      ["second-release", "second", "second-collection", "release"],
+    ]) {
+      db.prepare(`INSERT INTO subscriptions (id, user_id, collection_id, type, name, required_terms, created_at, updated_at)
+        VALUES (?, ?, ?, 'rule', '', ?, ?, ?)`).run(id, userId, collectionId, JSON.stringify([term]), timestamp, timestamp);
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'rutracker')").run(id);
+    }
+    const plugin = trackerRegistry.get("rutracker");
+    if (!plugin?.rules) throw new Error("RuTracker rule discovery is unavailable");
+    const discover = vi.spyOn(plugin.rules, "discover").mockResolvedValue(feedBatch([release("1"), release("2")], "2026-08-31T10:00:00Z"));
+    const reload = vi.spyOn(ReleaseBufferView.prototype, "reload");
+    const normalizeUrl = vi.spyOn(plugin, "normalizeUrl");
+    const telegram = { canNotify: vi.fn(() => false), notifyRelease: vi.fn() } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 7)));
+    try {
+      const status = await scheduler.run("test");
+      expect(status).toMatchObject({ checked: 2, errors: 0 });
+      expect(discover).toHaveBeenCalledTimes(1);
+      expect(reload).toHaveBeenCalledTimes(1);
+      // Two releases moved onto the one mirror both users share, not once for each of the four rule groups.
+      expect(normalizeUrl).toHaveBeenCalledTimes(2);
+      expect(db.prepare("SELECT COUNT(*) AS count FROM rule_matches").get()).toEqual({ count: 8 });
+    } finally {
+      discover.mockRestore();
+      reload.mockRestore();
+      normalizeUrl.mockRestore();
+      db.close();
+    }
+  });
+
+  it("requests a failed feed once per poll and reports the failure on every rule", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    for (const [id, term] of [["needle", "needle"], ["haystack", "haystack"]]) {
+      db.prepare(`INSERT INTO subscriptions (id, user_id, collection_id, type, name, required_terms, created_at, updated_at)
+        VALUES (?, ?, ?, 'rule', '', ?, ?, ?)`).run(id, user.id, collection.id, JSON.stringify([term]), timestamp, timestamp);
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'rutracker')").run(id);
+    }
+    const plugin = trackerRegistry.get("rutracker");
+    if (!plugin?.rules) throw new Error("RuTracker rule discovery is unavailable");
+    const discover = vi.spyOn(plugin.rules, "discover")
+      .mockRejectedValue(new TrackerError("network", "Request to feed.rutracker.cc failed", { trackerKey: "rutracker" }));
+    const telegram = { canNotify: vi.fn(() => false), notifyRelease: vi.fn() } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 8)));
+    try {
+      const status = await scheduler.run("test");
+      expect(discover).toHaveBeenCalledTimes(1);
+      expect(status).toMatchObject({ checked: 0, errors: 1 });
+      expect(db.prepare("SELECT operation, outcome FROM tracker_observations ORDER BY rowid").all()).toEqual([
+        { operation: "feed-poll", outcome: "network" },
+        { operation: "rule-discovery", outcome: "network" },
+        { operation: "rule-discovery", outcome: "network" },
+      ]);
+      expect(db.prepare("SELECT last_error FROM subscriptions ORDER BY id").all()).toEqual([
+        { last_error: "rutracker: Request to feed.rutracker.cc failed" },
+        { last_error: "rutracker: Request to feed.rutracker.cc failed" },
+      ]);
     } finally {
       discover.mockRestore();
       db.close();

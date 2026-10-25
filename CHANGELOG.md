@@ -7,6 +7,7 @@ All notable changes to Torrentinel are documented in this file.
 ### Changed
 
 - Kinozal, Rutor and RuTracker are checked side by side instead of one after another, so a poll takes about as long as the slowest tracker and a slow tracker no longer delays the others. Each tracker still gets one request at a time. If checking one tracker fails unexpectedly, the others still finish.
+- A RuTracker poll reads the feed and the 14-day release buffer once, instead of once for every rule group. With 20 rule groups and a full buffer this cuts the time spent matching rules from about 0.9 s to 0.05 s per poll on a desktop computer. When the feed cannot be read, the error is reported on every rule without requesting the feed again for each of them.
 - The integrated browser closes Chrome once it has been idle for 10 minutes instead of keeping it running between polls, and starts it again with the same profile, cookies and sign-ins for the next check. `BROWSER_IDLE_TIMEOUT_MS` sets the idle time; a value above the poll interval keeps browsers open between polls.
 
 ### Fixed

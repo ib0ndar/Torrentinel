@@ -1,6 +1,7 @@
 import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
 import type { DiscoveryBatch } from "./trackers/core/contracts.js";
+import { normalizeTitle } from "./rule-matching.js";
 import type { Release, TrackerKey } from "./types.js";
 
 const BUFFER_RETENTION_DAYS = 14;
@@ -211,6 +212,47 @@ export function bufferedReleases(db: SqliteDatabase, trackerKey: TrackerKey): Re
     publishedAt: row.published_at || undefined,
     metadata: jsonObject(row.metadata),
   }));
+}
+
+/**
+ * A tracker's buffered releases, read once per poll instead of once per rule group. Each mirror's
+ * copy, with addresses moved onto that mirror and titles prepared for matching, is built the first
+ * time a rule on that mirror needs it.
+ */
+export class ReleaseBufferView {
+  private releases: Release[] = [];
+  private readonly byExternalId = new Map<string, Release>();
+  private readonly mirrors = new Map<string, { releases: Release[]; normalizedTitles: string[] }>();
+
+  constructor(
+    private readonly db: SqliteDatabase,
+    private readonly trackerKey: TrackerKey,
+    private readonly onMirror: (release: Release, baseUrl: string) => Release,
+  ) {
+    this.reload();
+  }
+
+  /** Reads the buffer again; needed only after a catch-up search added releases to it. */
+  reload(): void {
+    this.releases = bufferedReleases(this.db, this.trackerKey);
+    this.byExternalId.clear();
+    for (const release of this.releases) this.byExternalId.set(release.externalId, release);
+    this.mirrors.clear();
+  }
+
+  get(externalId: string): Release | undefined {
+    return this.byExternalId.get(externalId);
+  }
+
+  forMirror(baseUrl: string): { releases: Release[]; normalizedTitles: string[] } {
+    let prepared = this.mirrors.get(baseUrl);
+    if (!prepared) {
+      const releases = this.releases.map((release) => this.onMirror(release, baseUrl));
+      prepared = { releases, normalizedTitles: releases.map((release) => normalizeTitle(release.title)) };
+      this.mirrors.set(baseUrl, prepared);
+    }
+    return prepared;
+  }
 }
 
 export function markFeedRecovery(db: SqliteDatabase, trackerKey: TrackerKey, complete: boolean, attemptedAt = nowIso()): void {

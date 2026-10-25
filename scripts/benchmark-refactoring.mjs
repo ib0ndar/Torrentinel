@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { createDatabase } from "../server/db.ts";
+import { bufferReleases, bufferedReleases, ReleaseBufferView } from "../server/release-buffer.ts";
 import { compileTitleMatcher, normalizeTitle } from "../server/rule-matching.ts";
+import { trackerRegistry } from "../server/trackers/index.ts";
 
 function medianTiming(work) {
   work();
@@ -67,12 +69,36 @@ try {
     LEFT JOIN subscriptions s ON s.user_id = u.id
     GROUP BY u.id ORDER BY u.created_at
   `);
-  const routes = readFileSync(new URL("../server/routes.ts", import.meta.url), "utf8");
+  const routes = readFileSync(new URL("../server/routes/admin.ts", import.meta.url), "utf8");
   const query = routes.match(/app\.get\("\/api\/admin\/users"[\s\S]*?db\.prepare\(`([\s\S]*?)`\)/)?.[1];
   assert.ok(query, "Could not locate the production admin user query");
   const after = db.prepare(query);
   const sortedRows = (statement) => statement.all().sort((a, b) => a.id.localeCompare(b.id));
   results.push(compare("Admin user counts", () => sortedRows(before), () => sortedRows(after), "40 users × 20 collections × 200 subscriptions, plus seeded admin"));
+
+  // Fourteen days of the RuTracker feed at about 40 entries an hour, read by 20 rule groups on one mirror.
+  const now = Date.now();
+  bufferReleases(db, Array.from({ length: 13_600 }, (_, index) => ({
+    trackerKey: "rutracker",
+    externalId: String(6_000_000 + index),
+    title: `Сериал Show ${index} (2026) WEB-DL 1080p`,
+    url: `https://rutracker.org/forum/viewtopic.php?t=${6_000_000 + index}`,
+    magnet: `magnet:?xt=urn:btih:${index.toString(16).padStart(40, "0")}`,
+    publishedAt: new Date(now - index * 90_000).toISOString(),
+    metadata: { feedSeen: true },
+  })));
+  const rutracker = trackerRegistry.get("rutracker");
+  const onMirror = (release, baseUrl) => ({ ...release, url: rutracker.normalizeUrl(new URL(release.url), baseUrl) });
+  const groups = Array.from({ length: 20 });
+  const perGroup = () => groups.map(() => {
+    const releases = bufferedReleases(db, "rutracker").map((release) => onMirror(release, "https://rutracker.org"));
+    return releases.map((release) => normalizeTitle(release.title)).length;
+  });
+  const oncePerRun = () => {
+    const view = new ReleaseBufferView(db, "rutracker", onMirror);
+    return groups.map(() => view.forMirror("https://rutracker.org").normalizedTitles.length);
+  };
+  results.push(compare("Feed buffer reads", perGroup, oncePerRun, "13,600 buffered releases × 20 rule groups on one mirror"));
   console.log(JSON.stringify({ node: process.version, samples: 7, statistic: "median", results }, null, 2));
 } finally {
   db.close();
