@@ -64,7 +64,7 @@ export default function App() {
   }, [notify, updateUser]);
   const shell = Boolean(user && !user.mustChangePassword);
   const content = user === undefined ? <BootScreen />
-    : !user ? <Login onLogin={(value) => { setLastUsername(""); updateUser(value); }} notify={notify} initialUsername={lastUsername} />
+    : !user ? <Login onLogin={(value) => { setLastUsername(""); updateUser(value); }} initialUsername={lastUsername} />
     : user.mustChangePassword ? <ChangePassword user={user} onChanged={updateUser} onSignOut={() => void signOut()} notify={notify} />
     : <TrackerMarkerStyleContext.Provider value={user.trackerMarkerStyle}><TrackersProvider key={user.id}><DialogProvider><AppShell key={user.id} user={user} setUser={updateUser} notify={notify} location={location} navigate={navigate} /></DialogProvider></TrackersProvider></TrackerMarkerStyleContext.Provider>;
   // The region keeps its place (and its toasts) when sign-in, password change and the app replace each other.

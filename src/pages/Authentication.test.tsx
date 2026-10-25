@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ChangePassword, Login } from "./Authentication";
-import { setLanguage } from "../i18n";
+import { api, ApiError } from "../api";
+import { LANGUAGE_STORAGE_KEY, setLanguage } from "../i18n";
+
+vi.mock("../api", async (original) => ({ ...await original<object>(), api: vi.fn() }));
+afterEach(() => { vi.resetAllMocks(); setLanguage("en"); });
+const type = (input: HTMLInputElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
 
 it("explains the password change for the first-run administrator and for members with a temporary password", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -50,9 +55,67 @@ it("starts the sign-in form with empty, required credentials", async () => {
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(async () => root.render(<Login onLogin={vi.fn()} notify={vi.fn()} />));
+    await act(async () => root.render(<Login onLogin={vi.fn()} />));
     const username = container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!, password = container.querySelector<HTMLInputElement>('input[type="password"]')!;
     expect(username.value).toBe(""); expect(password.value).toBe("");
     expect(username.required).toBe(true); expect(password.required).toBe(true);
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("shows a failed sign-in in the form: rejected credentials clear and focus the password, other errors keep it", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), onLogin = vi.fn();
+  vi.mocked(api).mockRejectedValueOnce(new ApiError("Invalid username or password", 401)).mockRejectedValueOnce(new ApiError("Too many sign-in attempts. Try again later.", 429));
+  const password = () => container.querySelector<HTMLInputElement>('input[autocomplete="current-password"]')!, error = () => container.querySelector('.login-form [role="alert"]');
+  const submit = () => act(async () => container.querySelector<HTMLFormElement>(".login-form")!.requestSubmit());
+  try {
+    await act(async () => root.render(<Login onLogin={onLogin} />));
+    expect(error()).toBeNull();
+    await act(async () => { type(container.querySelector<HTMLInputElement>('input[autocomplete="username"]')!, "admin"); type(password(), "wrong"); });
+    await submit();
+    expect(error()?.textContent).toBe("Invalid username or password");
+    expect(password().value).toBe(""); expect(document.activeElement).toBe(password());
+    expect(password().getAttribute("aria-invalid")).toBe("true"); expect(password().getAttribute("aria-describedby")).toBe(error()!.id);
+    expect(error()!.nextElementSibling?.classList.contains("button--primary")).toBe(true);
+    await act(async () => type(password(), "again"));
+    await submit();
+    expect(error()?.textContent).toBe("Too many sign-in attempts. Try again later.");
+    expect(password().value).toBe("again"); expect(password().hasAttribute("aria-invalid")).toBe(false);
+    expect(onLogin).not.toHaveBeenCalled();
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("shows and hides the password with a button that is not part of the field's label", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Login onLogin={vi.fn()} />));
+    const password = container.querySelector<HTMLInputElement>('input[autocomplete="current-password"]')!, toggle = container.querySelector<HTMLButtonElement>(".password-input__toggle")!;
+    expect([password.type, toggle.type, toggle.getAttribute("aria-label")]).toEqual(["password", "button", "Show password"]);
+    expect(toggle.closest("label")).toBeNull(); expect([...password.labels!].map((label) => label.textContent)).toEqual(["Password"]);
+    await act(async () => toggle.click());
+    expect([password.type, toggle.getAttribute("aria-label")]).toEqual(["text", "Hide password"]);
+    await act(async () => toggle.click());
+    expect(password.type).toBe("password");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it("switches the interface language outside the form and remembers the choice", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  const choices = () => [...container.querySelectorAll<HTMLButtonElement>(".login-language button")];
+  try {
+    await act(async () => root.render(<Login onLogin={vi.fn()} />));
+    expect(container.querySelector(".login-form select, .login-form .login-language")).toBeNull();
+    expect(container.querySelector(".login-language")!.getAttribute("aria-label")).toBe("Language");
+    expect(choices().map((choice) => [choice.textContent, choice.lang, choice.getAttribute("aria-pressed")])).toEqual([["English", "en", "true"], ["Русский", "ru", "false"]]);
+    await act(async () => choices()[1].click());
+    expect(container.querySelector(".login-form h2")?.textContent).toBe("Войти");
+    expect(container.querySelector(".login-language")!.getAttribute("aria-label")).toBe("Язык");
+    expect(choices().map((choice) => choice.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    expect(document.documentElement.lang).toBe("ru"); expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("ru");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

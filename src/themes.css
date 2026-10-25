@@ -32,6 +32,7 @@
   --telegram: #68bfff;
   --telegram-tint: #3ea2ee;
   --cover-bg: #09090a;
+  --primary-gradient: linear-gradient(135deg, #0e7490 0%, #3b5bd9 56%, #6d28d9 100%);
 }
 [data-theme="frost"] {
   color-scheme: dark;
@@ -69,6 +70,7 @@
   --telegram: #88c0d0;
   --telegram-tint: #5e81ac;
   --cover-bg: #1d2129;
+  --primary-gradient: var(--brand-gradient);
 }
 [data-theme="nebula"] {
   color-scheme: dark;
@@ -104,6 +106,7 @@
   --telegram: #7dc4ff;
   --telegram-tint: #3ea2ee;
   --cover-bg: #0a0810;
+  --primary-gradient: linear-gradient(135deg, #7c3aed 0%, #6d28d9 56%, #be185d 100%);
 }
 [data-theme="ember"] {
   color-scheme: dark;
@@ -139,6 +142,7 @@
   --telegram: #7cc4ff;
   --telegram-tint: #3ea2ee;
   --cover-bg: #0d0a08;
+  --primary-gradient: linear-gradient(135deg, #b45309 0%, #c2410c 56%, #be123c 100%);
 }
 [data-theme="daylight"] {
   color-scheme: light;
@@ -174,6 +178,7 @@
   --telegram: #0284c7;
   --telegram-tint: #0ea5e9;
   --cover-bg: #1e2230;
+  --primary-gradient: linear-gradient(135deg, #0e7490 0%, #3a5ad6 56%, #7c3aed 100%);
 }
 [data-theme="paper"] {
   color-scheme: light;
@@ -209,6 +214,7 @@
   --telegram: #1d7fc2;
   --telegram-tint: #268bd2;
   --cover-bg: #2a2418;
+  --primary-gradient: linear-gradient(135deg, #19697a 0%, #1f6aa5 56%, #5b5fb8 100%);
 }
 [data-theme="high-contrast"] {
   color-scheme: dark;
@@ -246,4 +252,5 @@
   --telegram: #7fd0ff;
   --telegram-tint: #3ea2ee;
   --cover-bg: #000000;
+  --primary-gradient: var(--brand-gradient);
 }

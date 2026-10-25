@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { getLanguage, russian, setLanguage, translate } from "./i18n";
+import { getLanguage, LANGUAGE_STORAGE_KEY, preferredLanguage, russian, setLanguage, translate } from "./i18n";
 import { formatPollInterval, relativeTime } from "./format";
 
 afterEach(() => setLanguage("en"));
@@ -9,6 +9,11 @@ describe("English and Russian localization", () => {
     expect(getLanguage()).toBe("en"); expect(translate("Delete “{name}”?", { name: "Settings" })).toBe("Delete “Settings”?");
     setLanguage("ru"); expect(translate("Delete “{name}”?", { name: "Settings" })).toBe("Удалить «Settings»?"); expect(document.documentElement.lang).toBe("ru");
     expect(translate("Unknown user text")).toBe("Unknown user text");
+  });
+  it("starts in the language last used in the browser, else the first supported browser language, and remembers changes", () => {
+    expect(preferredLanguage(null, ["de-DE", "ru-RU", "en-US"])).toBe("ru"); expect(preferredLanguage("en", ["ru-RU"])).toBe("en");
+    expect(preferredLanguage("fr", ["fr-FR", "pl"])).toBe("en"); expect(preferredLanguage(null, [])).toBe("en");
+    setLanguage("ru"); expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("ru");
   });
   it("localizes date, time and interval formatting", () => {
     expect(formatPollInterval(90)).toBe("1h 30m"); setLanguage("ru"); expect(formatPollInterval(90)).toBe("1 ч 30 мин");

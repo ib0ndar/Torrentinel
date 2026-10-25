@@ -2,6 +2,23 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- A button in the sign-in password field shows or hides the password.
+
+### Changed
+
+- A failed sign-in is shown in the form, above **Sign in**, instead of as a notification in the corner of the screen. When the username or password is rejected, the password field is cleared, marked as invalid and focused for the next attempt.
+- The sign-in page's language switch has moved out of the form to the top-right corner. The page opens in the language last used in that browser, whether chosen on the sign-in page or set for the account that signed in there, and otherwise in the browser's preferred language when it is English or Russian.
+- While signing in, **Sign in** shows a spinner and keeps its label readable instead of fading out.
+
+### Fixed
+
+- Primary buttons use darker gradients in the Sentinel, Graphite, Daylight, Nebula, Ember and Paper themes, so their white labels have at least 4.5:1 contrast across the whole button; it was as low as 1.7:1. Frost and High contrast are unchanged.
+- The letters of the Torrentinel wordmark on the sign-in page no longer touch, and the large logo in the sign-in background is a plain hexagon in the theme's color, without the visor that showed as a dark smudge behind the wordmark.
+
 ## [0.9.9] - 2026-10-25
 
 ### Security

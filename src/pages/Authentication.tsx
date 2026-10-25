@@ -1,20 +1,41 @@
-import { type FormEvent, useState } from "react";
-import { api, jsonBody } from "../api";
+import { type FormEvent, useId, useRef, useState } from "react";
+import { api, ApiError, jsonBody } from "../api";
+import { Icon } from "../components/Icon";
 import { BrandMark, Field } from "../components/UI";
 import { errorMessage } from "../format";
-import { setLanguage, useI18n, type Language } from "../i18n";
+import { LANGUAGES, setLanguage, useI18n } from "../i18n";
 import type { Notify, User } from "../types";
 
 export function BootScreen() { const { t } = useI18n(); return <div className="boot-screen"><BrandMark size={42} /><span>{t("Starting Torrentinel")}</span><span className="loading-line" /></div>; }
-export function Login({ onLogin, notify, initialUsername = "" }: { onLogin: (user: User) => void; notify: Notify; initialUsername?: string }) {
+// Sign-in errors stay in the form until the next attempt; rejected credentials clear the password and focus it.
+// The language switch is a page setting, so it sits in the corner rather than among the credentials.
+export function Login({ onLogin, initialUsername = "" }: { onLogin: (user: User) => void; initialUsername?: string }) {
   const { t, language } = useI18n();
   const [username, setUsername] = useState(initialUsername), [password, setPassword] = useState(""), [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ message: string; credentials: boolean } | null>(null), [passwordShown, setPasswordShown] = useState(false);
+  const passwordRef = useRef<HTMLInputElement>(null), passwordId = useId(), errorId = useId();
   async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true);
+    event.preventDefault(); setBusy(true); setError(null);
     try { const result = await api<{ user: User }>("/api/auth/login", { method: "POST", ...jsonBody({ username, password }) }); onLogin(result.user); }
-    catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
+    catch (failure) {
+      const credentials = failure instanceof ApiError && failure.status === 401;
+      setError({ message: errorMessage(failure), credentials });
+      if (credentials) { setPassword(""); passwordRef.current?.focus(); }
+    } finally { setBusy(false); }
   }
-  return <main className="login-page"><section className="login-brand"><BrandMark size={54} /><div><p className="eyebrow">{t("Private release monitor")}</p><h1>Torrentinel</h1><p>{t("Track change. Catch the release.")}</p></div></section><form className="login-form" onSubmit={submit}><p className="eyebrow">{t("Local access")}</p><h2>{t("Sign in")}</h2><Field label={t("Username")}><input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus={!initialUsername} required /></Field><Field label={t("Password")}><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" autoFocus={Boolean(initialUsername)} required /></Field><button className="button button--primary button--wide" disabled={busy}>{t(busy ? "Signing in…" : "Sign in")}</button><Field label={t("Language")}><select value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">English</option><option value="ru">Русский</option></select></Field></form></main>;
+  return <main className="login-page"><section className="login-brand"><BrandMark size={54} /><div><p className="eyebrow">{t("Private release monitor")}</p><h1>Torrentinel</h1><p>{t("Track change. Catch the release.")}</p></div></section>
+    <form className="login-form" onSubmit={submit}><p className="eyebrow">{t("Local access")}</p><h2>{t("Sign in")}</h2>
+      <Field label={t("Username")}><input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus={!initialUsername} required /></Field>
+      {/* Not a <label> wrapper: the toggle's own name would become part of the password field's name. */}
+      <div className="field"><span><label htmlFor={passwordId}><strong>{t("Password")}</strong></label></span><div className="password-input">
+        <input ref={passwordRef} id={passwordId} type={passwordShown ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" autoFocus={Boolean(initialUsername)} required aria-invalid={error?.credentials || undefined} aria-describedby={error ? errorId : undefined} />
+        <button type="button" className="password-input__toggle" aria-controls={passwordId} aria-label={t(passwordShown ? "Hide password" : "Show password")} title={t(passwordShown ? "Hide password" : "Show password")} onClick={() => setPasswordShown((shown) => !shown)}><Icon name={passwordShown ? "hide" : "show"} /></button>
+      </div></div>
+      {error && <div id={errorId} className="form-error login-error" role="alert"><Icon name="alert" size={16} /><span>{error.message}</span></div>}
+      <button className={`button button--primary button--wide ${busy ? "button--busy" : ""}`} disabled={busy}>{busy && <span className="button-spinner" aria-hidden="true" />}{t(busy ? "Signing in…" : "Sign in")}</button>
+    </form>
+    <div className="login-language" role="group" aria-label={t("Language")}>{LANGUAGES.map((item) => <button key={item.id} type="button" lang={item.id} aria-pressed={language === item.id} onClick={() => setLanguage(item.id)}>{item.name}</button>)}</div>
+  </main>;
 }
 export function ChangePassword({ user, onChanged, onSignOut, notify }: { user: User; onChanged: (user: User) => void; onSignOut: () => void; notify: Notify }) {
   const { t } = useI18n();

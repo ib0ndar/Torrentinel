@@ -679,7 +679,7 @@ it("opens an accessible keyboard shortcuts dialog with ? on Monitor and Activity
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
-it("keeps sign-in errors until dismissed or replaced by signing in, and lifts the stack above the mobile navigation in the app", async () => {
+it("shows sign-in errors in the form rather than as notifications, and lifts the stack above the mobile navigation in the app", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   let attempts = 0;
   const user = { id: "admin", username: "admin", isAdmin: true, mustChangePassword: false, language: "en", trackerMarkerStyle: "icons", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" };
@@ -694,21 +694,22 @@ it("keeps sign-in errors until dismissed or replaced by signing in, and lifts th
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container);
   const toasts = () => [...container.querySelectorAll(".toast")].map((toast) => toast.textContent);
+  const formError = () => container.querySelector('.login-form [role="alert"]')?.textContent;
   const submit = () => act(async () => container.querySelector<HTMLFormElement>(".login-form")!.requestSubmit());
   try {
     await act(async () => root.render(<App />));
     expect(container.querySelector(".toast-stack--navigation")).toBeNull();
     const fill = (selector: string, value: string) => { const input = container.querySelector<HTMLInputElement>(selector)!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); };
-    await act(async () => { fill('input[autocomplete="username"]', "admin"); fill('input[type="password"]', "wrong"); });
+    await act(async () => { fill('input[autocomplete="username"]', "admin"); fill('input[autocomplete="current-password"]', "wrong"); });
     await submit();
-    expect(toasts()).toEqual(["Invalid username or password"]);
-    expect(container.querySelector('[role="alert"] .toast')).not.toBeNull();
-    await act(async () => vi.advanceTimersByTime(60_000));
-    expect(toasts()).toEqual(["Invalid username or password"]);
-    await act(async () => container.querySelector<HTMLButtonElement>('.toast button[aria-label="Dismiss notification"]')!.click());
+    expect(formError()).toBe("Invalid username or password");
     expect(toasts()).toEqual([]);
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(formError()).toBe("Invalid username or password");
+    await act(async () => fill('input[autocomplete="current-password"]', "still wrong"));
     await submit();
-    expect(toasts()).toEqual(["Invalid username or password"]);
+    expect(formError()).toBe("Invalid username or password");
+    await act(async () => fill('input[autocomplete="current-password"]', "right"));
     await submit();
     expect(container.querySelector(".app-shell")).not.toBeNull();
     expect(toasts()).toEqual([]);

@@ -31,6 +31,8 @@
   --telegram: #68bfff;
   --telegram-tint: #3ea2ee;
   --cover-bg: #090c0a;
+  /* Primary buttons: darker than the brand gradient so a white label keeps at least 4.5:1 across the whole button. */
+  --primary-gradient: linear-gradient(135deg, #0e7490 0%, #3b5bd9 56%, #6d28d9 100%);
 }
 :root, [data-theme] {
   --line: color-mix(in srgb, var(--tint) 12%, transparent);
@@ -73,12 +75,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .loading-line::after { content: ""; display: block; width: 60px; height: 100%; background: var(--accent); animation: load 1.4s ease-in-out infinite; }
 
 .login-page { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); overflow: hidden; background: radial-gradient(circle at 30% 46%, color-mix(in srgb, var(--accent-2) 13%, transparent), transparent 42%), var(--base); }
-.login-page::before { content: ""; position: absolute; left: -8vw; top: 50%; width: min(68vw, 860px); aspect-ratio: 1; translate: 0 -50%; background: url("/brand/torrentinel-mark.svg") center / contain no-repeat; opacity: .035; pointer-events: none; }
+/* A plain hexagon in the theme's tint: the mark's dark visor and glow showed as a smudge behind the wordmark. */
+.login-page::before { content: ""; position: absolute; left: -8vw; top: 50%; width: min(68vw, 860px); aspect-ratio: 1; translate: 0 -50%; background: var(--tint); mask: url("/brand/torrentinel-watermark.svg") center / contain no-repeat; opacity: .035; pointer-events: none; }
 .login-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 24px; padding: 8vw; animation: rise .65s ease-out both; }
-.login-brand h1 { margin-left: -3px; font-size: clamp(52px, 8vw, 116px); line-height: .9; letter-spacing: -.065em; }
+.login-brand h1 { margin-left: -3px; font-size: clamp(52px, 8vw, 116px); line-height: .9; letter-spacing: -.035em; }
 .login-brand p:last-child { margin-top: 18px; color: var(--muted); font-size: 19px; }
 .login-form { position: relative; z-index: 2; align-self: center; width: min(420px, calc(100% - 64px)); padding: 48px; border-left: 1px solid var(--line); animation: enter-right .55s .1s ease-out both; }
 .login-form h2 { margin-bottom: 34px; font-size: 30px; letter-spacing: -.03em; }
+.login-error { margin: -6px 0 18px; }
+.login-language { position: absolute; z-index: 3; top: 24px; right: 28px; display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--overlay) 2.5%, transparent); }
+.login-language button { min-height: 32px; border: 0; border-radius: 6px; padding: 0 12px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 650; cursor: pointer; transition: color .14s ease, background .14s ease; }
+.login-language button:hover { color: var(--ink); }
+.login-language button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+.password-input { position: relative; }
+.password-input input { padding-right: 48px; }
+.password-input__toggle { position: absolute; top: 50%; right: 4px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 6px; padding: 0; background: transparent; color: var(--muted); cursor: pointer; translate: 0 -50%; transition: color .14s ease, background .14s ease; }
+.password-input__toggle:hover { background: color-mix(in srgb, var(--overlay) 5%, transparent); color: var(--ink); }
 .form-note { margin-top: 20px; color: var(--dim); font-size: 14px; text-align: center; }
 .form-note code { color: var(--muted); }
 .password-page { min-height: 100vh; display: grid; place-items: center; padding: 28px; background: radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 54%), var(--base); }
@@ -97,6 +109,7 @@ input, select { min-height: 43px; padding: 0 13px; }
 textarea { resize: vertical; padding: 12px 13px; line-height: 1.5; }
 input:hover, textarea:hover, select:hover { border-color: color-mix(in srgb, var(--tint) 38%, transparent); }
 input:focus, textarea:focus, select:focus { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 3.5%, transparent); outline: 0; }
+input[aria-invalid="true"], input[aria-invalid="true"]:hover, input[aria-invalid="true"]:focus { border-color: var(--danger); }
 input::placeholder, textarea::placeholder { color: var(--faint); }
 
 .phrase-input { min-height: 47px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 7px; border: 1px solid var(--line-strong); border-radius: 7px; background: color-mix(in srgb, var(--overlay) 2.5%, transparent); cursor: text; transition: border-color .18s ease, background .18s ease; }
@@ -115,8 +128,11 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--tint) 40%, transparent); transform: translateY(-1px); }
 .button:disabled { opacity: .45; cursor: not-allowed; }
 .button--wide { width: 100%; }
-.button--primary { border-color: color-mix(in srgb, var(--accent-2) 72%, transparent); background: var(--brand-gradient); box-shadow: 0 8px 24px color-mix(in srgb, var(--accent-2) 16%, transparent); color: var(--on-accent); }
+.button--primary { border-color: color-mix(in srgb, var(--accent-2) 72%, transparent); background: var(--primary-gradient); box-shadow: 0 8px 24px color-mix(in srgb, var(--accent-2) 16%, transparent); color: var(--on-accent); }
 .button--primary:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 20%, transparent); }
+/* Working, not unavailable: the label stays readable and a spinner shows progress. */
+.button--busy:disabled { opacity: 1; cursor: progress; }
+.button-spinner { width: 15px; height: 15px; flex: 0 0 auto; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 .button--quiet { background: color-mix(in srgb, var(--overlay) 2.5%, transparent); }
 .button--danger { border-color: color-mix(in srgb, var(--danger) 28%, transparent); color: var(--danger); }
 .button--danger-filled { border-color: color-mix(in srgb, var(--danger) 70%, transparent); background: linear-gradient(135deg, var(--danger-fill-1), var(--danger-fill-2)); box-shadow: 0 8px 24px color-mix(in srgb, var(--danger) 14%, transparent); color: var(--on-danger); }
@@ -452,7 +468,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .theme-swatch__face > span { min-width: 0; display: grid; align-content: center; gap: 6px; padding: 0 10px; }
 .theme-swatch__title { width: 62%; height: 5px; border-radius: 3px; background: var(--ink); }
 .theme-swatch__text { width: 84%; height: 4px; border-radius: 2px; background: var(--muted); opacity: .7; }
-.theme-swatch__action { width: 46%; height: 10px; margin-top: 2px; border-radius: 3px; background: var(--brand-gradient); }
+.theme-swatch__action { width: 46%; height: 10px; margin-top: 2px; border-radius: 3px; background: var(--primary-gradient); }
 .theme-option__copy { min-width: 0; display: grid; gap: 3px; padding: 0 2px; }
 .theme-option__copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .theme-option__copy small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
@@ -625,6 +641,7 @@ kbd { min-width: 26px; height: 24px; display: inline-grid; place-items: center; 
 @keyframes drawer-in { from { transform: translateX(100%); } }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes spin { to { rotate: 1turn; } }
 @keyframes visor-scan {
   0% { transform: translateX(0); animation-timing-function: cubic-bezier(.61, 1, .88, 1); }
   25% { transform: translateX(48px); animation-timing-function: cubic-bezier(.37, 0, .63, 1); }
@@ -762,10 +779,11 @@ kbd { min-width: 26px; height: 24px; display: inline-grid; place-items: center; 
   .settings-shortcuts::-webkit-scrollbar { display: none; }
   .drawer-heading--with-media { grid-template-columns: 150px minmax(0, 1fr); gap: 18px; }
   .release-cover--thumbnail { width: 150px; }
-  .login-page { display: block; padding: 54px 24px; }
+  .login-page { display: block; padding: 78px 24px 54px; }
+  .login-language { top: 16px; right: 16px; }
   .login-page::before { width: 110vw; left: -45vw; top: 20%; }
   .login-brand { padding: 0; gap: 16px; }
-  .login-brand h1 { font-size: 54px; }
+  .login-brand h1 { font-size: clamp(40px, 14vw, 54px); }
   .login-brand p:last-child { font-size: 16px; }
   .login-form { width: 100%; margin-top: 80px; padding: 32px 0 0; border-top: 1px solid var(--line); border-left: 0; }
   .toast-stack { right: 12px; bottom: 12px; width: calc(100vw - 24px); }

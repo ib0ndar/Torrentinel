@@ -23,7 +23,7 @@ export const russian: Record<string, string> = {
   "This tracker does not support direct subscriptions": "Этот трекер не поддерживает подписки по ссылке",
   "Starting Torrentinel": "Запуск Torrentinel", "Private release monitor": "Личный монитор релизов",
   "Track change. Catch the release.": "Следите за изменениями. Не пропускайте релизы.", "Local access": "Локальный доступ",
-  "Sign in": "Войти", "Signing in…": "Вход…", "Username": "Имя пользователя", "Password": "Пароль",
+  "Sign in": "Войти", "Signing in…": "Вход…", "Username": "Имя пользователя", "Password": "Пароль", "Show password": "Показать пароль", "Hide password": "Скрыть пароль",
   "First sign-in": "Первый вход", "Secure the admin account.": "Защитите учётную запись администратора.",
   "Replace the initial password with one of your own.": "Замените начальный пароль своим.",
   "Current password": "Текущий пароль", "New password": "Новый пароль", "Confirm new password": "Повторите новый пароль",
@@ -159,12 +159,29 @@ export const russian: Record<string, string> = {
   "Add a subscription (Monitor)": "Добавить подписку (Монитор)", "Show these shortcuts": "Показать эту справку", "Close a dialog or panel": "Закрыть диалог или панель",
 };
 
-let language: Language = "en";
+// Language names are shown in their own language, so they are not translated.
+export const LANGUAGES: ReadonlyArray<{ id: Language; name: string }> = [{ id: "en", name: "English" }, { id: "ru", name: "Русский" }];
+export const LANGUAGE_STORAGE_KEY = "torrentinel-language";
+// Before sign-in: the language last used in this browser, else the first supported browser language, else English.
+export function preferredLanguage(stored: string | null, browserLanguages: readonly string[]): Language {
+  const supported = (value: string | null | undefined) => LANGUAGES.find((item) => item.id === value?.toLowerCase().split("-")[0])?.id;
+  return supported(stored) ?? browserLanguages.map(supported).find(Boolean) ?? "en";
+}
+function startingLanguage(): Language {
+  let stored: string | null = null;
+  try { stored = localStorage.getItem(LANGUAGE_STORAGE_KEY); } catch { /* Private browsing can block storage. */ }
+  return preferredLanguage(stored, typeof navigator === "undefined" ? [] : navigator.languages ?? [navigator.language]);
+}
+
+let language: Language = startingLanguage();
+if (typeof document !== "undefined") document.documentElement.lang = language;
 const listeners = new Set<() => void>();
+// Remembered so the next sign-in page opens in the language chosen there or the account's language.
 export function setLanguage(value: Language): void {
   if (language === value) return;
   language = value;
   document.documentElement.lang = value;
+  try { localStorage.setItem(LANGUAGE_STORAGE_KEY, value); } catch { /* Private browsing can block storage. */ }
   for (const listener of listeners) listener();
 }
 export function getLanguage(): Language { return language; }
