@@ -2,7 +2,7 @@
 
 All notable changes to Torrentinel are documented in this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-10-25
 
 ### Added
 
@@ -62,7 +62,7 @@ All notable changes to Torrentinel are documented in this file.
 
 ### Development
 
-- The container build runs the test suite with 6 workers instead of 2, which shortens image builds on multi-core hosts, especially emulated cross-architecture builds.
+- The container build runs the test suite with 6 workers instead of 2, which shortens image builds on multi-core hosts, especially emulated cross-architecture builds, and allows each test two minutes instead of one.
 
 ## [0.9.9] - 2026-10-25
 
@@ -647,7 +647,8 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
-[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v0.9.9...HEAD
+[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v1.0.0
 [0.9.9]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.9
 [0.9.8]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.8
 [0.9.7]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.7
