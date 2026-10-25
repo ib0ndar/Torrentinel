@@ -77,6 +77,7 @@ export const config = {
   pollStartupDelaySeconds: integer("POLL_STARTUP_DELAY_SECONDS", 20),
   requestTimeoutMs: integer("TRACKER_REQUEST_TIMEOUT_MS", 30_000),
   browserTimeoutMs: integer("BROWSER_TIMEOUT_MS", 120_000),
+  browserIdleTimeoutMs: integer("BROWSER_IDLE_TIMEOUT_MS", 600_000),
   browserHeadless: boolean("BROWSER_HEADLESS", true),
   browserChannel: process.env.BROWSER_CHANNEL || "auto",
   browserSandbox: browserSandbox(),

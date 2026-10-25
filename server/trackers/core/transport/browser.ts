@@ -21,6 +21,8 @@ export interface IntegratedBrowserOptions {
   launchContext?: BrowserContextLauncher;
   profileRoot?: string;
   timeoutMs?: number;
+  /** Chrome is closed after this long without a request; the next request starts it again. */
+  idleTimeoutMs?: number;
   trackerKey?: TrackerKey;
   trackerName?: string;
   /** The tracker's own domains; the page may navigate within them and the mirror each request names. */
@@ -57,11 +59,15 @@ export class IntegratedBrowserError extends TrackerError {
  * Runs tracker browser navigation inside the Torrentinel process. Each logical
  * session gets an isolated persistent Chrome profile so authenticated state,
  * challenge clearance, and the browser fingerprint survive application restarts.
+ * Chrome itself only runs while it is in use: it is closed once it has been idle
+ * for a while and started again with the same profile by the next request.
  */
 export class IntegratedBrowserClient {
   private context?: BrowserContext;
   private contextCreatedAt = 0;
   private queue: Promise<void> = Promise.resolve();
+  private pendingOperations = 0;
+  private idleTimer?: NodeJS.Timeout;
   private readonly trustedHosts = new Set<string>();
   private readonly guardedPages = new WeakSet<Page>();
   private activePage?: Page;
@@ -334,9 +340,31 @@ export class IntegratedBrowserClient {
   }
 
   private serialized<T>(operation: () => Promise<T>): Promise<T> {
+    this.pendingOperations += 1;
+    this.cancelIdleClose();
     const result = this.queue.then(operation, operation);
-    this.queue = result.then(() => undefined, () => undefined);
+    const settled = result.then(() => undefined, () => undefined);
+    this.queue = settled;
+    void settled.then(() => {
+      this.pendingOperations -= 1;
+      if (this.pendingOperations === 0) this.scheduleIdleClose();
+    });
     return result;
+  }
+
+  /** Closing goes through the queue too, so it never interrupts a request that started meanwhile. */
+  private scheduleIdleClose(): void {
+    if (!this.context) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = undefined;
+      if (this.pendingOperations === 0 && this.context) void this.serialized(() => this.resetContext());
+    }, this.options.idleTimeoutMs ?? config.browserIdleTimeoutMs);
+    this.idleTimer.unref();
+  }
+
+  private cancelIdleClose(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = undefined;
   }
 }
 

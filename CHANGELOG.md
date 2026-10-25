@@ -2,6 +2,16 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The integrated browser closes Chrome once it has been idle for 10 minutes instead of keeping it running between polls, and starts it again with the same profile, cookies and sign-ins for the next check. `BROWSER_IDLE_TIMEOUT_MS` sets the idle time; a value above the poll interval keeps browsers open between polls.
+
+### Fixed
+
+- Switching a tracker's mirror no longer reports every release watched by link as changed. On the subscription's page, **Tracker page** and **Torrent file** move to the new mirror at the next check.
+
 ## [1.0.0] - 2026-10-25
 
 ### Added

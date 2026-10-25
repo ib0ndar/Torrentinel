@@ -45,6 +45,51 @@ describe("integrated browser client", () => {
     expect(fixture.close).toHaveBeenCalledOnce();
   });
 
+  it("closes Chrome once it has been idle and starts it again with the same profile", async () => {
+    const fixture = fakeBrowser([["<html><h1 class='maintitle'>Topic</h1></html>"]]);
+    const root = await tempDirectory();
+    const launch = vi.fn(async (_directory: string) => fixture.context);
+    const client = new IntegratedBrowserClient("idle-session", {
+      launchContext: launch,
+      profileRoot: root,
+      timeoutMs: 50,
+      idleTimeoutMs: 20,
+      allowedHosts: ["rutracker.org"],
+    });
+
+    await client.get("https://rutracker.org/forum/viewtopic.php?t=1");
+    await vi.waitFor(() => expect(fixture.close).toHaveBeenCalledOnce());
+    await client.get("https://rutracker.org/forum/viewtopic.php?t=2");
+    await client.close();
+
+    expect(launch).toHaveBeenCalledTimes(2);
+    expect(launch.mock.calls[0][0]).toBe(launch.mock.calls[1][0]);
+    expect(fixture.close).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps Chrome open while requests keep arriving within the idle time", async () => {
+    const fixture = fakeBrowser([["<html><h1 class='maintitle'>Topic</h1></html>"]]);
+    const launch = vi.fn(async () => fixture.context);
+    const client = new IntegratedBrowserClient("busy-session", {
+      launchContext: launch,
+      profileRoot: await tempDirectory(),
+      timeoutMs: 50,
+      idleTimeoutMs: 200,
+      allowedHosts: ["rutracker.org"],
+    });
+
+    for (let topic = 1; topic <= 3; topic += 1) {
+      await client.get(`https://rutracker.org/forum/viewtopic.php?t=${topic}`);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+    expect(fixture.close).not.toHaveBeenCalled();
+    await client.close();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    expect(launch).toHaveBeenCalledOnce();
+    expect(fixture.close).toHaveBeenCalledOnce();
+  });
+
   it("removes stale Chrome profile locks after a container restart", async () => {
     const fixture = fakeBrowser([["<html><h1 class='maintitle'>Ready</h1></html>"]]);
     const root = await tempDirectory();

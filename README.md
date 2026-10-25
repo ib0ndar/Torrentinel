@@ -335,6 +335,7 @@ Runtime settings are read from the process environment. The direct systemd insta
 | `POLL_STARTUP_DELAY_SECONDS` | Editable, default `20` | Editable, default `20` | Editable, default `20` | Delay before the startup poll |
 | `TRACKER_REQUEST_TIMEOUT_MS` | Editable, default `30000` | Editable, default `30000` | Editable, default `30000` | Tracker HTTP timeout |
 | `BROWSER_TIMEOUT_MS` | Editable, default `120000` | Editable, default `120000` | Editable, default `120000` | Integrated browser navigation and challenge timeout |
+| `BROWSER_IDLE_TIMEOUT_MS` | Editable, default `600000` | Editable, default `600000` | Editable, default `600000` | Closes an integrated browser after it has been idle this long; the next check starts it again with the same profile. Set it above the poll interval to keep browsers open between polls |
 | `BROWSER_HEADLESS` | Editable, default `true` | Editable, default `false` | Editable, default `false` | Use headless mode; containers use a private virtual display by default |
 | `BROWSER_CHANNEL` | Editable, default `auto` | Editable, default `auto` | Editable, default `auto` | `auto` selects Chrome on `amd64` and bundled Chromium on `arm64` |
 | `BROWSER_SANDBOX` | Editable, default `auto` | Editable, default `auto` | Editable, default `auto` | Chrome sandbox: `auto` uses it when available, `true` requires it, `false` disables it; see [Integrated browser sandbox](#integrated-browser-sandbox) |

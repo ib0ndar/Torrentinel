@@ -120,6 +120,8 @@ export class KinozalSessionManager {
         return;
       }
 
+      // Kinozal limits login attempts; the log shows whether a restarted browser had to sign in again.
+      console.info("Signing in to Kinozal in the integrated browser.");
       const result = await entry.client.submitForm({
         pageUrl: context.baseUrl,
         formSelector: LOGIN_FORM_SELECTOR,
