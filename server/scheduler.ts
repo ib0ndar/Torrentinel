@@ -57,6 +57,7 @@ interface RuleRow {
   base_url: string;
   tracker_initialized: number;
   discovery_revision: string | null;
+  gap_recovered_at: string | null;
 }
 
 interface RuleDiscoveryGroup {
@@ -73,11 +74,6 @@ interface SchedulerStatus {
   changed: number;
   errors: number;
   trigger?: string;
-}
-
-interface FeedRecoveryRunState {
-  attempted: number;
-  failed: number;
 }
 
 interface RuleScope {
@@ -490,7 +486,7 @@ export class Scheduler {
       SELECT s.id, s.user_id, s.name, st.tracker_key, s.required_terms, s.ignored_terms,
              utm.base_url AS personal_base_url, tm.base_url AS global_base_url,
              COALESCE(sts.initialized, 0) AS tracker_initialized,
-             sts.discovery_revision
+             sts.discovery_revision, sts.gap_recovered_at
       FROM subscriptions s
       JOIN users u ON u.id = s.user_id AND u.disabled = 0
       JOIN subscription_trackers st ON st.subscription_id = s.id
@@ -516,7 +512,9 @@ export class Scheduler {
 
     const feedDiscoveryBatches = new Map<TrackerKey, DiscoveryBatch>();
     const rollingFeeds = new Map<TrackerKey, RollingFeedResult>();
-    const recoveryRuns = new Map<TrackerKey, FeedRecoveryRunState>();
+    // Catch-up searches during a feed coverage gap: how many ran, and how many failed in a way a retry could fix.
+    let recoveryAttempts = 0;
+    let recoveryRetries = 0;
     for (const groupRows of groups.values()) {
       const startedMs = Date.now();
       const sample = groupRows[0];
@@ -563,6 +561,7 @@ export class Scheduler {
           let rollingFeed: RollingFeedResult | undefined;
           let recoveryCount = 0;
           let recoveryComplete: boolean | undefined;
+          let recoverySkipped = false;
           let recoveryError: unknown;
           if (batch.coverage.source === "feed") {
             rollingFeed = rollingFeeds.get(sample.tracker_key);
@@ -594,37 +593,54 @@ export class Scheduler {
                 },
               });
             }
-            if (rollingFeed.unresolvedGapSince) {
-              const recoveryRun = recoveryRuns.get(sample.tracker_key) || { attempted: 0, failed: 0 };
-              recoveryRun.attempted += 1;
-              recoveryRuns.set(sample.tracker_key, recoveryRun);
-              try {
-                if (!query || !plugin.rules.recover) {
-                  throw new TrackerError("unsupported", `${plugin.manifest.displayName} cannot recover this feed coverage gap`, {
-                    trackerKey: sample.tracker_key,
-                  });
+            const gapSince = rollingFeed.unresolvedGapSince;
+            if (gapSince) {
+              const recoveryStartedAt = nowIso();
+              // A rule that caught up after the latest gap, or one on its silent baseline, has nothing to recover.
+              const caughtUpAfter = rollingFeed.lastGapAt || gapSince;
+              const pending = discoveryGroup.rows.filter((row) => (
+                !ruleIsBaseline(row, plugin) && !(row.gap_recovered_at && row.gap_recovered_at >= caughtUpAfter)
+              ));
+              if (pending.length === 0) {
+                recoveryComplete = true;
+                recoverySkipped = true;
+              } else {
+                recoveryAttempts += 1;
+                // Set when the same search would fail the same way next time, so the gap need not wait for it.
+                let recoveryFinal = false;
+                try {
+                  if (!query || !plugin.rules.recover) {
+                    throw new TrackerError("unsupported", `${plugin.manifest.displayName} cannot recover this feed coverage gap`, {
+                      trackerKey: sample.tracker_key,
+                    });
+                  }
+                  const recovered = await plugin.rules.recover(
+                    this.context(sample.user_id, sample.tracker_key, sample.base_url),
+                    query,
+                    gapSince,
+                  );
+                  bufferReleases(this.db, recovered.releases);
+                  recoveryCount = recovered.releases.length;
+                  recoveryComplete = recovered.coverage.complete;
+                  if (!recoveryComplete) {
+                    // A retry starts from the same point and reads the same number of pages, so it stops short again.
+                    recoveryFinal = true;
+                    throw new TrackerError("temporary", `${plugin.manifest.displayName} catch-up search reached its safety limit before the gap was covered`, {
+                      trackerKey: sample.tracker_key,
+                      retryable: true,
+                      url: recovered.sourceUrl,
+                    });
+                  }
+                  this.markGapRecovered(discoveryGroup.rows, recoveryStartedAt);
+                } catch (error) {
+                  recoveryError = error;
+                  recoveryComplete = false;
+                  failedDiscoveries += 1;
+                  if (!recoveryFinal && !recoveryCannotSucceed(error)) recoveryRetries += 1;
                 }
-                const recovered = await plugin.rules.recover(
-                  this.context(sample.user_id, sample.tracker_key, sample.base_url),
-                  query,
-                  rollingFeed.unresolvedGapSince,
-                );
-                bufferReleases(this.db, recovered.releases);
-                recoveryCount = recovered.releases.length;
-                recoveryComplete = recovered.coverage.complete;
-                if (!recoveryComplete) {
-                  throw new TrackerError("temporary", `${plugin.manifest.displayName} catch-up search reached its safety limit before the gap was covered`, {
-                    trackerKey: sample.tracker_key,
-                    retryable: true,
-                    url: recovered.sourceUrl,
-                  });
-                }
-              } catch (error) {
-                recoveryError = error;
-                recoveryComplete = false;
-                recoveryRun.failed += 1;
-                failedDiscoveries += 1;
               }
+              // Rules on their silent baseline accept everything up to now, the gap included.
+              this.markGapRecovered(discoveryGroup.rows.filter((row) => ruleIsBaseline(row, plugin)), recoveryStartedAt);
             }
             releases = releasesForBaseUrl(bufferedReleases(this.db, sample.tracker_key), plugin, sample.base_url);
           }
@@ -668,6 +684,7 @@ export class Scheduler {
               ...(rollingFeed ? {
                 recoveryCount,
                 recoveryComplete: recoveryComplete ?? null,
+                ...(recoverySkipped ? { recoverySkipped } : {}),
               } : {}),
               ...(discoveryGroup.requiredTerms ? { requiredTerms: discoveryGroup.requiredTerms.join(" · ") } : {}),
               ...(plugin.manifest.ruleDiscoveryRevision
@@ -677,6 +694,8 @@ export class Scheduler {
           });
         } catch (error) {
           failedDiscoveries += 1;
+          // With the gap still open, this group's catch-up state is unknown, so a later poll must look again.
+          if (rollingFeeds.get(trackerKey)?.unresolvedGapSince) recoveryRetries += 1;
           const message = errorMessage(error);
           for (const row of discoveryGroup.rows) this.updateTrackerState(row.id, row.tracker_key, false, message);
           this.recordObservation({
@@ -699,10 +718,21 @@ export class Scheduler {
       if (failedDiscoveries > 0) status.errors += 1;
     }
 
-    for (const [recoveredTrackerKey, recovery] of recoveryRuns) {
-      // Only a full poll can attest that every active rule covered the gap.
-      if (recovery.attempted > 0) markFeedRecovery(this.db, recoveredTrackerKey, !scope && recovery.failed === 0);
+    if (rollingFeeds.get(trackerKey)?.unresolvedGapSince) {
+      // Only a full poll can attest that every active rule covered the gap. A rule that can never catch
+      // up (no login or search, or more results than the search reads) does not keep it open for the rest.
+      if (!scope && recoveryRetries === 0) markFeedRecovery(this.db, trackerKey, true);
+      else if (recoveryAttempts > 0) markFeedRecovery(this.db, trackerKey, false);
     }
+  }
+
+  /** Records that these rules have every release from the gap, so later polls skip their catch-up search. */
+  private markGapRecovered(rows: RuleRow[], recoveredAt: string): void {
+    const statement = this.db.prepare(`
+      INSERT INTO subscription_tracker_state (subscription_id, tracker_key, gap_recovered_at) VALUES (?, ?, ?)
+      ON CONFLICT(subscription_id, tracker_key) DO UPDATE SET gap_recovered_at = excluded.gap_recovered_at
+    `);
+    for (const row of rows) statement.run(row.id, row.tracker_key, recoveredAt);
   }
 
   /** Sums up each rule's trackers once every lane has finished, since a rule may watch several trackers. */
@@ -748,8 +778,7 @@ export class Scheduler {
       const matches = releases.filter((_, index) => matchesTitle(normalizedTitles[index]));
       matchedCount += matches.length;
       const discoveryRevision = plugin.manifest.ruleDiscoveryRevision;
-      const isBaseline = !row.tracker_initialized
-        || Boolean(discoveryRevision && row.discovery_revision !== discoveryRevision);
+      const isBaseline = ruleIsBaseline(row, plugin);
       if (isBaseline) baselineCount += 1;
       for (const release of matches) {
         if (this.db.prepare("SELECT 1 FROM rule_matches WHERE subscription_id = ? AND tracker_key = ? AND external_id = ?")
@@ -933,6 +962,17 @@ interface MirrorColumns {
 function withBaseUrl<T extends { tracker_key: TrackerKey } & MirrorColumns>(row: T): Omit<T, keyof MirrorColumns> & { base_url: string } {
   const { personal_base_url: personal, global_base_url: global, ...rest } = row;
   return { ...rest, base_url: effectiveBaseUrl(row.tracker_key, personal, global) };
+}
+
+/** A rule's first evaluation on a tracker, or its first after a discovery change, records matches silently. */
+function ruleIsBaseline(row: RuleRow, plugin: TrackerPlugin): boolean {
+  const revision = plugin.manifest.ruleDiscoveryRevision;
+  return !row.tracker_initialized || Boolean(revision && row.discovery_revision !== revision);
+}
+
+/** No login for the catch-up search, or no search at all: retrying cannot help until the user changes something. */
+function recoveryCannotSucceed(error: unknown): boolean {
+  return error instanceof TrackerError && (error.code === "authentication" || error.code === "unsupported");
 }
 
 function ruleDiscoveryGroups(plugin: TrackerPlugin, rows: RuleRow[]): RuleDiscoveryGroup[] {

@@ -138,6 +138,7 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
       tracker_key TEXT NOT NULL REFERENCES tracker_mirrors(tracker_key),
       initialized INTEGER NOT NULL DEFAULT 0,
       discovery_revision TEXT,
+      gap_recovered_at TEXT,
       last_checked_at TEXT,
       last_error TEXT,
       PRIMARY KEY(subscription_id, tracker_key)
@@ -384,6 +385,10 @@ function migrate(db: SqliteDatabase): void {
     .all() as Array<{ name: string }>;
   if (!trackerStateColumns.some((column) => column.name === "discovery_revision")) {
     db.exec("ALTER TABLE subscription_tracker_state ADD COLUMN discovery_revision TEXT");
+  }
+  // When this rule last caught up on a feed coverage gap; see Scheduler.pollRules.
+  if (!trackerStateColumns.some((column) => column.name === "gap_recovered_at")) {
+    db.exec("ALTER TABLE subscription_tracker_state ADD COLUMN gap_recovered_at TEXT");
   }
 
   const telegramDeliveryColumns = db.prepare("PRAGMA table_info(telegram_deliveries)")

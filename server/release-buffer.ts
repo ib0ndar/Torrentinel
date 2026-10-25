@@ -46,6 +46,8 @@ export interface RollingFeedResult {
   coverageStatus: "baseline" | "continuous" | "gap" | "recovered";
   gapDetected: boolean;
   unresolvedGapSince?: string;
+  /** When the most recent gap was detected; a catch-up search must have started after it. */
+  lastGapAt?: string;
   bufferedCount: number;
 }
 
@@ -92,6 +94,7 @@ export function ingestRollingFeedBatch(
     const unresolvedGapSince = previous?.unresolved_gap_since
       || (gapDetected ? previous?.fetched_at : undefined)
       || undefined;
+    const lastGapAt = gapDetected ? fetchedAt : previous?.last_gap_at || undefined;
     const coverageStatus: RollingFeedResult["coverageStatus"] = unresolvedGapSince
       ? "gap"
       : previous
@@ -134,7 +137,7 @@ export function ingestRollingFeedBatch(
       coverageStatus,
       gapDetected ? previous?.last_continuous_at || previous?.fetched_at || null : fetchedAt,
       unresolvedGapSince || null,
-      gapDetected ? fetchedAt : previous?.last_gap_at || null,
+      lastGapAt || null,
       previous?.recovered_at || null,
       previous?.last_recovery_attempt_at || null,
     );
@@ -154,6 +157,7 @@ export function ingestRollingFeedBatch(
       coverageStatus,
       gapDetected,
       unresolvedGapSince,
+      lastGapAt,
       bufferedCount,
     };
   })();

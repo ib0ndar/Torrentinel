@@ -5,6 +5,7 @@ import { SecretVault } from "./secrets.js";
 import type { TelegramService } from "./telegram.js";
 import type { DirectSnapshot } from "./types.js";
 import { trackerRegistry } from "./trackers/index.js";
+import { TrackerError } from "./trackers/core/errors.js";
 import type { CoverCacheStore } from "./cover-cache.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -90,6 +91,45 @@ describe("scheduler coordination", () => {
       expect(scheduler.discoveryHealth()[0].unresolvedGapSince).toBeUndefined();
       expect(db.prepare("SELECT COUNT(*) AS count FROM rule_matches WHERE subscription_id = 'two'").get()).toEqual({ count: 5 });
       expect(discover).toHaveBeenCalledTimes(3);
+    } finally { db.close(); }
+  });
+
+  it.each([
+    ["has no RuTracker login", new TrackerError("authentication", "RuTracker login is required to recover a feed coverage gap", { trackerKey: "rutracker" }), [0, 2, 2, 2]],
+    ["needs more pages than the catch-up search reads", "incomplete", [0, 2, 2, 2]],
+    ["fails once for a temporary reason", new TrackerError("network", "Request to rutracker.org failed", { trackerKey: "rutracker" }), [0, 2, 3, 3]],
+  ] as const)("closes a feed gap without searching again for rules that caught up, when one rule %s", async (_case, failure, expectedCalls) => {
+    const { db, user, collection, scheduler } = fixture();
+    const timestamp = new Date().toISOString();
+    for (const [id, term] of [["alpha", "alpha"], ["beta", "beta"]]) {
+      db.prepare(`
+        INSERT INTO subscriptions (id, user_id, collection_id, type, name, required_terms, created_at, updated_at)
+        VALUES (?, ?, ?, 'rule', '', ?, ?, ?)
+      `).run(id, user.id, collection.id, JSON.stringify([term]), timestamp, timestamp);
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, 'rutracker')").run(id);
+    }
+    const release = (id: string) => ({ trackerKey: "rutracker" as const, externalId: id, title: `alpha beta ${id}`, url: `https://rutracker.org/forum/viewtopic.php?t=${id}`, publishedAt: timestamp });
+    const plugin = trackerRegistry.get("rutracker")!;
+    vi.spyOn(plugin.rules!, "discover")
+      .mockResolvedValueOnce({ releases: [release("1"), release("2")], coverage: { source: "feed", complete: false } })
+      .mockResolvedValue({ releases: [release("3"), release("4")], coverage: { source: "feed", complete: false } });
+    let betaFailures = 0;
+    const recover = vi.spyOn(plugin.rules!, "recover").mockImplementation(async (_context, query) => {
+      if (query.requiredTerms[0] === "beta" && (failure === "incomplete" || betaFailures === 0 || failure.code === "authentication")) {
+        betaFailures += 1;
+        if (failure === "incomplete") return { releases: [release("5")], coverage: { source: "search", complete: false } };
+        throw failure;
+      }
+      return { releases: [], coverage: { source: "search", complete: true } };
+    });
+    try {
+      const calls: number[] = [];
+      for (let poll = 0; poll < 4; poll += 1) {
+        await scheduler.run("poll");
+        calls.push(recover.mock.calls.length);
+      }
+      expect(calls).toEqual(expectedCalls);
+      expect(scheduler.discoveryHealth()[0]).toMatchObject({ coverageStatus: "continuous", unresolvedGapSince: undefined });
     } finally { db.close(); }
   });
 
