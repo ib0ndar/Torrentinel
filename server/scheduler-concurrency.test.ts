@@ -259,4 +259,73 @@ describe("scheduler coordination", () => {
       expect(scheduler.status().running).toBe(false);
     } finally { db.close(); }
   });
+
+  it("checks different trackers side by side and one tracker's subscriptions one at a time", async () => {
+    const { db, user, collection, scheduler } = fixture();
+    const timestamp = new Date().toISOString();
+    const insertDirect = (id: string, tracker: string, url: string) => {
+      db.prepare(`
+        INSERT INTO subscriptions (id, user_id, collection_id, type, name, direct_url, created_at, updated_at)
+        VALUES (?, ?, ?, 'direct', '', ?, ?, ?)
+      `).run(id, user.id, collection.id, url, timestamp, timestamp);
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, ?)").run(id, tracker);
+    };
+    insertDirect("rutor-1", "rutor", "https://rutor.is/torrent/1");
+    insertDirect("rutor-2", "rutor", "https://rutor.is/torrent/2");
+    insertDirect("rutracker-1", "rutracker", "https://rutracker.org/forum/viewtopic.php?t=1");
+    const pending = new Map<string, ReturnType<typeof deferred<DirectSnapshot>>>();
+    const started: string[] = [];
+    const snapshot = (url: string): DirectSnapshot => ({
+      trackerKey: url.includes("rutor.is") ? "rutor" : "rutracker", externalId: url.slice(-1), title: url, url, fingerprint: url,
+    });
+    for (const key of ["rutor", "rutracker"] as const) {
+      vi.spyOn(trackerRegistry.get(key)!.direct!, "fetchSnapshot").mockImplementation((url) => {
+        started.push(url);
+        const result = deferred<DirectSnapshot>();
+        pending.set(url, result);
+        return result.promise;
+      });
+    }
+    try {
+      const run = scheduler.run("test");
+      await vi.waitFor(() => expect(started).toHaveLength(2));
+      expect(started).toEqual(expect.arrayContaining(["https://rutor.is/torrent/1", "https://rutracker.org/forum/viewtopic.php?t=1"]));
+      pending.get("https://rutor.is/torrent/1")!.resolve(snapshot("https://rutor.is/torrent/1"));
+      await vi.waitFor(() => expect(started).toContain("https://rutor.is/torrent/2"));
+      pending.get("https://rutor.is/torrent/2")!.resolve(snapshot("https://rutor.is/torrent/2"));
+      pending.get("https://rutracker.org/forum/viewtopic.php?t=1")!.resolve(snapshot("https://rutracker.org/forum/viewtopic.php?t=1"));
+      const status = await run;
+      expect(status).toMatchObject({ checked: 3, errors: 0 });
+      expect(db.prepare("SELECT COUNT(*) AS count FROM subscriptions WHERE initialized = 1").get()).toEqual({ count: 3 });
+    } finally { db.close(); }
+  });
+
+  it("finishes the other trackers when one tracker's lane fails unexpectedly", async () => {
+    const { db, user, collection, scheduler } = fixture();
+    const timestamp = new Date().toISOString();
+    for (const [id, tracker, url] of [
+      ["rutor-1", "rutor", "https://rutor.is/torrent/1"],
+      ["rutracker-1", "rutracker", "https://rutracker.org/forum/viewtopic.php?t=1"],
+    ]) {
+      db.prepare(`
+        INSERT INTO subscriptions (id, user_id, collection_id, type, name, direct_url, created_at, updated_at)
+        VALUES (?, ?, ?, 'direct', '', ?, ?, ?)
+      `).run(id, user.id, collection.id, url, timestamp, timestamp);
+      db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, ?)").run(id, tracker);
+    }
+    vi.spyOn(trackerRegistry.get("rutracker")!.direct!, "fetchSnapshot").mockResolvedValue({
+      trackerKey: "rutracker", externalId: "1", title: "Topic", url: "https://rutracker.org/forum/viewtopic.php?t=1", fingerprint: "topic",
+    });
+    const internals = scheduler as unknown as { checkDirect: (row: { tracker_key: string }, ...rest: unknown[]) => Promise<string> };
+    const checkDirect = internals.checkDirect.bind(scheduler);
+    vi.spyOn(internals, "checkDirect").mockImplementation((row, ...rest) => (
+      row.tracker_key === "rutor" ? Promise.reject(new Error("database is locked")) : checkDirect(row, ...rest)
+    ));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const status = await scheduler.run("test");
+      expect(status).toMatchObject({ checked: 1, errors: 1 });
+      expect(db.prepare("SELECT initialized FROM subscriptions WHERE id = 'rutracker-1'").get()).toEqual({ initialized: 1 });
+    } finally { db.close(); }
+  });
 });

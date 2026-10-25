@@ -85,6 +85,22 @@ interface RuleScope {
   userId: string;
 }
 
+/** State one poll shares between its tracker lanes. Every key includes the tracker. */
+interface RunState {
+  runId: string;
+  status: SchedulerStatus;
+  scope?: RuleScope;
+  newByRule: Map<string, Release[]>;
+  // Keep authenticated detail responses scoped to this run, user, and mirror.
+  enrichedReleases: Map<string, DirectSnapshot>;
+}
+
+interface TrackerLane {
+  trackerKey: TrackerKey;
+  directRows: DirectRow[];
+  ruleRows: RuleRow[];
+}
+
 export const MIN_POLL_INTERVAL_MINUTES = 5;
 export const MAX_POLL_INTERVAL_MINUTES = 6 * 60;
 const POLL_INTERVAL_STATE_KEY = "poll_interval_minutes";
@@ -226,8 +242,7 @@ export class Scheduler {
     this.writeStatus(status);
 
     try {
-      if (!scope) await this.pollDirect(status, runId);
-      await this.pollRules(status, runId, scope);
+      await this.pollTrackers(status, runId, scope);
       await this.notifications.drain();
     } finally {
       this.running = false;
@@ -270,9 +285,39 @@ export class Scheduler {
     if (type?.type === "rule") await this.runWithScope("subscription", { subscriptionId, userId });
   }
 
-  private async pollDirect(status: SchedulerStatus, runId: string): Promise<void> {
-    const rows = this.directRows();
-    for (const row of rows) await this.checkDirect(row, status, runId);
+  /**
+   * Each tracker is checked in its own lane and the lanes run side by side, so a slow tracker only
+   * delays its own subscriptions. Inside a lane requests stay one at a time, as trackers expect.
+   */
+  private async pollTrackers(status: SchedulerStatus, runId: string, scope?: RuleScope): Promise<void> {
+    const directRows = scope ? [] : this.directRows();
+    const ruleRows = this.ruleRows(scope);
+    const lanes = new Map<TrackerKey, TrackerLane>();
+    const laneFor = (trackerKey: TrackerKey) => {
+      let lane = lanes.get(trackerKey);
+      if (!lane) {
+        lane = { trackerKey, directRows: [], ruleRows: [] };
+        lanes.set(trackerKey, lane);
+      }
+      return lane;
+    };
+    for (const row of directRows) laneFor(row.tracker_key).directRows.push(row);
+    for (const row of ruleRows) laneFor(row.tracker_key).ruleRows.push(row);
+
+    const run: RunState = { runId, status, scope, newByRule: new Map(), enrichedReleases: new Map() };
+    const results = await Promise.allSettled([...lanes.values()].map((lane) => this.pollTrackerLane(lane, run)));
+    // An unexpected failure in one lane must not keep the other trackers from finishing.
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") return;
+      status.errors += 1;
+      console.error(`Could not finish checking ${[...lanes.keys()][index]}:`, errorMessage(result.reason));
+    });
+    this.settleRuleSubscriptions(ruleRows, run);
+  }
+
+  private async pollTrackerLane(lane: TrackerLane, run: RunState): Promise<void> {
+    for (const row of lane.directRows) await this.checkDirect(row, run.status, run.runId);
+    if (lane.ruleRows.length > 0) await this.pollRules(lane.trackerKey, lane.ruleRows, run);
   }
 
   private checkDirect(row: DirectRow, status: SchedulerStatus, runId: string): Promise<string> {
@@ -440,8 +485,8 @@ export class Scheduler {
     return outcome;
   }
 
-  private async pollRules(status: SchedulerStatus, runId: string, scope?: RuleScope): Promise<void> {
-    const rows: RuleRow[] = (this.db.prepare(`
+  private ruleRows(scope?: RuleScope): RuleRow[] {
+    return (this.db.prepare(`
       SELECT s.id, s.user_id, s.name, st.tracker_key, s.required_terms, s.ignored_terms,
              utm.base_url AS personal_base_url, tm.base_url AS global_base_url,
              COALESCE(sts.initialized, 0) AS tracker_initialized,
@@ -457,19 +502,18 @@ export class Scheduler {
       ${scope ? "AND s.id = ? AND s.user_id = ?" : ""}
       ORDER BY s.user_id, st.tracker_key
     `).all(...(scope ? [scope.subscriptionId, scope.userId] : [])) as Array<Omit<RuleRow, "base_url"> & MirrorColumns>).map(withBaseUrl);
+  }
 
+  private async pollRules(trackerKey: TrackerKey, rows: RuleRow[], run: RunState): Promise<void> {
+    const { runId, status, scope, newByRule, enrichedReleases } = run;
     const groups = new Map<string, RuleRow[]>();
     for (const row of rows) {
-      const key = `${row.user_id}:${row.tracker_key}:${row.base_url}`;
+      const key = `${row.user_id}:${row.base_url}`;
       const group = groups.get(key);
       if (group) group.push(row);
       else groups.set(key, [row]);
     }
 
-    const rulesById = new Map(rows.map((row) => [row.id, row]));
-    const newByRule = new Map<string, Release[]>();
-    // Keep authenticated detail responses scoped to this run, user, and mirror.
-    const enrichedReleases = new Map<string, DirectSnapshot>();
     const feedDiscoveryBatches = new Map<TrackerKey, DiscoveryBatch>();
     const rollingFeeds = new Map<TrackerKey, RollingFeedResult>();
     const recoveryRuns = new Map<TrackerKey, FeedRecoveryRunState>();
@@ -655,12 +699,15 @@ export class Scheduler {
       if (failedDiscoveries > 0) status.errors += 1;
     }
 
-    for (const [trackerKey, recovery] of recoveryRuns) {
+    for (const [recoveredTrackerKey, recovery] of recoveryRuns) {
       // Only a full poll can attest that every active rule covered the gap.
-      if (recovery.attempted > 0) markFeedRecovery(this.db, trackerKey, !scope && recovery.failed === 0);
+      if (recovery.attempted > 0) markFeedRecovery(this.db, recoveredTrackerKey, !scope && recovery.failed === 0);
     }
+  }
 
-    for (const subscriptionId of rulesById.keys()) {
+  /** Sums up each rule's trackers once every lane has finished, since a rule may watch several trackers. */
+  private settleRuleSubscriptions(rows: RuleRow[], run: RunState): void {
+    for (const subscriptionId of new Set(rows.map((row) => row.id))) {
       const trackerStates = this.db.prepare(`
         SELECT tracker_key, last_error, last_checked_at
         FROM subscription_tracker_state WHERE subscription_id = ?
@@ -673,12 +720,7 @@ export class Scheduler {
         UPDATE subscriptions SET last_error = ?, last_checked_at = ?, updated_at = ? WHERE id = ?
       `).run(errors.length ? errors.join("; ").slice(0, 500) : null, lastCheckedAt, nowIso(), subscriptionId);
     }
-
-    for (const [subscriptionId, releases] of newByRule) {
-      const rule = rulesById.get(subscriptionId);
-      if (!rule) continue;
-      status.changed += 1;
-    }
+    run.status.changed += run.newByRule.size;
   }
 
   private async processRuleMatches(
