@@ -958,9 +958,10 @@ export class Scheduler {
   private unchangedInFeed(row: DirectRow, plugin: TrackerPlugin, feed: Extract<FeedPoll, { ok: true }>): DirectSnapshot | undefined {
     if (!row.initialized || !row.current_fingerprint || row.last_error) return undefined;
     if (!storedDirectSnapshotIsSettled(row.current_snapshot, plugin.manifest.snapshotVersion)) return undefined;
-    if (this.coverCache && !this.coverCache.has(row.id)) return undefined;
     const stored = safeJson(row.current_snapshot);
     if (typeof stored.externalId !== "string" || typeof stored.title !== "string" || typeof stored.url !== "string") return undefined;
+    // A cover still missing from the cache is retried with the page; a topic without a cover has none to cache.
+    if (this.coverCache && typeof stored.coverUrl === "string" && !this.coverCache.has(row.id)) return undefined;
     const unchanged = feedShowsNoChange({
       verifiedAt: row.detail_verified_at,
       storedMagnet: typeof stored.magnet === "string" ? stored.magnet : undefined,

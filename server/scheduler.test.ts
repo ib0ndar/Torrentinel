@@ -726,7 +726,7 @@ describe("feed-assisted RuTracker direct checks", () => {
   // Three topics updated two to three hours ago, which the feed keeps listing unchanged.
   const quietFeed = () => [feedEntry("1", hoursAgo(3)), feedEntry("2", hoursAgo(2.5)), feedEntry("3", hoursAgo(2))];
 
-  function setup() {
+  function setup(coverCache?: CoverCacheStore) {
     const db = createDatabase(":memory:");
     const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
     const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
@@ -738,7 +738,7 @@ describe("feed-assisted RuTracker direct checks", () => {
     const discover = vi.spyOn(plugin.rules!, "discover").mockResolvedValue(feed(...quietFeed()));
     const fetchSnapshot = vi.spyOn(plugin.direct!, "fetchSnapshot").mockResolvedValue(topic("Series 1-10", "AAA"));
     const telegram = { canNotify: () => false, notifyRelease: vi.fn() } as unknown as TelegramService;
-    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 5)));
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 5)), coverCache);
     const outcomes = () => (db.prepare("SELECT outcome FROM tracker_observations WHERE operation = 'direct' ORDER BY rowid").all() as Array<{ outcome: string }>)
       .map((row) => row.outcome);
     const cleanup = () => { discover.mockRestore(); fetchSnapshot.mockRestore(); db.close(); };
@@ -754,6 +754,24 @@ describe("feed-assisted RuTracker direct checks", () => {
       expect(fetchSnapshot).toHaveBeenCalledTimes(1);
       expect(outcomes()).toEqual(["baseline", "feed-unchanged"]);
       expect(status).toMatchObject({ checked: 1, changed: 0, errors: 0 });
+    } finally { cleanup(); }
+  });
+
+  it.each([
+    ["skips a topic without a cover, which the cover cache never holds", undefined, ["baseline", "feed-unchanged"]],
+    ["loads the page again while its cover is still missing from the cache", "https://images.example/cover.jpg", ["baseline", "unchanged"]],
+  ] as const)("%s", async (_case, coverUrl, expected) => {
+    const coverCache = {
+      has: () => false,
+      refresh: vi.fn(async () => { throw new Error("cover host unreachable"); }),
+      remove: vi.fn(async () => undefined),
+    } as unknown as CoverCacheStore;
+    const { fetchSnapshot, outcomes, cleanup, scheduler } = setup(coverCache);
+    fetchSnapshot.mockResolvedValue({ ...topic("Series 1-10", "AAA"), coverUrl });
+    try {
+      await scheduler.run("baseline");
+      await scheduler.run("poll");
+      expect(outcomes()).toEqual(expected);
     } finally { cleanup(); }
   });
 
