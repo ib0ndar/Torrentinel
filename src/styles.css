@@ -75,9 +75,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .loading-line::after { content: ""; display: block; width: 60px; height: 100%; background: var(--accent); animation: load 1.4s ease-in-out infinite; }
 
 .login-page { position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); overflow: hidden; background: radial-gradient(circle at 30% 46%, color-mix(in srgb, var(--accent-2) 13%, transparent), transparent 42%), var(--base); }
-/* A plain hexagon in the theme's tint: the mark's dark visor and glow showed as a smudge behind the wordmark. */
-.login-page::before { content: ""; position: absolute; left: -8vw; top: 50%; width: min(68vw, 860px); aspect-ratio: 1; translate: 0 -50%; background: var(--tint); mask: url("/brand/torrentinel-watermark.svg") center / contain no-repeat; opacity: .035; pointer-events: none; }
-.login-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 24px; padding: 8vw; animation: rise .65s ease-out both; }
+.login-brand { position: relative; z-index: 1; align-self: center; justify-self: start; display: flex; align-items: center; gap: 24px; padding: 8vw; animation: rise .65s ease-out both; }
+/* A plain hexagon in the theme's tint, centered on the mark and wordmark (the padding is even, so the box's center is theirs).
+   The mark's own visor and glow showed as a smudge behind the wordmark. */
+.login-brand::before { content: ""; position: absolute; z-index: -1; left: 50%; top: 50%; width: min(64vw, 900px); aspect-ratio: 1; translate: -50% -50%; background: var(--tint); mask: url("/brand/torrentinel-watermark.svg") center / contain no-repeat; opacity: .035; pointer-events: none; }
 .login-brand h1 { margin-left: -3px; font-size: clamp(52px, 8vw, 116px); line-height: .9; letter-spacing: -.035em; }
 .login-brand p:last-child { margin-top: 18px; color: var(--muted); font-size: 19px; }
 .login-form { position: relative; z-index: 2; align-self: center; width: min(420px, calc(100% - 64px)); padding: 48px; border-left: 1px solid var(--line); animation: enter-right .55s .1s ease-out both; }
@@ -781,7 +782,7 @@ kbd { min-width: 26px; height: 24px; display: inline-grid; place-items: center; 
   .release-cover--thumbnail { width: 150px; }
   .login-page { display: block; padding: 78px 24px 54px; }
   .login-language { top: 16px; right: 16px; }
-  .login-page::before { width: 110vw; left: -45vw; top: 20%; }
+  .login-brand::before { display: none; }
   .login-brand { padding: 0; gap: 16px; }
   .login-brand h1 { font-size: clamp(40px, 14vw, 54px); }
   .login-brand p:last-child { font-size: 16px; }
