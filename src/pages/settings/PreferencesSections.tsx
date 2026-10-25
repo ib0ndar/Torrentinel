@@ -69,9 +69,9 @@ export function PreferencesSections({ user, onUserChange, notify, trackers }: { 
     </SettingsSection>
     <SettingsSection id="pagination" description={t("Show collections in pages. Turn off to load all entries. Search and status filters always run on the server.")}>
       <div className="settings-control settings-control--preferences settings-control--pagination">
-        <label className="check-line">
-          <input type="checkbox" checked={user.paginationEnabled} disabled={preferenceBusy} onChange={(event) => void savePreference({ paginationEnabled: event.target.checked })} />
-          <span><strong>{t("Enable pagination")}</strong></span>
+        <label className="switch-line">
+          <span className="switch"><input type="checkbox" role="switch" checked={user.paginationEnabled} disabled={preferenceBusy} onChange={(event) => void savePreference({ paginationEnabled: event.target.checked })} /><span /></span>
+          <strong>{t("Enable pagination")}</strong>
         </label>
         <label className="settings-field">
           <span>{t("Default entries per page")}</span>

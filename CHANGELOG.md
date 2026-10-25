@@ -17,9 +17,15 @@ All notable changes to Torrentinel are documented in this file.
 - Text uses one scale of seven sizes from 12 to 40 px and four weights; nothing is smaller than 12 px, where some labels were 9 or 10 px. Labels in spaced capitals keep that style at the new sizes.
 - A subscription's own page shows a breadcrumb, **Monitor › collection name**, instead of the **Subscription** label and the **Monitor** button, and long release names use a smaller title instead of wrapping over several large lines.
 - On the Monitor, a collection's **Edit** and **Delete** buttons sit right after its name instead of among the page actions next to **Add subscription**. On phones they stay in the header menu.
+- **Settings** has tabs like **Administration**: **Account**, **Preferences** (language, appearance, start page, pagination and source markers), **Telegram bot** and **Tracker access**, each with its own address such as `/settings/preferences`. `/settings` opens **Account**, and an older `/settings#section` link opens the tab holding that section. The row of section links at the top of the page is gone.
+- Form field labels share one style, bold in normal case as on the sign-in page: Settings fields such as **Current password**, dialog fields, and the theme, start page and source marker groups. Small labels above titles and sections, and table headers, keep their spaced capitals.
+- The Monitor and the other pages share one page frame, so the title stays in the same place when switching between the Monitor and **Activity**, **Settings** or **Administration**.
+- Every Settings control reaches the same right edge instead of stopping at 520 px, 560 px or the full width depending on the section.
+- **Enable pagination** is a switch, like the mirror switches in **Administration**, and the start page and source marker choices use radio buttons drawn in the accent color.
 
 ### Fixed
 
+- The switches in **Administration › Mirrors** can be reached and toggled with the keyboard; their checkbox was hidden from keyboard focus.
 - Secondary text such as counts, timestamps and hints has at least 4.5:1 contrast in every theme. It was 3.1:1 in the default Sentinel theme and below 4.5:1 in Graphite, Frost, Nebula and Ember.
 - Primary buttons use darker gradients in the Sentinel, Graphite, Daylight, Nebula, Ember and Paper themes, so their white labels have at least 4.5:1 contrast across the whole button; it was as low as 1.7:1. Frost and High contrast are unchanged.
 - The letters of the Torrentinel wordmark on the sign-in page no longer touch. The large logo in the sign-in background is a plain hexagon in the theme's color, centered behind the mark and wordmark, without the visor that showed as a dark smudge behind the wordmark; it is no longer shown in the stacked layout on narrow screens, where it ran into the form.

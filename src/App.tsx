@@ -20,7 +20,8 @@ import { Workspace } from "./pages/Workspace";
 import { SubscriptionInspector } from "./pages/SubscriptionInspector";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
-import { activityPath, adminPath, collectionDefaultFilter, DEFAULT_MONITOR_VIEW, isPlainClick, MONITOR_HOME, monitorPath, type MonitorView, type Navigate, parseRoute, type Route, storeCollectionId, storedCollectionId } from "./routing";
+import { activityPath, adminPath, collectionDefaultFilter, DEFAULT_MONITOR_VIEW, isPlainClick, MONITOR_HOME, monitorPath, type MonitorView, type Navigate, parseRoute, type Route, settingsPath, storeCollectionId, storedCollectionId } from "./routing";
+import { settingsTabForSection } from "./pages/settings/SettingsSection";
 import { applyTheme } from "./theme";
 import { entryKey, newEntryState, rememberScroll, replacedEntryState, restoreScroll, savedScroll } from "./scrollMemory";
 import type { Collection, Notify, User } from "./types";
@@ -120,6 +121,9 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   // "/admin", unknown sections and invalid or default query values resolve to the canonical address in place.
   const adminCanonical = route.name === "admin" ? adminPath(route.tab, route.diagnostics) : null;
   useLayoutEffect(() => { if (adminCanonical && adminCanonical !== location.pathname + location.search) navigate(adminCanonical, { replace: true }); }, [adminCanonical, location.pathname, location.search, navigate]);
+  // "/settings" opens Account, or the tab holding the section an older "/settings#section" link names (the anchor is kept).
+  const settingsCanonical = route.name === "settings" ? settingsPath(route.explicit ? route.tab : settingsTabForSection(window.location.hash.slice(1)) ?? route.tab) : null;
+  useLayoutEffect(() => { if (settingsCanonical && settingsCanonical !== location.pathname + location.search) navigate(settingsCanonical + window.location.hash, { replace: true }); }, [settingsCanonical, location.pathname, location.search, navigate]);
   useEffect(() => {
     if (!monitorVisible || !resolvedPath || !data.view.collectionId) return;
     setLastMonitorView(data.view); storeCollectionId(user.id, data.view.collectionId);
@@ -142,12 +146,12 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   const loadCollections = useCallback(() => data.loadCollections().catch((error) => notify(errorMessage(error), "bad")), [data.loadCollections, notify]);
   async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); navigate("/", { replace: true }); } catch (error) { notify(errorMessage(error), "bad"); } }
   const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };
-  const changePassword: MenuItem = { id: "change-password", label: t("Change password"), icon: "key", onSelect: () => { navigate("/settings"); setAccountFocusRequest((value) => value + 1); } };
+  const changePassword: MenuItem = { id: "change-password", label: t("Change password"), icon: "key", onSelect: () => { navigate(settingsPath("account")); setAccountFocusRequest((value) => value + 1); } };
   const shortcuts: MenuItem = { id: "shortcuts", label: t("Keyboard shortcuts"), icon: "keyboard", keyboardOnly: true, onSelect: showShortcuts };
   const versionTitle = APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`;
   const accountSummary = <div className="account-summary"><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span></div>;
   const schedulerLine = (className: string) => <div className={className}><span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>;
-  const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} accountFocusRequest={accountFocusRequest} onAccountFocused={() => setAccountFocusRequest(0)} />
+  const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} tab={route.tab} navigate={navigate} accountFocusRequest={accountFocusRequest} onAccountFocused={() => setAccountFocusRequest(0)} />
     : route.name === "admin" ? <Admin notify={notify} tab={route.tab} diagnostics={route.diagnostics} pageSize={user.pageSize} navigate={navigate} />
     : route.name === "activity" ? <Activity key={route.filter} user={user} notify={notify} filter={route.filter} onFilterChange={(filter) => navigate(activityPath(filter))} collections={data.collections} onCollectionsChanged={loadCollections} onShowShortcuts={showShortcuts} />
     : route.name === "subscription" ? <SubscriptionInspector key={route.id} id={route.id} collections={data.collections} onClose={() => navigate(resolvedPath ?? MONITOR_HOME)} onChanged={loadCollections} notify={notify} standalone monitorHref={resolvedPath ?? MONITOR_HOME} collectionHref={collectionHref} navigate={navigate} />

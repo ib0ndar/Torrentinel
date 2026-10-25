@@ -212,7 +212,7 @@ it("switches to the password form when a request reports that the password must 
     await act(async () => container.querySelector<HTMLFormElement>(".password-panel form")!.requestSubmit());
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/auth/change-password", expect.objectContaining({ method: "POST" }));
     expect(container.querySelector("h1")?.textContent).toBe("Settings page");
-    expect(window.location.pathname).toBe("/settings");
+    expect(window.location.pathname).toBe("/settings/account");
 
     reset = true;
     await act(async () => vi.advanceTimersByTime(30_000));
@@ -604,7 +604,7 @@ it("scrolls to the top for another page, keeps the position for filter changes, 
     expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
     const pageChanges = scrollTo.mock.calls.length;
     await popState(() => window.history.back());
-    expect(currentUrl()).toBe("/settings");
+    expect(currentUrl()).toBe("/settings/account");
     expect(scrollTo).toHaveBeenLastCalledWith(0, 300);
     await popState(() => window.history.back());
     expect(currentUrl()).toBe("/collections/films?filter=unread");

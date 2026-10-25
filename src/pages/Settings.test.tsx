@@ -6,6 +6,7 @@ import App from "../App";
 import { api, ApiError } from "../api";
 import { DialogProvider } from "../components/Dialogs";
 import { setLanguage } from "../i18n";
+import { SETTINGS_TABS, type SettingsTab } from "../routing";
 import { applyTheme } from "../theme";
 import { PAGE_SIZE_OPTIONS, THEME_PREFERENCES, type Tracker, type User } from "../types";
 import { Settings } from "./Settings";
@@ -20,15 +21,17 @@ it("shows and saves the default page-size dropdown even with pagination disabled
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container), onUserChange = vi.fn(), notify = vi.fn();
   try {
-    await act(async () => root.render(<DialogProvider><Settings user={user} onUserChange={onUserChange} notify={notify} /></DialogProvider>));
+    await act(async () => root.render(<DialogProvider><Settings user={user} onUserChange={onUserChange} notify={notify} tab="preferences" /></DialogProvider>));
     const label = [...container.querySelectorAll("label")].find((element) => element.textContent?.includes("Default entries per page"))!;
+    const pagination = container.querySelector<HTMLInputElement>('#pagination input[role="switch"]')!;
+    expect([pagination.type, pagination.checked, pagination.closest("label")?.textContent]).toEqual(["checkbox", false, "Enable pagination"]);
     const select = label.querySelector("select")!;
     expect(label.closest(".settings-control--pagination.settings-control--preferences")).not.toBeNull();
     const preferenceControls = container.querySelectorAll(".settings-control--preferences");
     expect(preferenceControls).toHaveLength(2);
     expect(preferenceControls[0].closest(".settings-section")?.querySelector(".settings-copy p")).toBeNull();
     expect([...preferenceControls].map((control) => control.querySelectorAll("select").length)).toEqual([1, 1]);
-    expect(container.querySelector(".telegram-setup")?.closest(".settings-control--preferences")).toBeNull();
+    expect(container.querySelector(".telegram-setup")).toBeNull();
     expect([...select.options].map((option) => Number(option.value))).toEqual([...PAGE_SIZE_OPTIONS]);
     expect(select.value).toBe("50"); expect(select.disabled).toBe(false);
     await act(async () => { select.value = "20"; select.dispatchEvent(new Event("change", { bubbles: true })); });
@@ -50,7 +53,7 @@ it("previews a chosen theme immediately, saves it per account and reverts if sav
   });
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container), onUserChange = vi.fn(), notify = vi.fn();
-  const render = (current: User) => act(async () => root.render(<DialogProvider><Settings user={current} onUserChange={onUserChange} notify={notify} /></DialogProvider>));
+  const render = (current: User) => act(async () => root.render(<DialogProvider><Settings user={current} onUserChange={onUserChange} notify={notify} tab="preferences" /></DialogProvider>));
   const choose = (theme: string) => act(async () => { container.querySelector<HTMLInputElement>(`.theme-options input[value="${theme}"]`)!.click(); });
   try {
     await render(user);
@@ -87,7 +90,7 @@ it("saves the start page per account and keeps the saved choice when saving fail
   });
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container), onUserChange = vi.fn(), notify = vi.fn();
-  const render = (current: User) => act(async () => root.render(<DialogProvider><Settings user={current} onUserChange={onUserChange} notify={notify} /></DialogProvider>));
+  const render = (current: User) => act(async () => root.render(<DialogProvider><Settings user={current} onUserChange={onUserChange} notify={notify} tab="preferences" /></DialogProvider>));
   const section = () => container.querySelector<HTMLElement>("#start-page")!;
   const options = () => [...section().querySelectorAll<HTMLInputElement>("input[type=radio]")];
   try {
@@ -121,7 +124,7 @@ function tracker(key: "kinozal" | "rutracker", options: Partial<Tracker> = {}): 
   return { key, displayName: key === "kinozal" ? "Kinozal" : "RuTracker", hosts: key === "kinozal" ? ["kinozal.tv", "kinozal.me"] : ["rutracker.org", "rutracker.net"], snapshotVersion: 1, capabilities: { authentication: key === "kinozal" ? "required" : "optional", customMirrors: true, direct: true, rules: true, covers: true, ruleDiscovery: key === "kinozal" ? "search" : "feed" },
     baseUrl: globalBaseUrl, globalBaseUrl, hasOverride: false, enabled: true, credentialsConfigured: false, ...options };
 }
-async function renderSettings(trackers: () => Tracker[] = () => [], extra: (path: string, init?: RequestInit) => unknown = () => undefined) {
+async function renderSettings(trackers: () => Tracker[] = () => [], extra: (path: string, init?: RequestInit) => unknown = () => undefined, tab: SettingsTab = "account", navigate = vi.fn()) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.mocked(api).mockImplementation(async (path, init) => {
     const handled = await extra(path, init);
@@ -132,24 +135,38 @@ async function renderSettings(trackers: () => Tracker[] = () => [], extra: (path
   });
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container), notify = vi.fn();
-  await act(async () => root.render(<DialogProvider><Settings user={member} onUserChange={vi.fn()} notify={notify} /></DialogProvider>));
+  await act(async () => root.render(<DialogProvider><Settings user={member} onUserChange={vi.fn()} notify={notify} tab={tab} navigate={navigate} /></DialogProvider>));
   return { container, notify, cleanup: async () => { await act(async () => root.unmount()); container.remove(); } };
 }
 
-it("links every section from the shortcuts and states how each section saves", async () => {
-  const { container, cleanup } = await renderSettings();
+it("links every Settings tab, shows only that tab's sections and states how each section saves", async () => {
+  const expected: Record<SettingsTab, string[][]> = {
+    account: [["account", "Account", "Save to apply"]],
+    preferences: [["language", "Language", "Saved automatically"], ["appearance", "Appearance", "Saved automatically"], ["start-page", "Start page", "Saved automatically"], ["pagination", "Pagination", "Saved automatically"], ["source-markers", "Source markers", "Saved automatically"]],
+    telegram: [["telegram-bot", "Telegram bot", "Save to apply"]],
+    trackers: [["tracker-access", "Tracker access", "Save to apply"]],
+  };
+  const labels: Record<SettingsTab, string> = { account: "Account", preferences: "Preferences", telegram: "Telegram bot", trackers: "Tracker access" };
+  for (const tab of SETTINGS_TABS) {
+    const navigate = vi.fn();
+    const { container, cleanup } = await renderSettings(() => [tracker("kinozal"), tracker("rutracker")], () => undefined, tab, navigate);
+    try {
+      const links = [...container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Settings sections"] a')];
+      expect(links.map((link) => [link.textContent, link.getAttribute("href"), link.getAttribute("aria-current")])).toEqual(SETTINGS_TABS.map((name) => [labels[name], `/settings/${name}`, name === tab ? "page" : null]));
+      const sections = [...container.querySelectorAll<HTMLElement>("section.settings-section")];
+      expect(sections.map((section) => [section.id, section.querySelector("h2")?.textContent, section.querySelector(".save-note")?.textContent])).toEqual(expected[tab]);
+      for (const section of sections) expect(section.getAttribute("aria-labelledby")).toBe(`${section.id}-heading`);
+      // The source marker previews show the trackers from the same list as Tracker access.
+      if (tab === "preferences") expect([...container.querySelectorAll(".marker-preview")].map((preview) => [...preview.querySelectorAll(".tracker-tag")].map((tag) => tag.classList[2]))).toEqual([["tracker-tag--kinozal", "tracker-tag--rutracker"], ["tracker-tag--kinozal", "tracker-tag--rutracker"]]);
+      await act(async () => links[(SETTINGS_TABS.indexOf(tab) + 1) % SETTINGS_TABS.length].click());
+      expect(navigate).toHaveBeenCalledWith(`/settings/${SETTINGS_TABS[(SETTINGS_TABS.indexOf(tab) + 1) % SETTINGS_TABS.length]}`);
+    } finally { await cleanup(); }
+  }
+  const { container, cleanup } = await renderSettings(() => [], () => undefined, "preferences");
   try {
-    const links = [...container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Settings sections"] a')];
-    expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([["Account", "#account"], ["Language", "#language"], ["Appearance", "#appearance"], ["Start page", "#start-page"], ["Pagination", "#pagination"],
-      ["Source markers", "#source-markers"], ["Telegram bot", "#telegram-bot"], ["Tracker access", "#tracker-access"]]);
-    const sections = [...container.querySelectorAll<HTMLElement>("section.settings-section")];
-    expect(sections.map((section) => [section.id, section.querySelector("h2")?.textContent, section.querySelector(".save-note")?.textContent])).toEqual([
-      ["account", "Account", "Save to apply"], ["language", "Language", "Saved automatically"], ["appearance", "Appearance", "Saved automatically"], ["start-page", "Start page", "Saved automatically"], ["pagination", "Pagination", "Saved automatically"],
-      ["source-markers", "Source markers", "Saved automatically"], ["telegram-bot", "Telegram bot", "Save to apply"], ["tracker-access", "Tracker access", "Save to apply"]]);
-    for (const link of links) expect(container.querySelector(link.getAttribute("href")!)?.getAttribute("aria-labelledby")).toBe(`${link.getAttribute("href")!.slice(1)}-heading`);
     await act(async () => setLanguage("ru"));
-    expect(links[0].textContent).toBe("Учётная запись");
-    expect(sections[1].querySelector(".save-note")?.textContent).toBe("Сохраняется автоматически");
+    expect([...container.querySelectorAll('nav[aria-label="Разделы настроек"] a')].map((link) => link.textContent)).toEqual(["Учётная запись", "Предпочтения", "Бот Telegram", "Доступ к трекерам"]);
+    expect(container.querySelector(".save-note")?.textContent).toBe("Сохраняется автоматически");
   } finally { await cleanup(); }
 });
 
@@ -206,7 +223,7 @@ it("enables tracker Save only for valid unsaved changes, discards them, and subm
     tracker("rutracker", { credentialsConfigured: true, username: "keeper", hasOverride: true, baseUrl: "https://rutracker.net" })], (path, init) => {
     if (path === "/api/trackers/kinozal/settings" && init?.method === "PUT") { kinozalSaved = true; return { ok: true }; }
     return undefined;
-  });
+  }, "trackers");
   const row = (name: string) => container.querySelector<HTMLFormElement>(`form.tracker-settings-row[aria-label="${name}"]`)!;
   const field = (name: string, label: string) => [...row(name).querySelectorAll("label")].find((element) => element.textContent?.startsWith(label))!.querySelector("input")!;
   const save = (name: string) => row(name).querySelector<HTMLButtonElement>('button[type="submit"]')!;
@@ -221,8 +238,6 @@ it("enables tracker Save only for valid unsaved changes, discards them, and subm
     // Status follows the capabilities: Kinozal needs a login; RuTracker polls a feed and uses the login for gap recovery.
     expect([row("Kinozal"), row("RuTracker")].map((form) => [form.querySelector(".integration-heading small")?.textContent, form.querySelector(".state")?.className, form.querySelector(".state")?.textContent])).toEqual([
       ["Login required for polling", "state state--pending", "Login missing"], ["Public feed + authenticated gap recovery; login stored for keeper", "state state--good", "Recovery ready"]]);
-    // The source marker previews show the trackers from the same list.
-    expect([...container.querySelectorAll(".marker-preview")].map((preview) => [...preview.querySelectorAll(".tracker-tag")].map((tag) => tag.classList[2]))).toEqual([["tracker-tag--kinozal", "tracker-tag--rutracker"], ["tracker-tag--kinozal", "tracker-tag--rutracker"]]);
     expect(field("RuTracker", "Mirror override").value).toBe("https://rutracker.net");
     // Personal mirrors are limited to the tracker's own domains and the global mirror.
     await act(async () => type(field("RuTracker", "Mirror override"), "http://192.168.1.10:8080"));
@@ -257,7 +272,12 @@ it("enables tracker Save only for valid unsaved changes, discards them, and subm
     // Unsaved edits in another row survive the reload.
     expect(field("RuTracker", "Mirror override").value).toBe("https://rutracker.nl");
     expect(row("RuTracker").textContent).toContain("Unsaved changes");
+  } finally { await cleanup(); }
+});
 
+it("enables the Telegram bot token Save only once a token is typed, as a form", async () => {
+  const { container, cleanup } = await renderSettings(() => [], () => undefined, "telegram");
+  try {
     const token = container.querySelector<HTMLInputElement>('#telegram-bot input[type="password"]')!;
     expect(token.form).not.toBeNull();
     expect(token.form!.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
@@ -288,12 +308,12 @@ it("opens the Account section from the account menu and focuses the current pass
     await act(async () => root.render(<App />));
     expect(container.querySelector("h1")?.textContent).toBe("Films");
     await choose(container.querySelector<HTMLButtonElement>(".account-button")!);
-    expect(window.location.pathname).toBe("/settings");
+    expect(window.location.pathname).toBe("/settings/account");
     expect(document.activeElement).toBe(current());
     current()!.blur();
     // Already on Settings: the mobile Account menu focuses the field again.
     await choose(container.querySelector<HTMLButtonElement>(".account-nav")!);
-    expect(window.location.pathname).toBe("/settings");
+    expect(window.location.pathname).toBe("/settings/account");
     expect(document.activeElement).toBe(current());
     // Returning to Settings later does not steal focus again.
     await act(async () => container.querySelector<HTMLAnchorElement>('.app-nav a[aria-label="Monitor"]')!.click());
@@ -302,12 +322,32 @@ it("opens the Account section from the account menu and focuses the current pass
   } finally { await act(async () => root.unmount()); container.remove(); window.history.replaceState({}, "", "/"); }
 });
 
+it("opens the tab holding the section an older /settings#section address names", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/auth/me") return { user: member };
+    if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
+    if (path === "/api/collections") return { collections: [] };
+    if (path === "/api/trackers") return { trackers: [tracker("kinozal")] };
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    window.history.replaceState({}, "", "/settings#tracker-access");
+    await act(async () => root.render(<App />));
+    expect(window.location.pathname + window.location.hash).toBe("/settings/trackers#tracker-access");
+    expect(container.querySelector('.page-tab[aria-current="page"]')?.textContent).toBe("Tracker access");
+    expect(container.querySelector("#tracker-access")).not.toBeNull();
+  } finally { await act(async () => root.unmount()); container.remove(); window.history.replaceState({}, "", "/"); }
+});
+
 it("checks for a linked Telegram chat only while the tab is visible and checks again on return", async () => {
   vi.useFakeTimers();
   let visibility: DocumentVisibilityState = "visible", linked = false;
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
   const setVisibility = (state: DocumentVisibilityState) => act(async () => { visibility = state; document.dispatchEvent(new Event("visibilitychange")); });
-  const { container, cleanup } = await renderSettings(() => [], (path) => path === "/api/telegram" ? { telegram: { configured: true, linked, botUsername: "watch_bot" } } : undefined);
+  const { container, cleanup } = await renderSettings(() => [], (path) => path === "/api/telegram" ? { telegram: { configured: true, linked, botUsername: "watch_bot" } } : undefined, "telegram");
   const checks = () => vi.mocked(api).mock.calls.filter(([path]) => path === "/api/telegram").length;
   try {
     expect(checks()).toBe(1);

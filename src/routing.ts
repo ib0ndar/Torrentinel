@@ -16,11 +16,15 @@ export type Route =
   | { name: "monitor"; view: MonitorView; explicit: boolean }
   | { name: "activity"; filter: ActivityFilter }
   | { name: "subscription"; id: string }
-  | { name: "settings" }
+  | { name: "settings"; tab: SettingsTab; explicit: boolean }
   | { name: "admin"; tab: AdminTab; explicit: boolean; diagnostics: DiagnosticsView };
 export type Navigate = (path: string, options?: { replace?: boolean }) => void;
 /** Monitor in the last used collection, whatever the start page is. */
 export const MONITOR_HOME = "/collections";
+
+export type SettingsTab = "account" | "preferences" | "telegram" | "trackers";
+export const SETTINGS_TABS: readonly SettingsTab[] = ["account", "preferences", "telegram", "trackers"];
+export function settingsPath(tab: SettingsTab): string { return `/settings/${tab}`; }
 
 export type AdminTab = "overview" | "users" | "mirrors" | "diagnostics";
 export const ADMIN_TABS: readonly AdminTab[] = ["overview", "users", "mirrors", "diagnostics"];
@@ -34,7 +38,11 @@ function pageParameter(value: string | null): number {
 }
 export function parseRoute(pathname: string, search: string): Route {
   const query = new URLSearchParams(search);
-  if (pathname === "/settings") return { name: "settings" };
+  // "/settings" and unknown sub-paths are unresolved and rewritten to the Account tab.
+  if (pathname === "/settings" || pathname.startsWith("/settings/")) {
+    const tab = pathname.slice("/settings/".length).replace(/\/$/, "") as SettingsTab;
+    return SETTINGS_TABS.includes(tab) ? { name: "settings", tab, explicit: true } : { name: "settings", tab: "account", explicit: false };
+  }
   const subscription = /^\/subscriptions\/([^/]+)\/?$/.exec(pathname);
   if (subscription) {
     try {

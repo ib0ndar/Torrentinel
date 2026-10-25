@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_TABS, adminPath, DEFAULT_DIAGNOSTICS_VIEW, DEFAULT_MONITOR_VIEW, MONITOR_HOME, monitorPath, parseRoute } from "./routing";
+import { ADMIN_TABS, adminPath, DEFAULT_DIAGNOSTICS_VIEW, DEFAULT_MONITOR_VIEW, MONITOR_HOME, monitorPath, parseRoute, SETTINGS_TABS, settingsPath } from "./routing";
 
 const diagnostics = (path: string, search: string) => { const route = parseRoute(path, search); return route.name === "admin" ? route.diagnostics : undefined; };
 
@@ -51,9 +51,17 @@ describe("Administration routes", () => {
   });
 });
 
+describe("Settings addresses", () => {
+  it("parses each tab and treats /settings and unknown tabs as unresolved Account", () => {
+    for (const tab of SETTINGS_TABS) { expect(parseRoute(settingsPath(tab), "")).toEqual({ name: "settings", tab, explicit: true }); expect(settingsPath(tab)).toBe(`/settings/${tab}`); }
+    for (const path of ["/settings", "/settings/", "/settings/extra", "/settings/account/extra"]) expect(parseRoute(path, "")).toEqual({ name: "settings", tab: "account", explicit: false });
+    expect(parseRoute("/settings/telegram/", "")).toMatchObject({ tab: "telegram", explicit: true });
+  });
+});
+
 describe("Start page and Monitor addresses", () => {
   it("sends / and unknown addresses to the start page and keeps /collections on Monitor", () => {
-    for (const path of ["/", "/unknown", "/activity/", "/settings/extra", "/collections/films/extra", "/collection"]) expect(parseRoute(path, "?filter=unread")).toEqual({ name: "home" });
+    for (const path of ["/", "/unknown", "/activity/", "/setting", "/collections/films/extra", "/collection"]) expect(parseRoute(path, "?filter=unread")).toEqual({ name: "home" });
     for (const path of ["/collections", "/collections/", "/collections/%E0%A4%A"]) expect(parseRoute(path, "?filter=unread")).toEqual({ name: "monitor", view: DEFAULT_MONITOR_VIEW, explicit: false });
     expect(MONITOR_HOME).toBe("/collections");
     expect(monitorPath({ ...DEFAULT_MONITOR_VIEW, filter: "unread" })).toBe("/collections");
