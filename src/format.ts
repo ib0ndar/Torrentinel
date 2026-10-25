@@ -52,13 +52,13 @@ const DIAGNOSTIC_LABELS: Record<string, string> = {
   unchanged: "Unchanged", changed: "Changed", "new-matches": "New matches", baseline: "Baseline saved", rebaseline: "Baseline refreshed", "cover-backfill": "Cover added",
   "cover-baseline": "Cover saved", "schema-upgrade": "Snapshot format updated", enriched: "Details added", superseded: "Replaced by a newer check", removed: "Removed",
   error: "Error", missing: "Not found", blocked: "Blocked", auth: "Login problem", parse: "Unreadable page", network: "Network error", unsupported: "Not supported",
-  challenge: "Access check", "temporarily-unavailable": "Temporarily unavailable", "coverage-gap": "Coverage gap",
+  challenge: "Access check", "temporarily-unavailable": "Temporarily unavailable", "coverage-gap": "Coverage gap", continuous: "Continuous", recovered: "Gap recovered",
   skipped: "Skipped", delivered: "Delivered", failed: "Failed", pending: "Waiting", sending: "Sending",
 };
-/** A readable label for a diagnostics identifier; unknown identifiers are shown in sentence case. */
+/** A readable label for a diagnostics identifier. One without a label uses its own translation where there is one, in sentence case. */
 export function diagnosticLabel(value: string): string {
   const label = DIAGNOSTIC_LABELS[value];
-  return label ? t(label) : value ? capitalize(value.replaceAll("-", " ")) : value;
+  return label ? t(label) : value ? capitalize(t(value).replaceAll("-", " ")) : value;
 }
 /** "Records expire after 7 days." from the server's retention in hours. */
 export function retentionNote(hours: number): string {

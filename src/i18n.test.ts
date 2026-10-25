@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { getLanguage, LANGUAGE_STORAGE_KEY, PLURALS, preferredLanguage, russian, setLanguage, translate } from "./i18n";
-import { formatPollInterval, relativeTime } from "./format";
+import { diagnosticLabel, formatPollInterval, relativeTime } from "./format";
 
 afterEach(() => setLanguage("en"));
 describe("English and Russian localization", () => {
@@ -31,6 +31,18 @@ describe("English and Russian localization", () => {
     expect([1, 2, 5, 11, 21, 22, 25].map((count) => translate("{count} subscriptions", { count }))).toEqual(["1 подписка", "2 подписки", "5 подписок", "11 подписок", "21 подписка", "22 подписки", "25 подписок"]);
     // Without Russian forms the plain translation already avoids agreement.
     expect(translate("{count} releases observed", { count: 1 })).toBe("Получено релизов: 1");
+  });
+  it("labels every diagnostics outcome and operation in both languages", () => {
+    const identifiers = ["direct", "feed-poll", "rule-discovery", "rule-enrichment", "unchanged", "changed", "new-matches", "baseline", "rebaseline", "cover-backfill", "cover-baseline",
+      "schema-upgrade", "enriched", "superseded", "removed", "error", "missing", "blocked", "auth", "parse", "network", "unsupported", "challenge", "temporarily-unavailable",
+      "coverage-gap", "continuous", "recovered", "skipped", "delivered", "failed", "pending", "sending"];
+    const english = identifiers.map(diagnosticLabel);
+    for (const label of english) expect(label).toMatch(/^[A-Z][a-z]* ?[a-z ]*$/);
+    setLanguage("ru");
+    identifiers.forEach((identifier, index) => expect(diagnosticLabel(identifier), identifier).not.toBe(english[index]));
+    expect([diagnosticLabel("continuous"), diagnosticLabel("recovered")]).toEqual(["Непрерывно", "Пропуск восстановлен"]);
+    // An identifier without a label still uses its own translation.
+    expect(diagnosticLabel("seeded")).toBe("В базе");
   });
   it("keeps the placeholders of every plural form and translates every plural message", () => {
     const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
