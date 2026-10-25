@@ -3,7 +3,7 @@
   color-scheme: dark;
   --ink: #ececef;
   --muted: #a1a1aa;
-  --dim: #7e7e88;
+  --dim: #82828c;
   --faint: #5b5b63;
   --base: #0a0a0c;
   --nav: #111113;
@@ -38,7 +38,7 @@
   color-scheme: dark;
   --ink: #eceff4;
   --muted: #b4bccb;
-  --dim: #8e99ad;
+  --dim: #a7b0c0;
   --faint: #6c788f;
   --base: #242933;
   --nav: #2e3440;
@@ -76,7 +76,7 @@
   color-scheme: dark;
   --ink: #eee9fb;
   --muted: #a99cca;
-  --dim: #8274a6;
+  --dim: #887bab;
   --faint: #5d5180;
   --base: #0c0915;
   --nav: #120e20;
@@ -112,7 +112,7 @@
   color-scheme: dark;
   --ink: #f5ede4;
   --muted: #b9a794;
-  --dim: #917e69;
+  --dim: #94816d;
   --faint: #66574a;
   --base: #0f0c0a;
   --nav: #15110e;
@@ -184,7 +184,7 @@
   color-scheme: light;
   --ink: #2a2418;
   --muted: #5f5444;
-  --dim: #73664f;
+  --dim: #71644d;
   --faint: #a89a82;
   --base: #f6f1e7;
   --nav: #eee6d6;

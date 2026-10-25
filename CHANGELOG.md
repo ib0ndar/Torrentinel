@@ -13,9 +13,14 @@ All notable changes to Torrentinel are documented in this file.
 - A failed sign-in is shown in the form, above **Sign in**, instead of as a notification in the corner of the screen. When the username or password is rejected, the password field is cleared, marked as invalid and focused for the next attempt.
 - The sign-in page's language switch has moved out of the form to the top-right corner. The page opens in the language last used in that browser, whether chosen on the sign-in page or set for the account that signed in there, and otherwise in the browser's preferred language when it is English or Russian.
 - While signing in, **Sign in** shows a spinner and keeps its label readable instead of fading out.
+- The web interface ships its own typeface, Inter (variable, with optical sizes for large headings, from `@fontsource-variable/inter` 5.3.0 under the SIL Open Font License), so it looks the same on every system. It asked for Inter before but fell back to the system font, such as San Francisco or Segoe UI, wherever Inter was not installed.
+- Text uses one scale of seven sizes from 12 to 40 px and four weights; nothing is smaller than 12 px, where some labels were 9 or 10 px. Labels in spaced capitals keep that style at the new sizes.
+- A subscription's own page shows a breadcrumb, **Monitor › collection name**, instead of the **Subscription** label and the **Monitor** button, and long release names use a smaller title instead of wrapping over several large lines.
+- On the Monitor, a collection's **Edit** and **Delete** buttons sit right after its name instead of among the page actions next to **Add subscription**. On phones they stay in the header menu.
 
 ### Fixed
 
+- Secondary text such as counts, timestamps and hints has at least 4.5:1 contrast in every theme. It was 3.1:1 in the default Sentinel theme and below 4.5:1 in Graphite, Frost, Nebula and Ember.
 - Primary buttons use darker gradients in the Sentinel, Graphite, Daylight, Nebula, Ember and Paper themes, so their white labels have at least 4.5:1 contrast across the whole button; it was as low as 1.7:1. Frost and High contrast are unchanged.
 - The letters of the Torrentinel wordmark on the sign-in page no longer touch. The large logo in the sign-in background is a plain hexagon in the theme's color, centered behind the mark and wordmark, without the visor that showed as a dark smudge behind the wordmark; it is no longer shown in the stacked layout on narrow screens, where it ran into the form.
 

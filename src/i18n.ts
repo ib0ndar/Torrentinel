@@ -28,7 +28,7 @@ export const russian: Record<string, string> = {
   "Replace the initial password with one of your own.": "Замените начальный пароль своим.",
   "Current password": "Текущий пароль", "New password": "Новый пароль", "Confirm new password": "Повторите новый пароль",
   "Save new password": "Сохранить новый пароль", "New passwords do not match": "Новые пароли не совпадают", "Password changed": "Пароль изменён",
-  "Monitor": "Монитор", "Settings": "Настройки", "Administration": "Администрирование", "Polling trackers": "Проверка трекеров",
+  "Monitor": "Монитор", "Breadcrumb": "Навигационная цепочка", "Settings": "Настройки", "Administration": "Администрирование", "Polling trackers": "Проверка трекеров",
   "Monitor ready": "Монитор готов", "Loading schedule": "Загрузка расписания", "Sign out": "Выйти", "Collection actions": "Действия с коллекцией", "No collection selected": "Коллекция не выбрана", "Next {time}": "Следующая проверка {time}",
   "Language": "Язык", "Interface language": "Язык интерфейса",
   "Appearance": "Оформление", "Color theme": "Цветовая тема",

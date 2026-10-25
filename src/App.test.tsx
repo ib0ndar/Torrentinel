@@ -49,7 +49,9 @@ it.each([
     expect(api).toHaveBeenCalledWith("/api/subscriptions/42/open", expect.objectContaining({ method: "POST" }));
     expect(document.querySelector(".drawer")).toBeNull();
     expect(vi.mocked(api).mock.calls.some(([path]) => path.startsWith("/api/subscriptions?") || path.startsWith("/api/activity?"))).toBe(false);
-    await act(async () => container.querySelector<HTMLButtonElement>(".page-header button")!.click());
+    const crumbs = [...container.querySelectorAll<HTMLAnchorElement>('.page-header nav[aria-label="Breadcrumb"] a')];
+    expect(crumbs.map((crumb) => crumb.textContent)).toEqual(["Monitor", "Films"]);
+    await act(async () => crumbs[1].click());
     expect(window.location.pathname).toBe("/collections/films");
     expect(container.querySelector("h1")?.textContent).toBe("Films");
     await popState(() => window.history.back());

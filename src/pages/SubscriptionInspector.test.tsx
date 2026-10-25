@@ -27,15 +27,18 @@ it("shows a persistent error for missing or inaccessible subscriptions instead o
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.mocked(api).mockRejectedValue(new ApiError("Subscription not found", 404));
   const container = document.createElement("div"); document.body.append(container);
-  const root = createRoot(container), onClose = vi.fn();
+  const root = createRoot(container), onClose = vi.fn(), navigate = vi.fn();
   try {
-    await act(async () => root.render(<DialogProvider><SubscriptionInspector id="missing /?#" collections={[]} onClose={onClose} onChanged={vi.fn()} notify={vi.fn()} standalone /></DialogProvider>));
+    await act(async () => root.render(<DialogProvider><SubscriptionInspector id="missing /?#" collections={[]} onClose={onClose} onChanged={vi.fn()} notify={vi.fn()} standalone monitorHref="/collections/films?filter=unread" collectionHref={(id) => `/collections/${id}`} navigate={navigate} /></DialogProvider>));
     expect(api).toHaveBeenCalledWith("/api/subscriptions/missing%20%2F%3F%23/open", expect.objectContaining({ method: "POST" }));
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("Subscription not found");
     expect(container.querySelector(".skeleton")).toBeNull();
     expect(document.querySelector(".drawer")).toBeNull();
-    await act(async () => container.querySelector<HTMLButtonElement>(".page-header button")!.click());
-    expect(onClose).toHaveBeenCalledOnce();
+    // Without a subscription there is no collection to name; the breadcrumb still leads back to the Monitor view.
+    const crumbs = [...container.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Breadcrumb"] a')];
+    expect(crumbs.map((crumb) => [crumb.textContent, crumb.getAttribute("href")])).toEqual([["Monitor", "/collections/films?filter=unread"]]);
+    await act(async () => crumbs[0].click());
+    expect(navigate).toHaveBeenCalledWith("/collections/films?filter=unread"); expect(onClose).not.toHaveBeenCalled();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 

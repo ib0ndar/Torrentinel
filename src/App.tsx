@@ -150,7 +150,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} accountFocusRequest={accountFocusRequest} onAccountFocused={() => setAccountFocusRequest(0)} />
     : route.name === "admin" ? <Admin notify={notify} tab={route.tab} diagnostics={route.diagnostics} pageSize={user.pageSize} navigate={navigate} />
     : route.name === "activity" ? <Activity key={route.filter} user={user} notify={notify} filter={route.filter} onFilterChange={(filter) => navigate(activityPath(filter))} collections={data.collections} onCollectionsChanged={loadCollections} onShowShortcuts={showShortcuts} />
-    : route.name === "subscription" ? <SubscriptionInspector key={route.id} id={route.id} collections={data.collections} onClose={() => navigate(resolvedPath ?? MONITOR_HOME)} onChanged={loadCollections} notify={notify} standalone />
+    : route.name === "subscription" ? <SubscriptionInspector key={route.id} id={route.id} collections={data.collections} onClose={() => navigate(resolvedPath ?? MONITOR_HOME)} onChanged={loadCollections} notify={notify} standalone monitorHref={resolvedPath ?? MONITOR_HOME} collectionHref={collectionHref} navigate={navigate} />
     : <Workspace user={user} onUserChange={setUser} notify={notify} data={data} onNewCollection={() => setNewCollection(true)} onShowShortcuts={showShortcuts} />;
   return <div className="app-shell">
     <aside className="app-nav">

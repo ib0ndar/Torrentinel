@@ -190,8 +190,9 @@ it("edits the name and default view and deletes the collection from the more-act
   const activeFilter = () => container.querySelector(".filter-tabs .active .filter-tabs__label")?.textContent;
   try {
     await act(async () => root.render(<Harness />));
-    expect(container.querySelector('.header-action[aria-label="Edit collection"]')).not.toBeNull();
-    expect(container.querySelector('.header-action[aria-label="Delete collection"]')).not.toBeNull();
+    // Edit and Delete sit right after the collection name, not among the page actions.
+    expect([...container.querySelectorAll(".pane-title .header-action")].map((button) => button.getAttribute("aria-label"))).toEqual(["Edit collection", "Delete collection"]);
+    expect(container.querySelector('.header-actions [aria-label="Edit collection"], .header-actions [aria-label="Delete collection"]')).toBeNull();
     expect(more().getAttribute("aria-label")).toBe("Collection actions");
     await act(async () => more().click());
     expect(document.querySelector('[role="menu"]')?.getAttribute("aria-label")).toBe("Collection actions");

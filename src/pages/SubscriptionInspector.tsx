@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useContext, useEffect, useEffectEvent, useRef, useState } from "react";
+import { type FormEvent, type MouseEvent, useCallback, useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import { api, jsonBody } from "../api";
 import { ChangeDetails } from "../components/ChangeDetails";
 import { useDialog } from "../components/Dialogs";
@@ -9,6 +9,7 @@ import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { Drawer, EmptyCompact, Field, ListSkeleton, Page, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
 import { absoluteTime, errorMessage, magnetHref, relativeTime, webHref } from "../format";
 import { useI18n } from "../i18n";
+import { isPlainClick, MONITOR_HOME, type Navigate } from "../routing";
 import type { Collection, Notify, RuleMatch, Subscription, SubscriptionEvent, TrackerKey } from "../types";
 
 function withSafeLinks(subscription: Subscription): Subscription {
@@ -16,7 +17,8 @@ function withSafeLinks(subscription: Subscription): Subscription {
   return snapshot ? { ...subscription, currentSnapshot: { ...snapshot, url: webHref(snapshot.url), coverUrl: webHref(snapshot.coverUrl), magnet: magnetHref(snapshot.magnet), torrentUrl: webHref(snapshot.torrentUrl) } } : subscription;
 }
 
-export function SubscriptionInspector({ id, collections, onClose, onChanged, notify, standalone = false }: { id: string; collections: Collection[]; onClose: () => void; onChanged: () => Promise<void>; notify: Notify; standalone?: boolean }) {
+// As a page (standalone), a breadcrumb leads back to the last Monitor view and to the subscription's collection.
+export function SubscriptionInspector({ id, collections, onClose, onChanged, notify, standalone = false, monitorHref = MONITOR_HOME, collectionHref, navigate }: { id: string; collections: Collection[]; onClose: () => void; onChanged: () => Promise<void>; notify: Notify; standalone?: boolean; monitorHref?: string; collectionHref?: (id: string) => string; navigate?: Navigate }) {
   const { t } = useI18n(), dialog = useDialog(), trackCheck = useContext(CheckActivityContext);
   const [item, setItem] = useState<Subscription | null>(null), [events, setEvents] = useState<SubscriptionEvent[]>([]), [matches, setMatches] = useState<RuleMatch[]>([]);
   const [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
@@ -79,10 +81,15 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
   const title = item?.label || t("Subscription");
   const subtitle = item ? t(item.type === "direct" ? "Direct subscription" : "Rule subscription") : loadError ? t("Subscription") : t("Loading details");
   const cover = item?.type === "direct" && item.currentSnapshot?.coverUrl ? <ReleaseCover key={item.currentSnapshot.coverUrl} url={item.currentSnapshot.coverUrl} title={item.currentSnapshot.title || item.label} thumbnail /> : undefined;
-  if (standalone) return <Page title={title} eyebrow={t("Subscription")} description={subtitle}
-    actions={<button className="button button--quiet" onClick={onClose}><Icon name="monitor" />{t("Monitor")}</button>}>
-    {cover}{content}
-  </Page>;
+  if (standalone) {
+    const collection = item && collections.find((entry) => entry.id === item.collectionId);
+    const follow = (href: string) => (event: MouseEvent<HTMLAnchorElement>) => { if (navigate && isPlainClick(event)) { event.preventDefault(); navigate(href); } };
+    const breadcrumb = <nav className="breadcrumb" aria-label={t("Breadcrumb")}><ol>
+      <li><a href={monitorHref} onClick={follow(monitorHref)}>{t("Monitor")}</a></li>
+      {collection && collectionHref && <li><a href={collectionHref(collection.id)} onClick={follow(collectionHref(collection.id))}>{collection.name}</a></li>}
+    </ol></nav>;
+    return <Page className="page--subscription" title={title} breadcrumb={breadcrumb} description={subtitle}>{cover}{content}</Page>;
+  }
   return <Drawer title={title} subtitle={subtitle} onClose={onClose} extraWide headerMedia={cover}>
     {content}
   </Drawer>;
