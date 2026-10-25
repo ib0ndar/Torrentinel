@@ -19,6 +19,10 @@ All notable changes to Torrentinel are documented in this file.
 - Primary buttons use darker gradients in the Sentinel, Graphite, Daylight, Nebula, Ember and Paper themes, so their white labels have at least 4.5:1 contrast across the whole button; it was as low as 1.7:1. Frost and High contrast are unchanged.
 - The letters of the Torrentinel wordmark on the sign-in page no longer touch, and the large logo in the sign-in background is a plain hexagon in the theme's color, without the visor that showed as a dark smudge behind the wordmark.
 
+### Development
+
+- The container build runs the test suite with 6 workers instead of 2, which shortens image builds on multi-core hosts, especially emulated cross-architecture builds.
+
 ## [0.9.9] - 2026-10-25
 
 ### Security
