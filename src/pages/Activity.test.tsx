@@ -88,7 +88,7 @@ it("groups unread changes by day, loads more pages, and opens an entry in the in
 });
 
 it("lists Mark unread reminders above the changes and counts them separately in the header", async () => {
-  const reminder = { subscription: { ...direct, id: "d9", label: "Kept for later" }, collection: { id: "films", name: "Films" }, lastChangedAt: dayAt(3) };
+  const reminder = { subscription: { ...direct, id: "d9", label: "Kept for later" }, collection: { id: "films", name: "Films" }, lastChangedAt: new Date(Date.now() - 3 * 86_400_000).toISOString() };
   let reminders = [reminder];
   vi.mocked(api).mockImplementation(async (path, options) => {
     if (path.startsWith("/api/activity?")) return { events: [events[0]], total: 1, page: 1, pageCount: 1, reminders };
