@@ -127,10 +127,6 @@ export class TelegramService {
     };
   }
 
-  configuredCount(): number {
-    return Number((this.db.prepare("SELECT COUNT(*) AS count FROM telegram_bots").get() as { count: number }).count);
-  }
-
   async configureBot(userId: string, token: string): Promise<ReturnType<TelegramService["statusForUser"]>> {
     const trimmedToken = token.trim();
     const me = await this.call<{ id: number; username?: string }>(trimmedToken, "getMe", {});

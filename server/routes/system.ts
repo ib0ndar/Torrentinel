@@ -3,8 +3,12 @@ import { requireAdmin, requireReadyUser } from "../auth.js";
 import { MAX_POLL_INTERVAL_MINUTES, MIN_POLL_INTERVAL_MINUTES } from "../scheduler.js";
 import { parse, type RouteServices } from "./shared.js";
 
-export function registerSystemRoutes({ app, scheduler, telegram }: RouteServices): void {
-  app.get("/api/health", async () => ({ status: "ok", database: "ready", scheduler: scheduler.status(), telegramConfigured: telegram.configuredCount() > 0 }));
+export function registerSystemRoutes({ app, db, scheduler }: RouteServices): void {
+  // Open to health probes without signing in, so it reveals nothing beyond whether the service and its database answer.
+  app.get("/api/health", async () => {
+    db.prepare("SELECT 1").get();
+    return { status: "ok", database: "ready" };
+  });
   app.get("/magnet/:infoHash", async (request, reply) => {
     const params = parse(z.object({ infoHash: z.string().regex(/^(?:[a-f\d]{40}|[a-z2-7]{32})$/i) }), request.params, reply);
     if (!params) return;

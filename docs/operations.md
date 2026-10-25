@@ -4,14 +4,7 @@ This guide covers routine health checks, logs, updates, backups, restoration, tr
 
 ## Health and status
 
-Torrentinel exposes `GET /api/health` without authentication so container and service managers can probe it. A successful response reports:
-
-- `status`: application readiness
-- `database`: database readiness
-- `scheduler`: whether a poll is running, recent counters, and scheduling timestamps when available
-- `telegramConfigured`: whether at least one user has configured Telegram
-
-The response contains no passwords, tokens, cookies, encryption keys, or tracker URLs. It does reveal limited operational state. If that information should not be public, block `/api/health` at the reverse proxy and probe it only through the host or private container network.
+Torrentinel exposes `GET /api/health` without authentication so container and service managers can probe it. It queries the database and, when the service and the database answer, returns HTTP 200 with `{"status":"ok","database":"ready"}`; otherwise it returns an error status. It reveals nothing else. Scheduler state, polling counters, and RuTracker feed coverage are shown in Administration.
 
 Subscription **Check now** checks that subscription only. Direct checks share any in-flight check for the same subscription; rule checks wait for an active scheduler run before evaluating the selected rule. Administration **Run now** performs a full poll. A targeted RuTracker recovery does not clear a tracker-wide feed gap: the next full poll must cover all active rules first. Shutdown cancels deferred checks and waits for active requests, so allow the configured tracker/browser timeouts when stopping the service.
 

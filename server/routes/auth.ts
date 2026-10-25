@@ -1,10 +1,11 @@
 import { compare, hash } from "bcryptjs";
+import { setTimeout as delay } from "node:timers/promises";
 import type { FastifyReply } from "fastify";
 import { z } from "zod";
 import { nowIso } from "../db.js";
 import { createSession, destroyOtherSessions, destroySession, requireUser } from "../auth.js";
 import { parse, type RouteServices } from "./shared.js";
-import { AttemptLimiter, type AttemptRule } from "../attempt-limiter.js";
+import { AttemptLimiter, AttemptSpacer, type AttemptRule } from "../attempt-limiter.js";
 import { forgetInitialAdminPassword } from "../initial-admin.js";
 import type { AuthUser } from "../types.js";
 import { passwordChangeReason, startPagePreference, themePreference } from "../types.js";
@@ -27,22 +28,29 @@ function tooManyAttempts(reply: FastifyReply, retryAfterMs: number, error: strin
 }
 export function registerAuthRoutes({ app, db, initialAdminFile }: RouteServices): void {
   const attempts = new AttemptLimiter();
+  // Guessing one account from many addresses slows its sign-in down instead of locking it, so the owner
+  // can still get in. From 10 failures, attempts are 1 second apart, doubling up to 10 seconds: at most
+  // about 100 attempts per account in 15 minutes, as before.
+  const accountTurns = new AttemptSpacer(attempts, { freeFailures: 10, initialSpacingMs: 1_000, maximumSpacingMs: 10_000, maximumWaitMs: 30_000 });
   app.post("/api/auth/login", async (request, reply) => {
     const input = parse(z.object({ username: z.string().trim().min(1).max(80), password: z.string().min(1).max(500) }), request.body, reply);
     if (!input) return;
-    // Per address, per account from that address, and per account from anywhere (distributed guessing).
+    // Per address and per account from that address; failures from anywhere only space out the account's attempts.
     const account = input.username.toLowerCase();
     const rules: AttemptRule[] = [
       { key: `login-address:${request.ip}`, limit: 30 },
       { key: `login-account-address:${account}\n${request.ip}`, limit: 10 },
-      { key: `login-account:${account}`, limit: 100 },
     ];
+    const accountKey = `login-account:${account}`;
     const retryAfterMs = attempts.retryAfterMs(rules);
     if (retryAfterMs > 0) return tooManyAttempts(reply, retryAfterMs, "Too many sign-in attempts. Try again later.");
+    const turn = accountTurns.reserve(accountKey);
+    if ("retryAfterMs" in turn) return tooManyAttempts(reply, turn.retryAfterMs, "Too many sign-in attempts. Try again later.");
+    if (turn.waitMs > 0) await delay(turn.waitMs);
     const row = db.prepare("SELECT * FROM users WHERE username = ?").get(input.username) as UserDbRow | undefined;
     const passwordMatches = await compare(input.password, row?.password_hash ?? TIMING_EQUALIZER_HASH);
     if (!row || row.disabled || !passwordMatches) {
-      attempts.recordFailure(rules);
+      attempts.recordFailure([...rules, { key: accountKey }]);
       return reply.code(401).send({ error: "Invalid username or password" });
     }
     attempts.reset([rules[1].key]);

@@ -123,7 +123,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - No default password: the first start generates one, keeps it readable only by Torrentinel, and deletes it after the first password change
 - Tracker logins and Telegram bot tokens are encrypted with AES-256-GCM using a key kept outside the database, and are set only in the web interface, never in environment variables
 - Ports are published on the local machine only by default, and requests addressed to unknown host names are refused to stop DNS rebinding
-- HttpOnly, SameSite=Strict session cookies, refused cross-site requests, and sign-in attempt limits per address and account; unknown accounts take as long to reject as a wrong password
+- HttpOnly, SameSite=Strict session cookies, refused cross-site requests, and sign-in attempt limits per address, and an account guessed at from many addresses is slowed down rather than locked; unknown accounts take as long to reject as a wrong password
 - The integrated Chrome runs in its sandbox, opens only the tracker's own domains, has no listening port, and connects through an internal proxy that refuses local and private network addresses
 - Cover downloads and tracker redirects reach only public internet addresses, tracker responses are size-limited, and personal mirrors are limited to the tracker's own domains
 

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApplication } from "./app.js";
-import { AttemptLimiter } from "./attempt-limiter.js";
+import { AttemptLimiter, AttemptSpacer } from "./attempt-limiter.js";
 import { fetchCover } from "./cover-fetch.js";
 import { createDatabase } from "./db.js";
 import { effectiveBaseUrl, personalMirrorAllowed } from "./mirrors.js";
@@ -151,6 +151,24 @@ describe("sign-in throttling", () => {
     expect(fromElsewhere.statusCode).toBe(200);
   }, PASSWORD_HASHING_TIMEOUT_MS);
 
+  it("slows sign-in to an account guessed at from many addresses instead of locking its owner out", async () => {
+    const { app } = await application();
+    await readyAdmin(app);
+    const signIn = (remoteAddress: string, password: string) => app.inject({ method: "POST", url: "/api/auth/login", remoteAddress, payload: { username: "admin", password } });
+    for (const remoteAddress of ["198.51.100.1", "198.51.100.2"]) {
+      for (let attempt = 0; attempt < 5; attempt += 1) expect((await signIn(remoteAddress, `wrong-${attempt}`)).statusCode).toBe(401);
+    }
+
+    // Ten failures from several addresses: the owner still gets in, with attempts a second apart.
+    const started = Date.now();
+    const results = await Promise.all(["198.51.100.3", "198.51.100.4"].map(async (remoteAddress) => {
+      const response = await signIn(remoteAddress, "Admin-Security-2026!");
+      return { statusCode: response.statusCode, elapsedMs: Date.now() - started };
+    }));
+    expect(results.map(({ statusCode }) => statusCode)).toEqual([200, 200]);
+    expect(Math.max(...results.map(({ elapsedMs }) => elapsedMs))).toBeGreaterThanOrEqual(950);
+  }, PASSWORD_HASHING_TIMEOUT_MS);
+
   it("limits current-password guesses on the password change form", async () => {
     const { app } = await application();
     const cookie = await readyAdmin(app);
@@ -173,6 +191,44 @@ describe("sign-in throttling", () => {
     expect(limiter.retryAfterMs(rules)).toBe(1);
     now = 1_000;
     expect(limiter.retryAfterMs(rules)).toBe(0);
+  });
+
+  it("spaces out attempts on an account with many failures and turns them away only when the line is full", () => {
+    let now = 0;
+    const limiter = new AttemptLimiter(60_000, () => now);
+    const spacer = new AttemptSpacer(limiter, { freeFailures: 2, initialSpacingMs: 1_000, maximumSpacingMs: 4_000, maximumWaitMs: 8_000 }, () => now);
+    const fail = (count: number) => { for (let failure = 0; failure < count; failure += 1) limiter.recordFailure([{ key: "account" }]); };
+
+    fail(1);
+    expect(spacer.reserve("account")).toEqual({ waitMs: 0 });
+    expect(spacer.reserve("account")).toEqual({ waitMs: 0 });
+    fail(1);
+    expect(spacer.reserve("account")).toEqual({ waitMs: 0 });
+    expect(spacer.reserve("account")).toEqual({ waitMs: 1_000 });
+    // Five failures: the spacing doubles from one second and stops at four.
+    fail(3);
+    expect(spacer.reserve("account")).toEqual({ waitMs: 2_000 });
+    expect(spacer.reserve("account")).toEqual({ waitMs: 6_000 });
+    expect(spacer.reserve("account")).toEqual({ retryAfterMs: 2_000 });
+    expect(spacer.reserve("account")).toEqual({ retryAfterMs: 2_000 });
+    expect(spacer.reserve("another-account")).toEqual({ waitMs: 0 });
+    now = 2_000;
+    expect(spacer.reserve("account")).toEqual({ waitMs: 8_000 });
+    // The line is forgotten with the failures once the window has passed.
+    now = 60_000;
+    expect(spacer.reserve("account")).toEqual({ waitMs: 0 });
+  });
+});
+
+describe("health check", () => {
+  it("reports only whether the service and its database answer", async () => {
+    const { app, db } = await application();
+    const healthy = await app.inject({ method: "GET", url: "/api/health" });
+    expect(healthy.statusCode).toBe(200);
+    expect(healthy.json()).toEqual({ status: "ok", database: "ready" });
+
+    vi.spyOn(db, "prepare").mockImplementationOnce(() => { throw new Error("database disk image is malformed"); });
+    expect((await app.inject({ method: "GET", url: "/api/health" })).statusCode).toBe(500);
   });
 });
 
