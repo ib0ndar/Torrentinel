@@ -15,6 +15,7 @@ All notable changes to Torrentinel are documented in this file.
 
 - A gap in the RuTracker feed is no longer missed when a topic updated during an outage appears in the feeds before and after it. Feed entries are now compared by topic and update time, not by topic alone.
 - A RuTracker feed coverage gap no longer stays open, with every rule searching again on every poll, because one rule cannot catch up. A rule whose owner has no RuTracker login, or whose catch-up search needs more pages than it reads, reports the problem on that rule and no longer holds the gap open. Rules that already caught up skip their search on later polls, and new rules, which never alert on their first matches, skip it entirely.
+- Collections created within the same millisecond are always listed in the order they were created, instead of in either order.
 - Switching a tracker's mirror no longer reports every release watched by link as changed. On the subscription's page, **Tracker page** and **Torrent file** move to the new mirror at the next check.
 
 ## [1.0.0] - 2026-10-25

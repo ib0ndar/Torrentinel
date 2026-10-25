@@ -48,6 +48,17 @@ describe("default status filter per collection", () => {
     expect(await list()).toEqual([["Inbox", "unread"], ["Films", "all"]]);
   });
 
+  it("lists collections created in the same millisecond in the order they were created", async () => {
+    const { db } = services;
+    const userId = (db.prepare("SELECT user_id FROM collections WHERE id = ?").get(inboxId) as { user_id: string }).user_id;
+    const createdAt = nowIso();
+    // Identifiers sort the other way round, as random identifiers may.
+    for (const [id, name] of [["zzz", "Films"], ["aaa", "Series"]]) {
+      db.prepare("INSERT INTO collections (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(id, userId, name, createdAt, createdAt);
+    }
+    expect((await list()).map(([name]) => name)).toEqual(["Inbox", "Films", "Series"]);
+  });
+
   it("never changes another account's collection and reads unknown stored values as All", async () => {
     const { db } = services;
     db.prepare("INSERT INTO users (id, username, password_hash, created_at, updated_at) VALUES ('other', 'other', 'hash', ?, ?)").run(nowIso(), nowIso());

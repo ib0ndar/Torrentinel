@@ -20,7 +20,7 @@ export function registerCollectionRoutes({ app, db, coverCache }: RouteServices)
       COALESCE(SUM((SELECT COUNT(*) FROM subscription_events e WHERE e.subscription_id = s.id AND e.read_at IS NULL)
         + CASE WHEN ${REMINDER_SQL} THEN 1 ELSE 0 END), 0) AS activity_count,
       COALESCE(SUM(CASE WHEN s.last_error IS NOT NULL AND s.last_error <> '' THEN 1 ELSE 0 END), 0) AS error_count FROM collections c
-      LEFT JOIN subscriptions s ON s.collection_id = c.id WHERE c.user_id = ? GROUP BY c.id ORDER BY c.created_at`).all(request.user!.id);
+      LEFT JOIN subscriptions s ON s.collection_id = c.id WHERE c.user_id = ? GROUP BY c.id ORDER BY c.created_at, c.rowid`).all(request.user!.id);
     return { collections: rows.map((value) => {
       const row = value as Record<string, unknown>;
       return { id: row.id, name: row.name, defaultFilter: monitorFilter(row.default_filter), subscriptionCount: Number(row.subscription_count), unreadCount: Number(row.unread_count), activityCount: Number(row.activity_count), errorCount: Number(row.error_count), createdAt: row.created_at, updatedAt: row.updated_at };
