@@ -2,6 +2,25 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- Tracker pages are always requested from the tracker's configured mirror: a direct subscription's address now supplies only the page's path and query. Some subscription addresses could previously make the server request a different host, including addresses on the local network, and show part of the response in the subscription. Existing subscriptions need no change; their next check uses the mirror.
+- The integrated browser trusts only the tracker's own domains and the mirror each request is made for. Previously the host of any page it was asked to open was trusted from then on as well, including local network addresses. A page on any other host is now refused before any request is made.
+- Sign-in no longer locks an account for everyone after repeated failures from different addresses. From 10 failures within 15 minutes, attempts on the account wait their turn, 1 second apart and doubling up to 10 seconds, so the right password still gets in after a short wait while guessing stays at about 100 attempts per account in 15 minutes. An attempt that would wait more than 30 seconds receives HTTP 429 with `Retry-After`. The limits per address and per account from one address are unchanged.
+- `GET /api/health`, which answers without signing in, returns only `status` and `database` and no longer reports scheduler counters and timestamps or whether Telegram is configured. It now queries the database, so it fails when the database does not answer.
+- Fastify 5.12.7 (from 5.12.5), undici 8.12.3 (from 8.11.2) and Zod 4.6.7 (from 4.4.3) include upstream security fixes, as do the updated copy of undici used by cheerio and fast-uri.
+
+### Development
+
+- Vite 8.3.5 (from 8.2.1) and Vitest 4.1.12 (from 4.1.11) include upstream security fixes for the development server and test runner. Neither is part of the image.
+
+### Upgrade notes
+
+- Monitoring that reads `scheduler` from `GET /api/health` must use **Administration** or the signed-in `GET /api/system/status` instead; `telegramConfigured` is no longer reported. The supplied Docker, Compose and Quadlet health checks test only the HTTP status and need no change.
+- There are no configuration or database changes. Back up the database and application-data directory together before updating, as usual.
+
 ## [0.9.8] - 2026-10-14
 
 ### Added
