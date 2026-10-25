@@ -47,6 +47,10 @@ describe("tracker plugin contract", () => {
     const plugin = createRutorPlugin();
     expect(() => new TrackerPluginRegistry([{ ...plugin, direct: undefined }]))
       .toThrow("direct capability");
+    // Rutor's rules read a recent list, not a feed that reports replaced torrents.
+    const capabilities = { ...plugin.manifest.capabilities, feedAssistedDirect: true };
+    expect(() => new TrackerPluginRegistry([{ ...plugin, manifest: { ...plugin.manifest, capabilities } }]))
+      .toThrow("assist direct checks with a feed");
   });
 });
 

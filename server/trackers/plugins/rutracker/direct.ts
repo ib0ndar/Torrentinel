@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import type { DirectMonitor } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
-import { absoluteImageUrl, cleanText, externalIdFromUrl, fingerprintRelease, magnetLink } from "../../core/parsing.js";
+import { absoluteImageUrl, cleanText, externalIdFromUrl, fingerprintRelease, magnetInfoHash, magnetLink } from "../../core/parsing.js";
 import { IntegratedBrowserClient, type BrowserPage } from "../../core/transport/browser.js";
 import type { Release } from "../../../types.js";
 import { rutrackerManifest } from "./manifest.js";
@@ -48,16 +48,5 @@ export class RutrackerDirectMonitor implements DirectMonitor {
 
   close(): Promise<void> | undefined {
     return this.detailProvider.close?.();
-  }
-}
-
-function magnetInfoHash(magnet: string | undefined): string | undefined {
-  if (!magnet) return undefined;
-  try {
-    const exactTopic = new URL(magnet).searchParams.getAll("xt")
-      .find((value) => value.toLocaleLowerCase("en-US").startsWith("urn:btih:"));
-    return exactTopic?.slice("urn:btih:".length).toLocaleUpperCase("en-US") || undefined;
-  } catch {
-    return undefined;
   }
 }

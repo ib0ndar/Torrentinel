@@ -20,7 +20,8 @@ import {
 import type { CoverCacheStore } from "./cover-cache.js";
 import { coverErrorMessage } from "./cover-fetch.js";
 import { compileTitleMatcher, normalizeTitle, parseTerms } from "./rule-matching.js";
-import { directBaselineOutcome, directSnapshotIsTemporarilyUnavailable } from "./direct-snapshot.js";
+import { directBaselineOutcome, directSnapshotIsTemporarilyUnavailable, storedDirectSnapshotIsSettled } from "./direct-snapshot.js";
+import { feedShowsNoChange } from "./feed-assist.js";
 import { enqueueNotification, NotificationQueue } from "./notification-queue.js";
 import {
   bufferReleases,
@@ -43,6 +44,8 @@ interface DirectRow {
   initialized: number;
   current_fingerprint: string | null;
   current_snapshot: string | null;
+  detail_verified_at: string | null;
+  last_error: string | null;
   tracker_key: TrackerKey;
   base_url: string;
 }
@@ -268,7 +271,8 @@ export class Scheduler {
         const outcome = await active;
         // A queued check for an edited topic must not disappear behind the
         // superseded request it joined. Normal overlapping checks still share.
-        if (outcome === "superseded") await this.checkSubscription(subscriptionId, userId);
+        // A requested check always loads the page, so it does not settle for a feed skip either.
+        if (outcome === "superseded" || outcome === "feed-unchanged") await this.checkSubscription(subscriptionId, userId);
         return;
       }
       const startedMs = Date.now();
@@ -320,21 +324,26 @@ export class Scheduler {
 
   private async pollTrackerLane(lane: TrackerLane, run: RunState): Promise<void> {
     const plugin = trackerRegistry.get(lane.trackerKey);
-    const feed = plugin?.rules && plugin.manifest.capabilities.ruleDiscovery === "feed" && lane.ruleRows.length > 0
-      ? await this.pollFeed(plugin, lane.ruleRows[0], run.runId)
+    const capabilities = plugin?.manifest.capabilities;
+    const sample = lane.ruleRows[0] ?? (capabilities?.feedAssistedDirect ? lane.directRows[0] : undefined);
+    // The feed is read before the direct checks, which may use it to skip pages it shows as unchanged.
+    const feed = plugin?.rules && capabilities?.ruleDiscovery === "feed" && sample
+      ? await this.pollFeed(plugin, sample, run.runId)
       : undefined;
-    for (const row of lane.directRows) await this.checkDirect(row, run.status, run.runId);
+    for (const row of lane.directRows) await this.checkDirect(row, run.status, run.runId, feed);
     if (lane.ruleRows.length > 0) await this.pollRules(lane.trackerKey, lane.ruleRows, run, feed);
+    // With no rule on this tracker, nothing is missing from a gap, so a full poll closes it.
+    else if (feed?.ok && feed.rollingFeed.unresolvedGapSince && !run.scope) markFeedRecovery(this.db, lane.trackerKey, true);
   }
 
-  private checkDirect(row: DirectRow, status: SchedulerStatus, runId: string): Promise<string> {
+  private checkDirect(row: DirectRow, status: SchedulerStatus, runId: string, feed?: FeedPoll): Promise<string> {
     const active = this.directChecks.get(row.id);
     if (active) return active;
     const work = Promise.resolve().then(async () => {
       // Rows selected before earlier network requests may have been edited or
       // removed. Never compare a fresh snapshot against a stale baseline.
       const current = this.directRow(row.id, row.user_id);
-      return current ? this.checkDirectOnce(current, status, runId) : "removed";
+      return current ? this.checkDirectOnce(current, status, runId, feed) : "removed";
     }).finally(() => {
       this.directChecks.delete(row.id);
     });
@@ -342,7 +351,7 @@ export class Scheduler {
     return work;
   }
 
-  private async checkDirectOnce(row: DirectRow, status: SchedulerStatus, runId: string): Promise<string> {
+  private async checkDirectOnce(row: DirectRow, status: SchedulerStatus, runId: string, feed?: FeedPoll): Promise<string> {
     const startedMs = Date.now();
     const plugin = trackerRegistry.get(row.tracker_key);
     let snapshot: DirectSnapshot | undefined;
@@ -369,6 +378,30 @@ export class Scheduler {
         error,
       });
       return "unsupported";
+    }
+    const stored = feed?.ok && plugin.manifest.capabilities.feedAssistedDirect
+      ? this.unchangedInFeed(row, plugin, feed)
+      : undefined;
+    if (stored) {
+      const skippedAt = nowIso();
+      status.checked += 1;
+      this.db.prepare("UPDATE subscriptions SET last_checked_at = ?, updated_at = ? WHERE id = ?").run(skippedAt, skippedAt, row.id);
+      this.recordObservation({
+        runId,
+        subscriptionId: row.id,
+        userId: row.user_id,
+        trackerKey: row.tracker_key,
+        operation: "direct",
+        outcome: "feed-unchanged",
+        requestedUrl: row.direct_url,
+        snapshot: stored,
+        durationMs: Date.now() - startedMs,
+        details: {
+          detailVerifiedAt: row.detail_verified_at,
+          feedContinuousSince: feed?.ok ? feed.rollingFeed.continuousSince || null : null,
+        },
+      });
+      return "feed-unchanged";
     }
     const checkedAt = nowIso();
     try {
@@ -424,10 +457,10 @@ export class Scheduler {
         } else {
           this.db.prepare(`
             UPDATE subscriptions
-            SET name = ?, initialized = 1, current_fingerprint = ?, current_snapshot = ?,
+            SET name = ?, initialized = 1, current_fingerprint = ?, current_snapshot = ?, detail_verified_at = ?,
                 last_checked_at = ?, last_error = NULL, updated_at = ?
             WHERE id = ?
-          `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
+          `).run(snapshot.title, snapshot.fingerprint, JSON.stringify(snapshot), checkedAt, checkedAt, checkedAt, row.id);
         }
         return outcome;
       }
@@ -441,10 +474,10 @@ export class Scheduler {
         this.db.transaction(() => {
           this.db.prepare(`
             UPDATE subscriptions
-            SET name = ?, current_fingerprint = ?, current_snapshot = ?, last_checked_at = ?,
+            SET name = ?, current_fingerprint = ?, current_snapshot = ?, detail_verified_at = ?, last_checked_at = ?,
                 last_changed_at = ?, last_error = NULL, updated_at = ?
             WHERE id = ?
-          `).run(currentSnapshot.title, currentSnapshot.fingerprint, JSON.stringify(currentSnapshot), checkedAt, checkedAt, checkedAt, row.id);
+          `).run(currentSnapshot.title, currentSnapshot.fingerprint, JSON.stringify(currentSnapshot), checkedAt, checkedAt, checkedAt, checkedAt, row.id);
           this.db.prepare(`
             INSERT INTO subscription_events
               (id, subscription_id, user_id, kind, summary, payload, created_at)
@@ -460,8 +493,9 @@ export class Scheduler {
         outcome = "unchanged";
         // The fingerprint ignores the mirror, so keep the stored links on the one requests now use.
         this.db.prepare(`
-          UPDATE subscriptions SET name = ?, current_snapshot = ?, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = ?
-        `).run(snapshot.title, JSON.stringify(snapshot), checkedAt, checkedAt, row.id);
+          UPDATE subscriptions SET name = ?, current_snapshot = ?, detail_verified_at = ?, last_checked_at = ?, last_error = NULL, updated_at = ?
+          WHERE id = ?
+        `).run(snapshot.title, JSON.stringify(snapshot), checkedAt, checkedAt, checkedAt, row.id);
       }
     } catch (error) {
       observationError = error;
@@ -544,6 +578,7 @@ export class Scheduler {
           feedCoverageStatus: rollingFeed.coverageStatus,
           feedOldestEntryAt: rollingFeed.oldestEntryAt || null,
           feedNewestEntryAt: rollingFeed.newestEntryAt || null,
+          feedContinuousSince: rollingFeed.continuousSince || null,
         },
       });
       return {
@@ -915,6 +950,26 @@ export class Scheduler {
     }
   }
 
+  /**
+   * The stored snapshot when the feed shows the topic unchanged since its page was last loaded, so a
+   * scheduled check need not load it again. Anything unsettled (a pending baseline, a missing cover,
+   * a failed last check) loads the page as before.
+   */
+  private unchangedInFeed(row: DirectRow, plugin: TrackerPlugin, feed: Extract<FeedPoll, { ok: true }>): DirectSnapshot | undefined {
+    if (!row.initialized || !row.current_fingerprint || row.last_error) return undefined;
+    if (!storedDirectSnapshotIsSettled(row.current_snapshot, plugin.manifest.snapshotVersion)) return undefined;
+    if (this.coverCache && !this.coverCache.has(row.id)) return undefined;
+    const stored = safeJson(row.current_snapshot);
+    if (typeof stored.externalId !== "string" || typeof stored.title !== "string" || typeof stored.url !== "string") return undefined;
+    const unchanged = feedShowsNoChange({
+      verifiedAt: row.detail_verified_at,
+      storedMagnet: typeof stored.magnet === "string" ? stored.magnet : undefined,
+      continuousSince: feed.rollingFeed.continuousSince,
+      entry: feed.view.get(stored.externalId),
+    });
+    return unchanged ? stored as unknown as DirectSnapshot : undefined;
+  }
+
   private directRowStillCurrent(row: DirectRow): boolean {
     const latest = this.directRow(row.id, row.user_id);
     return Boolean(latest && latest.direct_url === row.direct_url && latest.base_url === row.base_url
@@ -929,7 +984,7 @@ export class Scheduler {
   private directRows(extraWhere = "", ...parameters: string[]): DirectRow[] {
     return (this.db.prepare(`
       SELECT s.id, s.user_id, s.name, s.direct_url, s.initialized,
-             s.current_fingerprint, s.current_snapshot, st.tracker_key,
+             s.current_fingerprint, s.current_snapshot, s.detail_verified_at, s.last_error, st.tracker_key,
              utm.base_url AS personal_base_url, tm.base_url AS global_base_url
       FROM subscriptions s
       JOIN users u ON u.id = s.user_id AND u.disabled = 0

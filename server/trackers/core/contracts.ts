@@ -23,6 +23,11 @@ export interface TrackerManifest {
     rules: boolean;
     covers: boolean;
     ruleDiscovery?: RuleDiscoveryMode;
+    /**
+     * The tracker's rule feed lists every topic whose torrent is replaced, so a scheduled direct check
+     * may skip loading a page the feed shows as unchanged. Requires direct checks and a feed.
+     */
+    feedAssistedDirect?: boolean;
   };
   ruleDiscoveryRevision?: string;
 }

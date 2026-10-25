@@ -8,10 +8,12 @@ All notable changes to Torrentinel are documented in this file.
 
 - Kinozal, Rutor and RuTracker are checked side by side instead of one after another, so a poll takes about as long as the slowest tracker and a slow tracker no longer delays the others. Each tracker still gets one request at a time. If checking one tracker fails unexpectedly, the others still finish.
 - A RuTracker poll reads the feed and the 14-day release buffer once, instead of once for every rule group. With 20 rule groups and a full buffer this cuts the time spent matching rules from about 0.9 s to 0.05 s per poll on a desktop computer. When the feed cannot be read, the error is reported on every rule without requesting the feed again for each of them.
+- A scheduled poll loads a RuTracker topic watched by link only when the feed lists the topic with a new update time or a different torrent since the page was last loaded, instead of opening every topic in the integrated browser on every poll. Every topic is still loaded at least once a day, which catches edits that keep the torrent and deleted topics, and after any gap in the feed. **Check now** always loads the page. The RuTracker feed is now also read for users who only watch topics by link. **Administration › Diagnostics** shows a skipped page as **Unchanged in feed**.
 - The integrated browser closes Chrome once it has been idle for 10 minutes instead of keeping it running between polls, and starts it again with the same profile, cookies and sign-ins for the next check. `BROWSER_IDLE_TIMEOUT_MS` sets the idle time; a value above the poll interval keeps browsers open between polls.
 
 ### Fixed
 
+- A gap in the RuTracker feed is no longer missed when a topic updated during an outage appears in the feeds before and after it. Feed entries are now compared by topic and update time, not by topic alone.
 - A RuTracker feed coverage gap no longer stays open, with every rule searching again on every poll, because one rule cannot catch up. A rule whose owner has no RuTracker login, or whose catch-up search needs more pages than it reads, reports the problem on that rule and no longer holds the gap open. Rules that already caught up skip their search on later polls, and new rules, which never alert on their first matches, skip it entirely.
 - Switching a tracker's mirror no longer reports every release watched by link as changed. On the subscription's page, **Tracker page** and **Torrent file** move to the new mirror at the next check.
 

@@ -24,6 +24,12 @@ export function directSnapshotRequiresSilentSchemaUpgrade(value: string | null, 
   return typeof current.metadata?.snapshotVersion === "number" && metadata(value).snapshotVersion !== current.metadata.snapshotVersion;
 }
 
+/** The stored snapshot is a complete page observation in the plugin's current format, needing no silent baseline work. */
+export function storedDirectSnapshotIsSettled(value: string | null, snapshotVersion: number): boolean {
+  const previous = metadata(value);
+  return previous.feedSeen !== false && previous.coverObserved === true && previous.snapshotVersion === snapshotVersion;
+}
+
 export function directBaselineOutcome(initialized: number, previousFingerprint: string | null, previousSnapshot: string | null, current: DirectSnapshot): BaselineOutcome | undefined {
   if (!initialized || !previousFingerprint) return "baseline";
   if (directSnapshotIsTemporarilyUnavailable(current)) return "temporarily-unavailable";

@@ -193,8 +193,11 @@ function safeObservationDetails(details: Record<string, DiagnosticDetail> | unde
     "feedCoverageStatus",
     "feedOldestEntryAt",
     "feedNewestEntryAt",
+    "feedContinuousSince",
     "recoveryCount",
     "recoveryComplete",
+    "recoverySkipped",
+    "detailVerifiedAt",
   ]) {
     const value = details[key];
     if (typeof value === "string") safe[key] = truncate(value, 200);

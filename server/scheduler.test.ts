@@ -698,3 +698,99 @@ function directSnapshot(title: string, fingerprint: string, coverFile: string): 
     fingerprint,
   };
 }
+
+describe("feed-assisted RuTracker direct checks", () => {
+  const topicUrl = "https://rutracker.org/forum/viewtopic.php?t=100";
+  const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1_000).toISOString();
+  const feedEntry = (externalId: string, publishedAt: string, hash = externalId.padStart(40, "0")): Release => ({
+    trackerKey: "rutracker",
+    externalId,
+    title: `Topic ${externalId}`,
+    url: `https://rutracker.org/forum/viewtopic.php?t=${externalId}`,
+    magnet: `magnet:?xt=urn:btih:${hash}`,
+    publishedAt,
+  });
+  const feed = (...entries: Release[]): DiscoveryBatch => {
+    const times = entries.map((entry) => entry.publishedAt!).sort();
+    return { releases: entries, coverage: { source: "feed", complete: false, oldestObservedAt: times[0] }, cursor: times.at(-1) };
+  };
+  const topic = (title: string, hash: string): DirectSnapshot => ({
+    trackerKey: "rutracker",
+    externalId: "100",
+    title,
+    url: topicUrl,
+    magnet: `magnet:?xt=urn:btih:${hash}`,
+    metadata: { snapshotVersion: trackerRegistry.get("rutracker")!.manifest.snapshotVersion, coverObserved: true },
+    fingerprint: `${title}:${hash}`,
+  });
+  // Three topics updated two to three hours ago, which the feed keeps listing unchanged.
+  const quietFeed = () => [feedEntry("1", hoursAgo(3)), feedEntry("2", hoursAgo(2.5)), feedEntry("3", hoursAgo(2))];
+
+  function setup() {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    db.prepare(`INSERT INTO subscriptions (id, user_id, collection_id, type, name, direct_url, created_at, updated_at)
+      VALUES ('topic', ?, ?, 'direct', '', ?, ?, ?)`).run(user.id, collection.id, topicUrl, timestamp, timestamp);
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES ('topic', 'rutracker')").run();
+    const plugin = trackerRegistry.get("rutracker")!;
+    const discover = vi.spyOn(plugin.rules!, "discover").mockResolvedValue(feed(...quietFeed()));
+    const fetchSnapshot = vi.spyOn(plugin.direct!, "fetchSnapshot").mockResolvedValue(topic("Series 1-10", "AAA"));
+    const telegram = { canNotify: () => false, notifyRelease: vi.fn() } as unknown as TelegramService;
+    const scheduler = new Scheduler(db, telegram, new SecretVault(Buffer.alloc(32, 5)));
+    const outcomes = () => (db.prepare("SELECT outcome FROM tracker_observations WHERE operation = 'direct' ORDER BY rowid").all() as Array<{ outcome: string }>)
+      .map((row) => row.outcome);
+    const cleanup = () => { discover.mockRestore(); fetchSnapshot.mockRestore(); db.close(); };
+    return { db, user, scheduler, discover, fetchSnapshot, outcomes, cleanup };
+  }
+
+  it("skips the page of a topic the feed has not listed since the last check, even with no rules on RuTracker", async () => {
+    const { scheduler, discover, fetchSnapshot, outcomes, cleanup } = setup();
+    try {
+      await scheduler.run("baseline");
+      const status = await scheduler.run("poll");
+      expect(discover).toHaveBeenCalledTimes(2);
+      expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+      expect(outcomes()).toEqual(["baseline", "feed-unchanged"]);
+      expect(status).toMatchObject({ checked: 1, changed: 0, errors: 0 });
+    } finally { cleanup(); }
+  });
+
+  it("loads the page and reports the change when the feed lists the topic as updated", async () => {
+    const { db, scheduler, discover, fetchSnapshot, outcomes, cleanup } = setup();
+    try {
+      await scheduler.run("baseline");
+      // The page was last loaded two hours ago, and the torrent was replaced an hour ago.
+      db.prepare("UPDATE subscriptions SET detail_verified_at = ? WHERE id = 'topic'").run(hoursAgo(2));
+      discover.mockResolvedValue(feed(...quietFeed(), feedEntry("100", hoursAgo(1), "BBB")));
+      fetchSnapshot.mockResolvedValue(topic("Series 1-11", "BBB"));
+      await scheduler.run("poll");
+      await scheduler.run("poll");
+      expect(fetchSnapshot).toHaveBeenCalledTimes(2);
+      expect(outcomes()).toEqual(["baseline", "changed", "feed-unchanged"]);
+      expect(db.prepare("SELECT kind FROM subscription_events").all()).toEqual([{ kind: "direct-change" }]);
+    } finally { cleanup(); }
+  });
+
+  it("loads every page after a gap in the feed", async () => {
+    const { scheduler, discover, fetchSnapshot, outcomes, cleanup } = setup();
+    try {
+      await scheduler.run("baseline");
+      discover.mockResolvedValue(feed(feedEntry("8", new Date().toISOString()), feedEntry("9", new Date().toISOString())));
+      await scheduler.run("poll");
+      expect(fetchSnapshot).toHaveBeenCalledTimes(2);
+      expect(outcomes()).toEqual(["baseline", "unchanged"]);
+    } finally { cleanup(); }
+  });
+
+  it("always loads the page when a check is requested", async () => {
+    const { user, scheduler, fetchSnapshot, outcomes, cleanup } = setup();
+    try {
+      await scheduler.run("baseline");
+      await scheduler.checkSubscription("topic", user.id);
+      expect(fetchSnapshot).toHaveBeenCalledTimes(2);
+      expect(outcomes()).toEqual(["baseline", "unchanged"]);
+    } finally { cleanup(); }
+  });
+});

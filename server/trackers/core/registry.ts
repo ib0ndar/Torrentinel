@@ -51,4 +51,7 @@ function validatePlugin(plugin: TrackerPlugin): void {
   if (manifest.capabilities.rules && !manifest.capabilities.ruleDiscovery) {
     throw new Error(`${manifest.key} must declare a rule discovery mode`);
   }
+  if (manifest.capabilities.feedAssistedDirect && (!manifest.capabilities.direct || manifest.capabilities.ruleDiscovery !== "feed")) {
+    throw new Error(`${manifest.key} can only assist direct checks with a feed when it has both`);
+  }
 }

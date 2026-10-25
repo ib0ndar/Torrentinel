@@ -29,6 +29,18 @@ export function magnetLink(value: string | undefined): string | undefined {
   return link && /^magnet:\?/iu.test(link) ? link : undefined;
 }
 
+/** The torrent's info-hash from a magnet link, in upper case, or undefined when the link has none. */
+export function magnetInfoHash(magnet: string | undefined): string | undefined {
+  if (!magnet) return undefined;
+  try {
+    const exactTopic = new URL(magnet).searchParams.getAll("xt")
+      .find((value) => value.toLocaleLowerCase("en-US").startsWith("urn:btih:"));
+    return exactTopic?.slice("urn:btih:".length).toLocaleUpperCase("en-US") || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function labeledValue($: CheerioAPI, labels: string[]): string | undefined {
   const wanted = new Set(labels.map(normalizeLabel));
   let found: string | undefined;

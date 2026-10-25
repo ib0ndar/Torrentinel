@@ -49,7 +49,7 @@ export function diagnosticStateClass(outcome: string): string {
 }
 const DIAGNOSTIC_LABELS: Record<string, string> = {
   direct: "Direct link", "feed-poll": "Feed check", "rule-discovery": "Rule search", "rule-enrichment": "Release details",
-  unchanged: "Unchanged", changed: "Changed", "new-matches": "New matches", baseline: "Baseline saved", rebaseline: "Baseline refreshed", "cover-backfill": "Cover added",
+  unchanged: "Unchanged", "feed-unchanged": "Unchanged in feed", changed: "Changed", "new-matches": "New matches", baseline: "Baseline saved", rebaseline: "Baseline refreshed", "cover-backfill": "Cover added",
   "cover-baseline": "Cover saved", "schema-upgrade": "Snapshot format updated", enriched: "Details added", superseded: "Replaced by a newer check", removed: "Removed",
   error: "Error", missing: "Not found", blocked: "Blocked", auth: "Login problem", parse: "Unreadable page", network: "Network error", unsupported: "Not supported",
   challenge: "Access check", "temporarily-unavailable": "Temporarily unavailable", "coverage-gap": "Coverage gap", continuous: "Continuous", recovered: "Gap recovered",

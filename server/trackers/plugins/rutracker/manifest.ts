@@ -12,5 +12,6 @@ export const rutrackerManifest: TrackerManifest = {
     rules: true,
     covers: true,
     ruleDiscovery: "feed",
+    feedAssistedDirect: true,
   },
 };

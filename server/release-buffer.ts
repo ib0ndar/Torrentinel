@@ -22,6 +22,7 @@ interface FeedStateRow {
   last_gap_at: string | null;
   recovered_at: string | null;
   last_recovery_attempt_at: string | null;
+  continuous_since: string | null;
 }
 
 interface BufferedReleaseRow {
@@ -49,6 +50,8 @@ export interface RollingFeedResult {
   unresolvedGapSince?: string;
   /** When the most recent gap was detected; a catch-up search must have started after it. */
   lastGapAt?: string;
+  /** From when (the tracker's clock) the feed has been followed without a gap. */
+  continuousSince?: string;
   bufferedCount: number;
 }
 
@@ -79,12 +82,18 @@ export function ingestRollingFeedBatch(
 ): RollingFeedResult {
   return db.transaction(() => {
     const previous = feedStateRow(db, trackerKey);
-    const previousIds = jsonStringArray(previous?.previous_entry_ids);
-    const currentIds = [...new Set(batch.releases.map((release) => release.externalId))];
-    const previousSet = new Set(previousIds);
-    const overlapCount = previous ? currentIds.filter((id) => previousSet.has(id)).length : undefined;
-    const newEntryCount = previous ? currentIds.length - (overlapCount || 0) : currentIds.length;
-    const gapDetected = Boolean(previous && previousIds.length > 0 && currentIds.length > 0 && overlapCount === 0);
+    const previousKeys = jsonStringArray(previous?.previous_entry_ids);
+    const currentKeys = [...new Set(batch.releases.map(feedEntryKey))];
+    const previousSet = new Set(previousKeys);
+    // Entries stored before the keys included the update time are compared by topic, once.
+    const legacyIds = new Set(previousKeys.filter((key) => !key.includes("@")));
+    // An entry listed with the same update time in both fetches proves the new window reaches back into
+    // the previous one. A topic updated again moves to the top with a new time, so it proves nothing.
+    const overlapCount = previous
+      ? currentKeys.filter((key) => previousSet.has(key) || legacyIds.has(feedEntryId(key))).length
+      : undefined;
+    const newEntryCount = previous ? currentKeys.length - (overlapCount || 0) : currentKeys.length;
+    const gapDetected = Boolean(previous && previousKeys.length > 0 && currentKeys.length > 0 && overlapCount === 0);
     const timestamps = batch.releases
       .map((release) => release.publishedAt)
       .filter((value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)))
@@ -96,6 +105,9 @@ export function ingestRollingFeedBatch(
       || (gapDetected ? previous?.fetched_at : undefined)
       || undefined;
     const lastGapAt = gapDetected ? fetchedAt : previous?.last_gap_at || undefined;
+    const continuousSince = !previous || gapDetected || !previous.continuous_since
+      ? oldestEntryAt
+      : previous.continuous_since;
     const coverageStatus: RollingFeedResult["coverageStatus"] = unresolvedGapSince
       ? "gap"
       : previous
@@ -108,8 +120,8 @@ export function ingestRollingFeedBatch(
         tracker_key, fetched_at, entry_count, oldest_entry_at, newest_entry_at,
         previous_entry_ids, overlap_count, new_entry_count, coverage_minutes,
         coverage_status, last_continuous_at, unresolved_gap_since, last_gap_at,
-        recovered_at, last_recovery_attempt_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        recovered_at, last_recovery_attempt_at, continuous_since
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tracker_key) DO UPDATE SET
         fetched_at = excluded.fetched_at,
         entry_count = excluded.entry_count,
@@ -124,14 +136,15 @@ export function ingestRollingFeedBatch(
         unresolved_gap_since = excluded.unresolved_gap_since,
         last_gap_at = excluded.last_gap_at,
         recovered_at = excluded.recovered_at,
-        last_recovery_attempt_at = excluded.last_recovery_attempt_at
+        last_recovery_attempt_at = excluded.last_recovery_attempt_at,
+        continuous_since = excluded.continuous_since
     `).run(
       trackerKey,
       fetchedAt,
-      currentIds.length,
+      currentKeys.length,
       oldestEntryAt || null,
       newestEntryAt || null,
-      JSON.stringify(currentIds),
+      JSON.stringify(currentKeys),
       overlapCount ?? null,
       newEntryCount,
       coverageMinutes ?? null,
@@ -141,6 +154,7 @@ export function ingestRollingFeedBatch(
       lastGapAt || null,
       previous?.recovered_at || null,
       previous?.last_recovery_attempt_at || null,
+      continuousSince || null,
     );
     pruneReleaseBuffer(db, fetchedAt);
     const bufferedCount = Number((db.prepare(`
@@ -149,7 +163,7 @@ export function ingestRollingFeedBatch(
     return {
       trackerKey,
       fetchedAt,
-      entryCount: currentIds.length,
+      entryCount: currentKeys.length,
       overlapCount,
       newEntryCount,
       oldestEntryAt,
@@ -159,6 +173,7 @@ export function ingestRollingFeedBatch(
       gapDetected,
       unresolvedGapSince,
       lastGapAt,
+      continuousSince,
       bufferedCount,
     };
   })();
@@ -309,6 +324,14 @@ function feedStateRow(db: SqliteDatabase, trackerKey: TrackerKey): FeedStateRow 
 function pruneReleaseBuffer(db: SqliteDatabase, now: string): void {
   const cutoff = new Date(Date.parse(now) - BUFFER_RETENTION_DAYS * 24 * 60 * 60 * 1_000).toISOString();
   db.prepare("DELETE FROM tracker_release_buffer WHERE last_seen_at < ?").run(cutoff);
+}
+
+function feedEntryKey(release: Release): string {
+  return `${release.externalId}@${release.publishedAt || ""}`;
+}
+
+function feedEntryId(key: string): string {
+  return key.slice(0, key.lastIndexOf("@"));
 }
 
 function durationMinutes(oldest: string | undefined, newest: string | undefined): number | undefined {

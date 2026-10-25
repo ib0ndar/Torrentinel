@@ -108,6 +108,7 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
       last_error TEXT,
       current_fingerprint TEXT,
       current_snapshot TEXT,
+      detail_verified_at TEXT,
       manual_unread INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -203,7 +204,8 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
       unresolved_gap_since TEXT,
       last_gap_at TEXT,
       recovered_at TEXT,
-      last_recovery_attempt_at TEXT
+      last_recovery_attempt_at TEXT,
+      continuous_since TEXT
     );
 
     CREATE TABLE IF NOT EXISTS scheduler_runs (
@@ -389,6 +391,18 @@ function migrate(db: SqliteDatabase): void {
   // When this rule last caught up on a feed coverage gap; see Scheduler.pollRules.
   if (!trackerStateColumns.some((column) => column.name === "gap_recovered_at")) {
     db.exec("ALTER TABLE subscription_tracker_state ADD COLUMN gap_recovered_at TEXT");
+  }
+
+  // From when the feed has been followed without a gap; direct checks rely on it (see feed-assist.ts).
+  const feedStateColumns = db.prepare("PRAGMA table_info(tracker_feed_state)")
+    .all() as Array<{ name: string }>;
+  if (!feedStateColumns.some((column) => column.name === "continuous_since")) {
+    db.exec("ALTER TABLE tracker_feed_state ADD COLUMN continuous_since TEXT");
+  }
+
+  // When the topic page of a direct subscription was last loaded; see feed-assist.ts.
+  if (!subscriptionColumns.some((column) => column.name === "detail_verified_at")) {
+    db.exec("ALTER TABLE subscriptions ADD COLUMN detail_verified_at TEXT");
   }
 
   const telegramDeliveryColumns = db.prepare("PRAGMA table_info(telegram_deliveries)")
