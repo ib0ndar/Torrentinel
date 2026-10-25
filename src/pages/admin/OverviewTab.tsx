@@ -16,7 +16,7 @@ export function OverviewTab({ status, intervalMinutes, intervalIndex, onInterval
   return <>
     <section className="admin-strip">
       <div>
-        <span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} />
+        <span className={`status-dot ${status?.running ? "status-dot--live" : status ? "status-dot--ok" : ""}`} />
         <span>
           <strong>{status?.running ? t("Poll in progress") : pollingCadence(intervalMinutes)}</strong>
           <small>{status?.lastFinishedAt ? t("Last completed {time}", { time: relativeTime(status.lastFinishedAt) }) : t("No completed poll yet")}</small>
@@ -32,13 +32,14 @@ export function OverviewTab({ status, intervalMinutes, intervalIndex, onInterval
     <section className="admin-schedule" aria-labelledby="poll-interval-heading">
       <div className="schedule-copy">
         <span className="schedule-icon"><Icon name="clock" /></span>
-        <span><strong id="poll-interval-heading">{t("Polling interval")}</strong><small>{t("One schedule for every user and tracker")}</small></span>
+        <span><strong id="poll-interval-heading">{t("Polling interval")}</strong>
+          <span className="interval-readout">
+            <strong>{formatPollInterval(selectedInterval)}</strong>
+            <small>{intervalChanged ? t("Currently {interval}", { interval: formatPollInterval(intervalMinutes) }) : t("Active schedule")}</small>
+          </span>
+          <small>{t("One schedule for every user and tracker")}</small></span>
       </div>
       <div className="interval-control">
-        <div className="interval-readout">
-          <strong>{formatPollInterval(selectedInterval)}</strong>
-          <small>{intervalChanged ? t("Currently {interval}", { interval: formatPollInterval(intervalMinutes) }) : t("Active schedule")}</small>
-        </div>
         <input className="interval-slider" type="range" min={0} max={POLL_INTERVAL_OPTIONS.length - 1} step={1} value={intervalIndex} aria-label={t("Polling interval")} aria-valuetext={formatPollInterval(selectedInterval)}
           style={{ "--interval-progress": `${intervalProgress}%` } as CSSProperties} onChange={(event) => onIntervalIndexChange(Number(event.target.value))} />
         <div className="interval-scale" aria-hidden="true">

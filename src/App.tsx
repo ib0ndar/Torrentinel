@@ -150,7 +150,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   const shortcuts: MenuItem = { id: "shortcuts", label: t("Keyboard shortcuts"), icon: "keyboard", keyboardOnly: true, onSelect: showShortcuts };
   const versionTitle = APP_REVISION ? `Torrentinel v${APP_VERSION} · build ${APP_REVISION.slice(0, 7)}` : `Torrentinel v${APP_VERSION}`;
   const accountSummary = <div className="account-summary"><span className="avatar" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span><span><strong>{user.username}</strong><small>{t(user.isAdmin ? "Administrator" : "Member")}</small></span></div>;
-  const schedulerLine = (className: string) => <div className={className}><span className={`status-dot ${status?.running ? "status-dot--live" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>;
+  const schedulerLine = (className: string) => <div className={className}><span className={`status-dot ${status?.running ? "status-dot--live" : status ? "status-dot--ok" : ""}`} /><div><strong>{t(status?.running ? "Polling trackers" : "Monitor ready")}</strong><span>{status?.nextRunAt ? t("Next {time}", { time: relativeTime(status.nextRunAt) }) : intervalMinutes ? pollingCadence(intervalMinutes) : t("Loading schedule")}</span></div></div>;
   const page = route.name === "settings" ? <Settings user={user} onUserChange={setUser} notify={notify} tab={route.tab} navigate={navigate} accountFocusRequest={accountFocusRequest} onAccountFocused={() => setAccountFocusRequest(0)} />
     : route.name === "admin" ? <Admin notify={notify} tab={route.tab} diagnostics={route.diagnostics} pageSize={user.pageSize} navigate={navigate} />
     : route.name === "activity" ? <Activity key={route.filter} user={user} notify={notify} filter={route.filter} onFilterChange={(filter) => navigate(activityPath(filter))} collections={data.collections} onCollectionsChanged={loadCollections} onShowShortcuts={showShortcuts} />
@@ -159,7 +159,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   return <div className="app-shell">
     <aside className="app-nav">
       <div className="brand-lockup"><BrandMark size={28} scanning={checking} /><strong>Torrentinel</strong></div>
-      <nav><NavItem to={lastMonitorView ? monitorPath(lastMonitorView) : MONITOR_HOME} icon="monitor" label={t("Monitor")} active={monitorVisible} navigate={navigate} />
+      <nav><NavItem to={lastMonitorView ? monitorPath(lastMonitorView) : MONITOR_HOME} icon="monitor" label={t("Monitor")} active={monitorVisible} parent={monitorVisible && Boolean(data.selectedId)} navigate={navigate} />
         <NavItem to="/activity" icon="activity" label={t("Activity")} active={route.name === "activity"} navigate={navigate} badge={unreadTotal} /></nav>
       <CollectionsNavigation {...collectionNavigation} className="collection-navigation--desktop" />
       <nav className="secondary-nav"><NavItem to="/settings" icon="sliders" label={t("Settings")} active={route.name === "settings"} navigate={navigate} />{user.isAdmin && <NavItem to="/admin" icon="users" label={t("Administration")} active={route.name === "admin"} navigate={navigate} />}</nav>
@@ -191,9 +191,11 @@ function CollectionSwitcher({ current, ...navigation }: Omit<Parameters<typeof C
     {expanded && <CollectionsNavigation {...navigation} id={listId} className="collection-navigation--mobile collection-navigation--switcher" />}
   </div>;
 }
-function NavItem({ to, icon, label, active, navigate, badge = 0 }: { to: string; icon: IconName; label: string; active: boolean; navigate: Navigate; badge?: number }) {
+// A parent link (Monitor while a collection is open) is drawn quieter on the desktop rail, where the
+// selected collection below it already marks the current page.
+function NavItem({ to, icon, label, active, parent = false, navigate, badge = 0 }: { to: string; icon: IconName; label: string; active: boolean; parent?: boolean; navigate: Navigate; badge?: number }) {
   const { t } = useI18n();
-  return <a href={to} aria-label={badge ? `${label}, ${t("{count} unread", { count: badge })}` : label} aria-current={active ? "page" : undefined} className={active ? "nav-link nav-link--active" : "nav-link"} onClick={(event) => { if (!isPlainClick(event)) return; event.preventDefault(); navigate(to); }}>
+  return <a href={to} aria-label={badge ? `${label}, ${t("{count} unread", { count: badge })}` : label} aria-current={active ? "page" : undefined} className={active ? `nav-link nav-link--active${parent ? " nav-link--parent" : ""}` : "nav-link"} onClick={(event) => { if (!isPlainClick(event)) return; event.preventDefault(); navigate(to); }}>
     <Icon name={icon} size={18} /><span>{label}</span>{badge > 0 && <span className="count-badge nav-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</span>}
   </a>;
 }

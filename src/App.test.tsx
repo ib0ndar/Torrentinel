@@ -278,6 +278,7 @@ it("opens the account menu, closes it with Escape or an outside click, and signs
     expect(document.activeElement).toBe(mobileItems[1]);
     expect(menu()!.parentElement!.textContent).toContain("admin");
     expect(menu()!.parentElement!.textContent).toContain("Monitor ready");
+    expect(menu()!.parentElement!.querySelector(".status-dot--ok")).not.toBeNull();
     await act(async () => document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
     expect(menu()).toBeNull();
 
@@ -444,6 +445,9 @@ it("opens Activity for / and unknown addresses when it is the start page, while 
     await act(async () => monitorLink().click());
     expect(currentUrl()).toBe("/collections/books");
     expect(heading()).toBe("Books");
+    // The open collection marks the page in the rail, so Monitor is drawn as its quieter parent.
+    expect(monitorLink().getAttribute("aria-current")).toBe("page");
+    expect(monitorLink().classList.contains("nav-link--parent")).toBe(true);
     expect(window.history.length).toBe(start + 1);
     await popState(() => window.history.back());
     expect(currentUrl()).toBe("/activity");

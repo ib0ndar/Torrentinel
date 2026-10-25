@@ -123,6 +123,39 @@ it("shows the last change with the last check as a tooltip, keeps the type icon 
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
+it("badges only the states worth a look and puts an error, not the tracker address, on the second line", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" };
+  const base = { collectionId: "inbox", requiredTerms: [] as string[], ignoredTerms: [] as string[], trackerKeys: ["rutor"] as TrackerKey[], enabled: true, initialized: true, isUnread: false, unreadCount: 0, eventCount: 0, matchCount: 0, lastChangedAt: null, lastCheckedAt: null, createdAt: "2026-09-30T00:00:00Z" };
+  const subscriptions: SubscriptionSummary[] = [
+    { ...base, id: "1", type: "direct", label: "Watched release", directUrl: "https://rutor.info/torrent/1" },
+    { ...base, id: "2", type: "direct", label: "Broken release", directUrl: "https://rutor.info/torrent/2", lastError: "Tracker answered HTTP 503" },
+    { ...base, id: "3", type: "rule", label: "Dune", requiredTerms: ["Dune"], ignoredTerms: ["Trailer"] },
+    { ...base, id: "4", type: "rule", label: "Paused rule", requiredTerms: ["Paused"], enabled: false },
+    { ...base, id: "5", type: "direct", label: "New release", directUrl: "https://rutor.info/torrent/5", initialized: false },
+  ];
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/collections") return { collections: [{ id: "inbox", name: "Inbox", subscriptionCount: 5, unreadCount: 0 }] };
+    return { subscriptions, total: 5, page: 1, pageCount: 1 };
+  });
+  const container = document.createElement("div"); document.body.append(container);
+  const root = createRoot(container), notify = vi.fn();
+  function Harness() {
+    const data = useWorkspaceData(notify, false, 20);
+    return <DialogProvider><Workspace user={user} onUserChange={vi.fn()} notify={notify} data={data} onNewCollection={() => undefined} /></DialogProvider>;
+  }
+  try {
+    await act(async () => root.render(<Harness />));
+    const rows = [...container.querySelectorAll(".subscription-row")];
+    expect(rows.map((row) => row.querySelector(".row-status .state")?.textContent ?? null)).toEqual([null, "Needs attention", null, "Paused", "Learning"]);
+    // Watching stays available to screen readers.
+    expect(rows[0].querySelector(".row-status .visually-hidden")?.textContent).toBe("Watching");
+    expect(rows.map((row) => row.querySelector(".subscription-main small")?.textContent ?? null)).toEqual([null, "Tracker answered HTTP 503", "Excludes Trailer", "Matches every required phrase", null]);
+    expect(rows[1].querySelector(".subscription-error")?.getAttribute("title")).toBe("Tracker answered HTTP 503");
+    expect(container.querySelector(".subscription-list")?.textContent).not.toContain("rutor.info");
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
 it("marks a collection read after confirming, from the header or the more-actions menu", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const user: User = { id: "user", username: "test", isAdmin: false, mustChangePassword: false, trackerMarkerStyle: "icons", language: "en", paginationEnabled: false, pageSize: 20, theme: "sentinel", startPage: "monitor" };

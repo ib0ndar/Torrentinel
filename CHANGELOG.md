@@ -22,10 +22,18 @@ All notable changes to Torrentinel are documented in this file.
 - The Monitor and the other pages share one page frame, so the title stays in the same place when switching between the Monitor and **Activity**, **Settings** or **Administration**.
 - Every Settings control reaches the same right edge instead of stopping at 520 px, 560 px or the full width depending on the section.
 - **Enable pagination** is a switch, like the mirror switches in **Administration**, and the start page and source marker choices use radio buttons drawn in the accent color.
+- The Monitor's **Status** column shows a badge only for **Needs attention**, **Learning** and **Paused**; the green **Watching** badge on every other row is gone (screen readers still announce it).
+- Unread rows on the Monitor and in **Activity** have an accent edge on the left. Read titles are grey at normal weight, and unread titles stay white and semibold.
+- A rule's required phrases are light filled tags instead of bordered boxes that looked like buttons.
+- A direct subscription no longer repeats its tracker address under the title. When a subscription needs attention, that line shows the reason in red, for rules as well.
+- In the sidebar, Monitor no longer gets a second highlight while a collection is open; the open collection carries it. The phone's bottom bar is unchanged.
+- The dot next to **Monitor ready** and the poll summary in **Administration › Overview** is green once the schedule is loaded, instead of grey, which looked like "offline". It still pulses while a poll runs.
+- In **Administration › Overview**, the selected polling interval sits under the **Polling interval** label instead of past the far end of the slider.
 
 ### Fixed
 
 - The switches in **Administration › Mirrors** can be reached and toggled with the keyboard; their checkbox was hidden from keyboard focus.
+- The Monitor's **Last change** column header fits on one line at window widths from 781 to 1240 px; it wrapped onto two.
 - Secondary text such as counts, timestamps and hints has at least 4.5:1 contrast in every theme. It was 3.1:1 in the default Sentinel theme and below 4.5:1 in Graphite, Frost, Nebula and Ember.
 - Primary buttons use darker gradients in the Sentinel, Graphite, Daylight, Nebula, Ember and Paper themes, so their white labels have at least 4.5:1 contrast across the whole button; it was as low as 1.7:1. Frost and High contrast are unchanged.
 - The letters of the Torrentinel wordmark on the sign-in page no longer touch. The large logo in the sign-in background is a plain hexagon in the theme's color, centered behind the mark and wordmark, without the visor that showed as a dark smudge behind the wordmark; it is no longer shown in the stacked layout on narrow screens, where it ran into the form.
