@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { Icon } from "../../components/Icon";
 import { PageNavigation } from "../../components/Pagination";
 import { ListSkeleton, TrackerTag } from "../../components/UI";
-import { deliveryMethodLabel, diagnosticStateClass, errorMessage, formatCoverageMinutes, formatDiagnosticDuration, relativeTime, webHref } from "../../format";
+import { deliveryMethodLabel, diagnosticLabel, diagnosticStateClass, errorMessage, formatCoverageMinutes, formatDiagnosticDuration, relativeTime, retentionNote, webHref } from "../../format";
 import { useTrackerName, useTrackers } from "../../hooks/useTrackers";
 import { translate, useI18n } from "../../i18n";
 import type { DiagnosticsView, DiagnosticsViewChange } from "../../routing";
@@ -40,12 +40,10 @@ function NotificationQueueSection({ revision, refresh, notify }: { revision: num
   return <section className="table-section diagnostic-section">
     <div className="section-heading"><div><h2>{t("Notification queue")}</h2><p>{t("Pending deliveries are persisted and retried automatically.")}</p></div></div>
     {!queue ? <ListSkeleton /> : !queue.length ? <div className="diagnostic-empty">{t("Queue is empty")}</div> : <div className="queue-table">{queue.map((row) => <div className="queue-row" key={row.id}>
-      <strong>{row.username}</strong>
-      <span className="queue-row__subscription" title={t("Subscription {id}", { id: row.subscriptionId })}>{subscriptionLabel(row.subscriptionId, row.subscriptionName)}</span>
-      <span>{t("Attempts")}: {row.attempts}</span>
-      <span>{t("Next attempt")}: {relativeTime(row.nextAttemptAt)}</span>
-      <span className={`state ${diagnosticStateClass(row.status)}`}>{t(row.status)}</span>
-      <small>{row.lastError}</small>
+      <span className="queue-row__who"><strong>{row.username}</strong><span className="queue-row__subscription" title={t("Subscription {id}", { id: row.subscriptionId })}>{subscriptionLabel(row.subscriptionId, row.subscriptionName)}</span></span>
+      <span className={`state ${diagnosticStateClass(row.status)}`}>{diagnosticLabel(row.status)}</span>
+      <small className="queue-row__meta">{t("Attempts")}: {row.attempts} · {t("Next attempt")}: {relativeTime(row.nextAttemptAt)}</small>
+      {row.lastError && <small className="queue-row__error">{row.lastError}</small>}
     </div>)}</div>}
   </section>;
 }
@@ -78,7 +76,7 @@ function TrackerLogsSection({ revision, refresh, notify, pageSize, onViewChange,
   </nav>;
   return <section className="table-section diagnostic-section">
     <div className="section-heading">
-      <div><h2>{t("Tracker logs")}</h2><p>{t("Safe polling observations for investigating tracker behavior. Records expire after 168 hours.")}</p></div>
+      <div><h2>{t("Tracker logs")}</h2><p>{t("Safe polling observations for investigating tracker behavior.")}{logs && ` ${retentionNote(logs.retentionHours)}`}</p></div>
       <div className="diagnostic-controls">
         <select aria-label={t("Filter logs by tracker")} value={tracker} onChange={(event) => onViewChange({ tracker: event.target.value as TrackerKey | "", page: 1 })}>
           <option value="">{t("All trackers")}</option>
@@ -86,7 +84,7 @@ function TrackerLogsSection({ revision, refresh, notify, pageSize, onViewChange,
         </select>
         <select aria-label={t("Filter logs by outcome")} value={outcome} onChange={(event) => onViewChange({ outcome: event.target.value, page: 1 })}>
           <option value="">{t("All outcomes")}</option>
-          {outcomes.map((value) => <option key={value} value={value}>{t(value)}</option>)}
+          {outcomes.map((value) => <option key={value} value={value}>{diagnosticLabel(value)}</option>)}
         </select>
         <button type="button" className="button button--quiet" onClick={onRefresh}><Icon name="refresh" />{t("Refresh")}</button>
       </div>
@@ -116,8 +114,8 @@ function ObservationRow({ row }: { row: TrackerObservation }) {
   return <div className="diagnostic-row">
     <span className="diagnostic-time" title={new Date(row.observedAt).toLocaleString(language)}>{relativeTime(row.observedAt)}</span>
     <span className="diagnostic-source"><TrackerTag tracker={row.trackerKey} /><span><strong>{trackerName(row.trackerKey)}</strong><small title={source}>{source}</small></span></span>
-    <span className="diagnostic-operation">{t(row.operation)}</span>
-    <span className="diagnostic-outcome"><span className={`state ${diagnosticStateClass(row.outcome)}`} title={t(row.outcome)}>{t(row.outcome)}</span></span>
+    <span className="diagnostic-operation">{diagnosticLabel(row.operation)}</span>
+    <span className="diagnostic-outcome"><span className={`state ${diagnosticStateClass(row.outcome)}`}>{diagnosticLabel(row.outcome)}</span></span>
     <span className="diagnostic-detail"><strong>{detail}</strong><small>{meta}</small>{url && <a href={url} target="_blank" rel="noreferrer">{url}</a>}</span>
     <span className="diagnostic-duration">{formatDiagnosticDuration(row.durationMs)}</span>
   </div>;
@@ -142,7 +140,7 @@ function TelegramDeliveriesSection({ revision, refresh, notify, pageSize, onView
     <PageNavigation page={deliveries.page} pageCount={deliveries.pageCount} total={deliveries.total} loading={loading} onPageChange={(value) => onViewChange({ deliveriesPage: value })} announce={announce} />
   </nav>;
   return <section className="table-section diagnostic-section">
-    <div className="section-heading"><div><h2>{t("Telegram deliveries")}</h2><p>{t("Delivery receipts and failures for subscription notifications. Records expire after 168 hours.")}</p></div></div>
+    <div className="section-heading"><div><h2>{t("Telegram deliveries")}</h2><p>{t("Delivery receipts and failures for subscription notifications.")}{deliveries && ` ${retentionNote(deliveries.retentionHours)}`}</p></div></div>
     {pages("Telegram delivery pages", "pagination--top")}
     {!deliveries ? <ListSkeleton /> : !deliveries.telegramDeliveries.length ? <div className="diagnostic-empty">{t("No Telegram notifications have been attempted during the retention window.")}</div> : <div className="diagnostic-table diagnostic-table--telegram">
       <div className="diagnostic-head telegram-delivery-grid"><span>{t("Sent")}</span><span>{t("Account")}</span><span>{t("Source")}</span><span>{t("Delivery")}</span><span>{t("Outcome")}</span><span>{t("Release")}</span><span>{t("Duration")}</span></div>
@@ -161,7 +159,7 @@ function DeliveryRow({ row }: { row: TelegramDelivery }) {
     <span className="diagnostic-detail"><strong>{row.username}</strong><small>{row.subscriptionId ? subscriptionLabel(row.subscriptionId, row.subscriptionName) : t("Account message")}</small></span>
     <span className="diagnostic-source">{row.trackerKey ? <><TrackerTag tracker={row.trackerKey} /><span><strong>{trackerName(row.trackerKey)}</strong><small>{row.externalId ? `ID ${row.externalId}` : t("Release")}</small></span></> : <span><strong>{t("System")}</strong><small>Telegram</small></span>}</span>
     <span className="diagnostic-operation">{deliveryMethodLabel(row.deliveryMethod)}</span>
-    <span className="diagnostic-outcome"><span className={`state ${diagnosticStateClass(row.outcome)}`} title={t(row.outcome)}>{t(row.outcome)}</span></span>
+    <span className="diagnostic-outcome"><span className={`state ${diagnosticStateClass(row.outcome)}`}>{diagnosticLabel(row.outcome)}</span></span>
     <span className="diagnostic-detail"><strong title={detail}>{detail}</strong><small title={note}>{note}</small></span>
     <span className="diagnostic-duration">{formatDiagnosticDuration(row.durationMs)}</span>
   </div>;

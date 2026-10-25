@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, jsonBody } from "../../api";
 import { useDialog } from "../../components/Dialogs";
-import { ListSkeleton, TrackerTag } from "../../components/UI";
+import { ListSkeleton, PasswordField, TrackerTag } from "../../components/UI";
 import { errorMessage } from "../../format";
 import { useI18n } from "../../i18n";
 import type { Notify, Tracker, TrackerKey } from "../../types";
@@ -76,10 +76,7 @@ function TrackerAccessRow({ tracker, edit, saving, onEdit, onDiscard, onSave, on
         <span>{t("Username")}</span>
         <input value={draft.username} onChange={(event) => onEdit({ username: event.target.value })} autoComplete="off" />
       </label>
-      <label className="settings-field">
-        <span>{t("Password")}</span>
-        <input type="password" value={draft.password} onChange={(event) => onEdit({ password: event.target.value })} placeholder={t(configured ? "Stored — type to replace" : "Password")} autoComplete="new-password" />
-      </label>
+      <PasswordField variant="settings" label={t("Password")} value={draft.password} onChange={(event) => onEdit({ password: event.target.value })} placeholder={t(configured ? "Stored — type to replace" : "Password")} autoComplete="new-password" />
     </div>
     <div className="integration-actions">
       <small role={mirrorRejected ? "alert" : undefined}>{mirrorRejected ? t("Personal mirrors must use {hosts} or the global mirror", { hosts: tracker.hosts.join(", ") })

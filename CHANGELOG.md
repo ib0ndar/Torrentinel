@@ -7,6 +7,9 @@ All notable changes to Torrentinel are documented in this file.
 ### Added
 
 - A button in the sign-in password field shows or hides the password.
+- Every other password and token field has the same show or hide button: **Settings › Account**, the password change after a reset or first sign-in, **New user**, **Reset password**, tracker logins and the Telegram bot token.
+- The browser tab names the current page and shows the unread count, for example “(3) Series 2026 · Torrentinel”.
+- `robots.txt` and an `X-Robots-Tag: noindex, nofollow` header keep an instance that is reachable from the internet out of search engines.
 
 ### Changed
 
@@ -29,11 +32,30 @@ All notable changes to Torrentinel are documented in this file.
 - In the sidebar, Monitor no longer gets a second highlight while a collection is open; the open collection carries it. The phone's bottom bar is unchanged.
 - The dot next to **Monitor ready** and the poll summary in **Administration › Overview** is green once the schedule is loaded, instead of grey, which looked like "offline". It still pulses while a poll runs.
 - In **Administration › Overview**, the selected polling interval sits under the **Polling interval** label instead of past the far end of the slider.
+- **Diagnostics** names outcomes, operations and queue states in words, such as **New matches**, **Temporarily unavailable** and **Rule search**, instead of identifiers such as `new-matches`, in English and Russian. Routine results such as **Unchanged** and **Delivered** have a grey badge, so changes and errors stand out, and the retention period reads “7 days” instead of “168 hours”.
+- On phones, **Diagnostics** shows each log entry and delivery as a card instead of a table that scrolls sideways. On wider screens the **Source** column has more room for subscription names, and each notification queue entry reads as one item: account and subscription, status, attempts and next attempt, then the last error.
+- Drawers explain themselves in a sentence below the title instead of a line of spaced capitals above it (**New collection**, **Edit collection**, **New user**). **Add subscription** names its collection above the title.
+- An empty collection shows only “No subscriptions yet”, without filters, search or column headings; **Add subscription** stays in the header. A search without results offers **Clear search**.
+- A subscription's page uses the Monitor's words for its state: **Watching**, **Learning**, **Paused** or **Needs attention**. The **State** row is gone, and the collection is shown as text and changed in **Edit**; moving a subscription there does not start a new baseline.
+- In a rule's matches, the tracker page icon follows the release title instead of standing beside the magnet and torrent file buttons.
+- The **Users** table marks only disabled accounts and pending password changes; active accounts have no badge.
+- In **Settings**, the **Account**, **Telegram bot** and **Tracker access** tabs name their section after its content: **Password**, **Bot and chat**, **Logins and mirrors**. **Preferences** says once, above its sections, that changes are saved automatically.
+- The **Settings** and **Administration** tab bars keep the active tab in view on narrow screens and fade the edge where more tabs are.
+- On phones, **Settings** and **Administration** no longer show the collection switcher at the top.
+- The password change after a reset or first sign-in has the sign-in page's language switch and the “At least 8 characters” hint, and its heading no longer ends with a period.
+- The **Administrator** choice in **New user** is a switch.
+- The web app manifest and the logo files use the sign-in tagline and the page description instead of “Always watching the swarm”.
 
 ### Fixed
 
 - The switches in **Administration › Mirrors** can be reached and toggled with the keyboard; their checkbox was hidden from keyboard focus.
 - The Monitor's **Last change** column header fits on one line at window widths from 781 to 1240 px; it wrapped onto two.
+- English counts use the singular for one: “1 subscription”, “1 release observed”, “1 new match”, “Page 1 of 1 · 1 entry”. Russian collection counts agree with the number: “1 подписка”, “2 подписки”, “5 подписок”.
+- All text has at least 4.5:1 contrast in every theme. Status badges, count badges, filter counts and tracker letter badges in Daylight, Paper and Frost were as low as 3.9:1, and so was the subscription count of the selected collection in several themes.
+- A subscription address that no longer exists shows one “Subscription not found” page with **Back to Monitor**, instead of an error box and an error notification at the same time.
+- The sign-in form no longer jumps up when an error appears.
+- The Monitor page has a main landmark for screen readers, like the other pages.
+- The version link in the sidebar has a 24 px target.
 - Secondary text such as counts, timestamps and hints has at least 4.5:1 contrast in every theme. It was 3.1:1 in the default Sentinel theme and below 4.5:1 in Graphite, Frost, Nebula and Ember.
 - Primary buttons use darker gradients in the Sentinel, Graphite, Daylight, Nebula, Ember and Paper themes, so their white labels have at least 4.5:1 contrast across the whole button; it was as low as 1.7:1. Frost and High contrast are unchanged.
 - The letters of the Torrentinel wordmark on the sign-in page no longer touch. The large logo in the sign-in background is a plain hexagon in the theme's color, centered behind the mark and wordmark, without the visor that showed as a dark smudge behind the wordmark; it is no longer shown in the stacked layout on narrow screens, where it ran into the form.

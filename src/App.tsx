@@ -20,6 +20,7 @@ import { Workspace } from "./pages/Workspace";
 import { SubscriptionInspector } from "./pages/SubscriptionInspector";
 import { errorMessage, pollingCadence, relativeTime } from "./format";
 import { setLanguage, useI18n } from "./i18n";
+import { useUnreadTitle } from "./pageTitle";
 import { activityPath, adminPath, collectionDefaultFilter, DEFAULT_MONITOR_VIEW, isPlainClick, MONITOR_HOME, monitorPath, type MonitorView, type Navigate, parseRoute, type Route, settingsPath, storeCollectionId, storedCollectionId } from "./routing";
 import { settingsTabForSection } from "./pages/settings/SettingsSection";
 import { applyTheme } from "./theme";
@@ -143,6 +144,7 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
   };
   // Same unit as the Activity unread view: unread changes plus standalone "Mark unread" reminders.
   const unreadTotal = data.collections.reduce((sum, collection) => sum + collection.activityCount, 0);
+  useUnreadTitle(unreadTotal);
   const loadCollections = useCallback(() => data.loadCollections().catch((error) => notify(errorMessage(error), "bad")), [data.loadCollections, notify]);
   async function logout() { try { await api("/api/auth/logout", { method: "POST" }); setUser(null); navigate("/", { replace: true }); } catch (error) { notify(errorMessage(error), "bad"); } }
   const signOut: MenuItem = { id: "sign-out", label: t("Sign out"), icon: "logout", onSelect: () => void logout() };
@@ -170,7 +172,8 @@ function AppShell({ user, setUser, notify, location, navigate }: { user: User; s
       <a className="app-version" href={RELEASE_URL} target="_blank" rel="noreferrer" title={versionTitle}>v{APP_VERSION}</a>
     </aside>
     <div className="app-stage">
-      {monitorVisible ? <CollectionsNavigation {...collectionNavigation} className="collection-navigation--mobile" /> : <CollectionSwitcher key={location.pathname} {...collectionNavigation} current={data.collections.find((collection) => collection.id === data.selectedId)} />}
+      {/* Phones: the Monitor shows its collection strip; Activity and subscription pages a collection switcher. Settings and Administration have nothing to do with collections. */}
+      {monitorVisible ? <CollectionsNavigation {...collectionNavigation} className="collection-navigation--mobile" /> : (route.name === "activity" || route.name === "subscription") && <CollectionSwitcher key={location.pathname} {...collectionNavigation} current={data.collections.find((collection) => collection.id === data.selectedId)} />}
       <CheckActivityContext.Provider value={trackCheck}>{page}</CheckActivityContext.Provider>
     </div>
     {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}

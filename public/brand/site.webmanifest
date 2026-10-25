@@ -1,7 +1,7 @@
 {
   "name": "Torrentinel",
   "short_name": "Torrentinel",
-  "description": "Always watching the swarm.",
+  "description": "Torrentinel monitors torrent tracker releases and sends private Telegram notifications.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B1020",

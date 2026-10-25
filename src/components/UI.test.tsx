@@ -17,7 +17,7 @@ it("portals drawers outside the animated stage and closes them with Escape", asy
   const stage = document.createElement("div"); stage.className = "app-stage"; document.body.append(stage);
   const root = createRoot(stage), close = vi.fn();
   try {
-    await act(async () => root.render(<Drawer title="Test" subtitle="Subtitle" onClose={close}><button>Save</button></Drawer>));
+    await act(async () => root.render(<Drawer title="Test" eyebrow="Subtitle" onClose={close}><button>Save</button></Drawer>));
     expect(stage.querySelector(".drawer-layer")).toBeNull(); expect(document.body.querySelector(".drawer-layer")?.parentElement).toBe(document.body);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); expect(close).toHaveBeenCalledOnce();
   } finally { await act(async () => root.unmount()); stage.remove(); }
@@ -26,7 +26,7 @@ it("portals drawers outside the animated stage and closes them with Escape", asy
 
 function Opener({ autoFocusField = false }: { autoFocusField?: boolean }) {
   const [open, setOpen] = useState(false);
-  return <><button className="opener" onClick={() => setOpen(true)}>Open</button>{open && <Drawer title="Details" subtitle="Test" onClose={() => setOpen(false)}>
+  return <><button className="opener" onClick={() => setOpen(true)}>Open</button>{open && <Drawer title="Details" eyebrow="Test" onClose={() => setOpen(false)}>
     <input aria-label="Name" autoFocus={autoFocusField} /><button className="last">Save</button>
   </Drawer>}</>;
 }
@@ -78,7 +78,7 @@ it("lets a dialog over a drawer own Tab and Escape, then hands both back to the 
   const container = document.createElement("div"); document.body.append(container);
   const root = createRoot(container), close = vi.fn();
   let dialog!: ReturnType<typeof useDialog>;
-  function Harness() { dialog = useDialog(); return <Drawer title="Details" subtitle="Test" onClose={close}><button className="delete">Delete</button></Drawer>; }
+  function Harness() { dialog = useDialog(); return <Drawer title="Details" eyebrow="Test" onClose={close}><button className="delete">Delete</button></Drawer>; }
   try {
     await act(async () => root.render(<DialogProvider><Harness /></DialogProvider>));
     await nextFrame();
@@ -110,7 +110,7 @@ function DrawerWithError() {
   const toasts = useToasts();
   return <>
     <button className="opener" onClick={() => toasts.notify("Save failed", "bad")}>Fail</button>
-    <Drawer title="Details" subtitle="Test" onClose={() => undefined}><button className="last">Save</button></Drawer>
+    <Drawer title="Details" eyebrow="Test" onClose={() => undefined}><button className="last">Save</button></Drawer>
     <ToastRegion toasts={toasts.toasts} onDismiss={toasts.dismiss} />
   </>;
 }

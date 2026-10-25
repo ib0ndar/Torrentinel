@@ -8,6 +8,7 @@ import { moveRowFocus, useKeyboardShortcuts } from "../hooks/useKeyboardShortcut
 import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { absoluteTime, errorMessage, relativeTime } from "../format";
 import { getLanguage, useI18n } from "../i18n";
+import { usePageTitle } from "../pageTitle";
 import type { ActivityFilter } from "../routing";
 import type { ActivityEvent, ActivityReminder, Collection, Notify, User } from "../types";
 import { SubscriptionInspector } from "./SubscriptionInspector";
@@ -19,6 +20,7 @@ export function Activity({ user, notify, filter, onFilterChange, collections, on
   user: User; notify: Notify; filter: ActivityFilter; onFilterChange: (filter: ActivityFilter) => void; collections: Collection[]; onCollectionsChanged: () => Promise<void>; onShowShortcuts?: () => void;
 }) {
   const { t } = useI18n(), dialog = useDialog();
+  usePageTitle(t("Activity"));
   const [events, setEvents] = useState<ActivityEvent[]>([]), [reminders, setReminders] = useState<ActivityReminder[]>([]), [total, setTotal] = useState(0), [loading, setLoading] = useState(true), [loadingMore, setLoadingMore] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const pages = useRef(1), request = useRef<AbortController | null>(null);

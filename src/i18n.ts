@@ -23,8 +23,8 @@ export const russian: Record<string, string> = {
   "This tracker does not support direct subscriptions": "Этот трекер не поддерживает подписки по ссылке",
   "Starting Torrentinel": "Запуск Torrentinel", "Private release monitor": "Личный монитор релизов",
   "Track change. Catch the release.": "Следите за изменениями. Не пропускайте релизы.", "Local access": "Локальный доступ",
-  "Sign in": "Войти", "Signing in…": "Вход…", "Username": "Имя пользователя", "Password": "Пароль", "Show password": "Показать пароль", "Hide password": "Скрыть пароль",
-  "First sign-in": "Первый вход", "Secure the admin account.": "Защитите учётную запись администратора.",
+  "Sign in": "Войти", "Signing in…": "Вход…", "Username": "Имя пользователя", "Password": "Пароль", "Show password": "Показать пароль", "Hide password": "Скрыть пароль", "Show token": "Показать токен", "Hide token": "Скрыть токен",
+  "First sign-in": "Первый вход", "Secure the admin account": "Защитите учётную запись администратора",
   "Replace the initial password with one of your own.": "Замените начальный пароль своим.",
   "Current password": "Текущий пароль", "New password": "Новый пароль", "Confirm new password": "Повторите новый пароль",
   "Save new password": "Сохранить новый пароль", "New passwords do not match": "Новые пароли не совпадают", "Password changed": "Пароль изменён",
@@ -51,14 +51,14 @@ export const russian: Record<string, string> = {
   "Filter this collection": "Поиск в коллекции", "Search": "Поиск", "Subscription": "Подписка", "Source": "Источник", "Last check": "Последняя проверка", "Status": "Статус",
   "Nothing matches this view": "Ничего не найдено", "No subscriptions yet": "Подписок пока нет", "Try a different status filter or search.": "Попробуйте другой фильтр или поисковый запрос.",
   "No unread subscriptions": "Непрочитанных подписок нет", "New changes in this collection will appear here.": "Здесь появятся новые изменения из этой коллекции.",
-  "No errors": "Ошибок нет", "No subscription in this collection needs attention.": "Ни одна подписка в этой коллекции не требует внимания.", "Show all": "Показать все",
+  "No errors": "Ошибок нет", "No subscription in this collection needs attention.": "Ни одна подписка в этой коллекции не требует внимания.", "Show all": "Показать все", "Clear search": "Очистить поиск", "Bot and chat": "Бот и чат", "Logins and mirrors": "Логины и зеркала", "Changes on this tab are saved automatically.": "Изменения на этой вкладке сохраняются автоматически.",
   "Add a direct tracker link or a rule to begin monitoring.": "Добавьте ссылку на трекер или правило для отслеживания.", "Create your first collection": "Создайте первую коллекцию",
   "Collections keep each user’s subscriptions separate and organized.": "Коллекции помогают организовать личные подписки каждого пользователя.",
   "Read": "Прочитано", "Unread — open to mark read": "Не прочитано — откройте, чтобы отметить прочитанным", "Excludes {terms}": "Исключает: {terms}",
   "Matches every required phrase": "Содержит все обязательные фразы", "Pending": "Ожидание", "Needs attention": "Требует внимания", "Paused": "Приостановлено", "Learning": "Создание базы", "Watching": "Отслеживается",
   "Collection created": "Коллекция создана", "Create an isolated place for related subscriptions.": "Создайте отдельную коллекцию для связанных подписок.", "Create collection": "Создать коллекцию",
   "Direct subscription added": "Подписка по ссылке добавлена", "Rule added and baseline scan started": "Правило добавлено, начата первоначальная проверка",
-  "New monitor in {name}": "Новая подписка в коллекции {name}", "Direct link": "Прямая ссылка", "Rule": "Правило", "Tracker page URL": "Адрес страницы трекера",
+  "Direct link": "Прямая ссылка", "Rule": "Правило", "Tracker page URL": "Адрес страницы трекера",
   "The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.": "Первая проверка создаёт базу сравнения. Последующие изменения названия, magnet-ссылки, торрент-файла и метаданных создают события.",
   "Trackers": "Трекеры", "gap recovery unavailable": "восстановление пропусков недоступно", "credentials missing": "нет данных для входа",
   "Required phrases": "Обязательные фразы", "Ignored phrases": "Исключаемые фразы", "Press Enter after each phrase. Every phrase must appear.": "Нажмите Enter после каждой фразы. Релиз должен содержать все фразы.",
@@ -106,10 +106,16 @@ export const russian: Record<string, string> = {
   "One schedule for every user and tracker": "Единое расписание для всех пользователей и трекеров", "Currently {interval}": "Сейчас: {interval}", "Active schedule": "Текущее расписание", "Applying…": "Применение…", "Apply interval": "Применить интервал",
   "Polling interval set to {interval}": "Интервал проверки: {interval}", "RuTracker feed coverage": "Покрытие ленты RuTracker", "entries": "записей", "seeded": "в базе", "new": "новых", "overlap": "пересечение", "window": "окно", "margin": "запас",
   "Available after the first RuTracker rule poll": "Доступно после первой проверки правил RuTracker", "Gap detected": "Обнаружен пропуск", "Recovered": "Восстановлено", "Baseline": "База сравнения", "Continuous": "Непрерывно",
-  "Tracker logs": "Журнал трекеров", "Safe polling observations for investigating tracker behavior. Records expire after 168 hours.": "Безопасные записи для диагностики трекеров. Хранятся 168 часов.", "Filter logs by tracker": "Фильтр журнала по трекеру", "Filter logs by outcome": "Фильтр журнала по результату",
+  "Tracker logs": "Журнал трекеров", "Safe polling observations for investigating tracker behavior.": "Безопасные записи для диагностики трекеров.", "Filter logs by tracker": "Фильтр журнала по трекеру", "Filter logs by outcome": "Фильтр журнала по результату",
   "All trackers": "Все трекеры", "All outcomes": "Все результаты", "Refresh": "Обновить", "No tracker observations match these filters.": "Нет записей по выбранным фильтрам.", "Observed": "Время", "Operation": "Операция", "Outcome": "Результат", "Details": "Подробности", "Duration": "Длительность",
   "Tracker request completed": "Запрос к трекеру завершён", "Rule evaluated: {terms}": "Проверено правило: {terms}", "{count} releases observed": "Получено релизов: {count}", "{count} matched": "Совпадений: {count}", "{count} new matches": "Новых совпадений: {count}",
-  "Telegram deliveries": "Доставка в Telegram", "Delivery receipts and failures for subscription notifications. Records expire after 168 hours.": "Результаты доставки уведомлений о подписках. Хранятся 168 часов.", "No Telegram notifications have been attempted during the retention window.": "За период хранения попыток доставки не было.",
+  "Telegram deliveries": "Доставка в Telegram", "Delivery receipts and failures for subscription notifications.": "Результаты доставки уведомлений о подписках.", "Records expire after {count} days.": "Срок хранения в днях: {count}.", "Records expire after {count} hours.": "Срок хранения в часах: {count}.",
+  "Feed check": "Проверка ленты", "Rule search": "Поиск по правилам", "Release details": "Подробности релиза", "Unchanged": "Без изменений", "Changed": "Изменено",
+  "New matches": "Новые совпадения", "Baseline saved": "База сохранена", "Baseline refreshed": "База обновлена", "Cover added": "Обложка добавлена", "Cover saved": "Обложка сохранена",
+  "Snapshot format updated": "Формат снимка обновлён", "Details added": "Подробности добавлены", "Replaced by a newer check": "Заменено новой проверкой", "Removed": "Удалено", "Error": "Ошибка",
+  "Not found": "Не найдено", "Blocked": "Заблокировано", "Login problem": "Проблема со входом", "Unreadable page": "Не удалось разобрать страницу", "Network error": "Ошибка сети",
+  "Not supported": "Не поддерживается", "Access check": "Проверка доступа", "Temporarily unavailable": "Временно недоступно", "Coverage gap": "Пропуск в ленте", "Skipped": "Пропущено",
+  "Delivered": "Доставлено", "Failed": "Не доставлено", "Waiting": "Ожидание", "Sending": "Отправка", "No Telegram notifications have been attempted during the retention window.": "За период хранения попыток доставки не было.",
   "Sent": "Отправлено", "Account": "Учётная запись", "Delivery": "Способ доставки", "General notification": "Общее уведомление", "Telegram message #{id}": "Сообщение Telegram №{id}", "No delivery receipt": "Нет подтверждения доставки", "Artwork fallback: {error} · {receipt}": "Резервная доставка обложки: {error} · {receipt}",
   "Account message": "Сообщение учётной записи", "System": "Система", "Subscription {id}": "Подписка {id}", "Notification queue": "Очередь уведомлений", "Pending deliveries are persisted and retried automatically.": "Неотправленные уведомления сохраняются и автоматически отправляются повторно.", "Queue is empty": "Очередь пуста", "Attempts": "Попытки", "Next attempt": "Следующая попытка",
   "Users": "Пользователи", "Collections and subscription data are isolated by account.": "Коллекции и подписки изолированы по учётным записям.", "User": "Пользователь", "Role": "Роль", "Subscriptions": "Подписки", "Created {time}": "Создан {time}", "Administrator": "Администратор", "Member": "Пользователь",
@@ -126,10 +132,10 @@ export const russian: Record<string, string> = {
   "Personal mirrors must use {hosts} or the global mirror": "Личное зеркало должно использовать {hosts} или общее зеркало",
   "An administrator reset your password. Sign in with the temporary password you were given.": "Администратор сбросил ваш пароль. Войдите с выданным временным паролем.",
   "Your password was changed in another session. Sign in with the new password.": "Пароль изменён в другом сеансе. Войдите с новым паролем.",
-  "An administrator disabled your account.": "Администратор отключил вашу учётную запись.", "Choose a new password to continue.": "Задайте новый пароль, чтобы продолжить.", "Choose a new password.": "Задайте новый пароль.", "Password reset": "Сброс пароля",
+  "An administrator disabled your account.": "Администратор отключил вашу учётную запись.", "Choose a new password to continue.": "Задайте новый пароль, чтобы продолжить.", "Choose a new password": "Задайте новый пароль", "Password reset": "Сброс пароля",
   "An administrator reset your password. Enter the temporary password you were given, then choose a new one to continue.": "Администратор сбросил ваш пароль. Введите выданный временный пароль и задайте новый, чтобы продолжить.",
   "Your account uses a temporary password. Enter it, then choose a new one to continue.": "Для вашей учётной записи задан временный пароль. Введите его и задайте новый, чтобы продолжить.", "Password change required": "Требуется сменить пароль", "Administrator access required": "Требуются права администратора",
-  "A collection with this name already exists": "Коллекция с таким названием уже существует", "Collection not found": "Коллекция не найдена", "Subscription not found": "Подписка не найдена", "Invalid request": "Некорректный запрос", "Internal server error": "Внутренняя ошибка сервера", "User not found": "Пользователь не найден", "Username already exists": "Имя пользователя уже занято",
+  "A collection with this name already exists": "Коллекция с таким названием уже существует", "Collection not found": "Коллекция не найдена", "Subscription not found": "Подписка не найдена", "It may have been deleted, or the link is incomplete.": "Возможно, её удалили или ссылка неполная.", "Back to Monitor": "Вернуться к монитору", "Invalid request": "Некорректный запрос", "Internal server error": "Внутренняя ошибка сервера", "User not found": "Пользователь не найден", "Username already exists": "Имя пользователя уже занято",
   "The URL does not belong to a supported tracker": "Адрес не принадлежит поддерживаемому трекеру", "Telegram bot is not configured": "Бот Telegram не настроен", "Both username and password are required to save tracker credentials": "Для сохранения данных входа нужны имя пользователя и пароль",
   "You cannot disable or demote your current account": "Нельзя отключить свою учётную запись или лишить её прав администратора",
   "direct": "по ссылке", "rule": "по правилу", "delivered": "доставлено", "failed": "ошибка", "skipped": "пропущено", "pending": "ожидание", "sending": "отправка", "baseline": "база сравнения", "unchanged": "без изменений", "new-matches": "новые совпадения", "continuous": "непрерывно", "coverage-gap": "пропуск", "recovered": "восстановлено", "enriched": "дополнено", "temporarily-unavailable": "временно недоступно",
@@ -161,6 +167,30 @@ export const russian: Record<string, string> = {
 
 // Language names are shown in their own language, so they are not translated.
 export const LANGUAGES: ReadonlyArray<{ id: Language; name: string }> = [{ id: "en", name: "English" }, { id: "ru", name: "Русский" }];
+
+// Messages with a count. The English plural is the message key; Intl.PluralRules picks the form for the
+// count (Russian "other", used only for fractions, takes the "many" form). Without Russian forms the plain
+// translation above is used, which already avoids agreement ("Получено релизов: {count}").
+type PluralForms = { count?: string; en: { one: string }; ru?: { one: string; few: string; many: string } };
+export const PLURALS: Record<string, PluralForms> = {
+  "{count} subscriptions": { en: { one: "{count} subscription" }, ru: { one: "{count} подписка", few: "{count} подписки", many: "{count} подписок" } },
+  "{count} releases observed": { en: { one: "{count} release observed" } },
+  "{count} new matches": { en: { one: "{count} new match" } },
+  "{count} feed entries seeded · overlap unavailable": { en: { one: "{count} feed entry seeded · overlap unavailable" } },
+  "{count} feed entries scanned": { en: { one: "{count} feed entry scanned" } },
+  "{count} entries were seeded as the initial sample. Overlap becomes available after the next poll.": {
+    en: { one: "{count} entry was seeded as the initial sample. Overlap becomes available after the next poll." },
+    ru: { one: "Начальная база содержит {count} запись. Пересечение будет доступно после следующей проверки.", few: "Начальная база содержит {count} записи. Пересечение будет доступно после следующей проверки.", many: "Начальная база содержит {count} записей. Пересечение будет доступно после следующей проверки." },
+  },
+  "{count} entries currently span {window}; the selected interval leaves a {margin}× margin.": {
+    en: { one: "{count} entry currently spans {window}; the selected interval leaves a {margin}× margin." },
+    ru: { one: "{count} запись охватывает {window}; выбранный интервал оставляет запас {margin}×.", few: "{count} записи охватывают {window}; выбранный интервал оставляет запас {margin}×.", many: "{count} записей охватывают {window}; выбранный интервал оставляет запас {margin}×." },
+  },
+  "Page {page} of {pages} · {total} entries": { count: "total", en: { one: "Page {page} of {pages} · {total} entry" } },
+  "Records expire after {count} days.": { en: { one: "Records expire after {count} day." }, ru: { one: "Хранятся {count} день.", few: "Хранятся {count} дня.", many: "Хранятся {count} дней." } },
+  "Records expire after {count} hours.": { en: { one: "Records expire after {count} hour." }, ru: { one: "Хранятся {count} час.", few: "Хранятся {count} часа.", many: "Хранятся {count} часов." } },
+};
+const PLURAL_RULES: Record<Language, Intl.PluralRules> = { en: new Intl.PluralRules("en"), ru: new Intl.PluralRules("ru") };
 export const LANGUAGE_STORAGE_KEY = "torrentinel-language";
 // Before sign-in: the language last used in this browser, else the first supported browser language, else English.
 export function preferredLanguage(stored: string | null, browserLanguages: readonly string[]): Language {
@@ -186,7 +216,13 @@ export function setLanguage(value: Language): void {
 }
 export function getLanguage(): Language { return language; }
 export function translate(message: string, values: Record<string, string | number> = {}): string {
-  const text = language === "ru" ? russian[message] ?? message : message;
+  let text = language === "ru" ? russian[message] ?? message : message;
+  const forms = PLURALS[message], count = forms && values[forms.count ?? "count"];
+  if (forms && typeof count === "number") {
+    const category = PLURAL_RULES[language].select(count);
+    if (language === "en") text = category === "one" ? forms.en.one : message;
+    else if (forms.ru) text = forms.ru[category === "one" || category === "few" ? category : "many"];
+  }
   return text.replace(/\{(\w+)\}/g, (match, key: string) => values[key] === undefined ? match : String(values[key]));
 }
 export function useI18n() {

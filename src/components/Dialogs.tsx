@@ -1,5 +1,6 @@
 import { createContext, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { PasswordField } from "./UI";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useI18n } from "../i18n";
 
@@ -85,7 +86,8 @@ function AppDialog({ request, onCancel, onAccept }: { request: DialogRequest; on
           <p className="app-dialog__eyebrow"><span />{request.eyebrow}</p>
           <h2 id={titleId}>{request.title}</h2>
           <p id={descriptionId} className="app-dialog__description">{request.description}</p>
-          {request.kind === "prompt" && <label className="app-dialog__field">
+          {request.kind === "prompt" && request.inputType === "password" ? <PasswordField variant="dialog" label={request.inputLabel} inputRef={inputRef} value={value} onChange={(event) => setValue(event.target.value)} autoComplete={request.autoComplete} minLength={request.minLength} maxLength={request.maxLength} required
+            hint={request.minLength ? t("At least {count} characters", { count: request.minLength }) : undefined} /> : request.kind === "prompt" && <label className="app-dialog__field">
             <span>{request.inputLabel}</span>
             <input ref={inputRef} type={request.inputType || "text"} value={value} onChange={(event) => setValue(event.target.value)} autoComplete={request.autoComplete} minLength={request.minLength} maxLength={request.maxLength} required />
             {request.minLength && <small>{t("At least {count} characters", { count: request.minLength })}</small>}

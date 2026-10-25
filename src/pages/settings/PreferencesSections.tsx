@@ -36,6 +36,7 @@ export function PreferencesSections({ user, onUserChange, notify, trackers }: { 
     catch (error) { notify(errorMessage(error), "bad"); } finally { setMarkerBusy(false); }
   }
   return <>
+    <p className="save-note save-note--tab"><Icon name="check" size={13} />{t("Changes on this tab are saved automatically.")}</p>
     <SettingsSection id="language">
       <div className="settings-control settings-control--preferences">
         <label className="settings-field">

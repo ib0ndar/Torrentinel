@@ -39,6 +39,7 @@ describe("authenticated API", () => {
       const login = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "admin", password: "admin" } });
       expect(login.statusCode).toBe(200);
       expect(login.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+      expect(login.headers["x-robots-tag"]).toBe("noindex, nofollow");
       const adminCookie = sessionCookie(login.headers["set-cookie"]!);
 
       const blockedAdmin = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: adminCookie } });

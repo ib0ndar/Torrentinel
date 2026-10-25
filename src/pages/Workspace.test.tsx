@@ -302,7 +302,10 @@ it("explains an empty Unread or Errors view and offers to show all, but keeps th
     const search = container.querySelector<HTMLInputElement>(".search-box input")!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "absent"); search.dispatchEvent(new Event("input", { bubbles: true })); });
     await act(async () => vi.advanceTimersByTime(300));
-    expect([empty()?.querySelector("h2")?.textContent, empty()?.querySelector("button")]).toEqual(["Nothing matches this view", null]);
+    expect([empty()?.querySelector("h2")?.textContent, empty()?.querySelector("button")?.textContent]).toEqual(["Nothing matches this view", "Clear search"]);
+    await act(async () => empty()!.querySelector<HTMLButtonElement>("button")!.click());
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(search.value).toBe("");
   } finally { await act(async () => root.unmount()); container.remove(); vi.useRealTimers(); }
 });
 

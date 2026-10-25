@@ -140,11 +140,12 @@ async function renderSettings(trackers: () => Tracker[] = () => [], extra: (path
 }
 
 it("links every Settings tab, shows only that tab's sections and states how each section saves", async () => {
-  const expected: Record<SettingsTab, string[][]> = {
-    account: [["account", "Account", "Save to apply"]],
-    preferences: [["language", "Language", "Saved automatically"], ["appearance", "Appearance", "Saved automatically"], ["start-page", "Start page", "Saved automatically"], ["pagination", "Pagination", "Saved automatically"], ["source-markers", "Source markers", "Saved automatically"]],
-    telegram: [["telegram-bot", "Telegram bot", "Save to apply"]],
-    trackers: [["tracker-access", "Tracker access", "Save to apply"]],
+  const expected: Record<SettingsTab, Array<Array<string | undefined>>> = {
+    account: [["account", "Password", "Save to apply"]],
+    // Preferences says once, above its sections, that every change is saved.
+    preferences: [["language", "Language", undefined], ["appearance", "Appearance", undefined], ["start-page", "Start page", undefined], ["pagination", "Pagination", undefined], ["source-markers", "Source markers", undefined]],
+    telegram: [["telegram-bot", "Bot and chat", "Save to apply"]],
+    trackers: [["tracker-access", "Logins and mirrors", "Save to apply"]],
   };
   const labels: Record<SettingsTab, string> = { account: "Account", preferences: "Preferences", telegram: "Telegram bot", trackers: "Tracker access" };
   for (const tab of SETTINGS_TABS) {
@@ -156,6 +157,7 @@ it("links every Settings tab, shows only that tab's sections and states how each
       const sections = [...container.querySelectorAll<HTMLElement>("section.settings-section")];
       expect(sections.map((section) => [section.id, section.querySelector("h2")?.textContent, section.querySelector(".save-note")?.textContent])).toEqual(expected[tab]);
       for (const section of sections) expect(section.getAttribute("aria-labelledby")).toBe(`${section.id}-heading`);
+      expect(container.querySelector(".save-note--tab")?.textContent).toBe(tab === "preferences" ? "Changes on this tab are saved automatically." : undefined);
       // The source marker previews show the trackers from the same list as Tracker access.
       if (tab === "preferences") expect([...container.querySelectorAll(".marker-preview")].map((preview) => [...preview.querySelectorAll(".tracker-tag")].map((tag) => tag.classList[2]))).toEqual([["tracker-tag--kinozal", "tracker-tag--rutracker"], ["tracker-tag--kinozal", "tracker-tag--rutracker"]]);
       await act(async () => links[(SETTINGS_TABS.indexOf(tab) + 1) % SETTINGS_TABS.length].click());
@@ -166,7 +168,7 @@ it("links every Settings tab, shows only that tab's sections and states how each
   try {
     await act(async () => setLanguage("ru"));
     expect([...container.querySelectorAll('nav[aria-label="Разделы настроек"] a')].map((link) => link.textContent)).toEqual(["Учётная запись", "Предпочтения", "Бот Telegram", "Доступ к трекерам"]);
-    expect(container.querySelector(".save-note")?.textContent).toBe("Сохраняется автоматически");
+    expect(container.querySelector(".save-note")?.textContent).toBe("Изменения на этой вкладке сохраняются автоматически.");
   } finally { await cleanup(); }
 });
 
@@ -225,7 +227,7 @@ it("enables tracker Save only for valid unsaved changes, discards them, and subm
     return undefined;
   }, "trackers");
   const row = (name: string) => container.querySelector<HTMLFormElement>(`form.tracker-settings-row[aria-label="${name}"]`)!;
-  const field = (name: string, label: string) => [...row(name).querySelectorAll("label")].find((element) => element.textContent?.startsWith(label))!.querySelector("input")!;
+  const field = (name: string, label: string) => [...row(name).querySelectorAll(".settings-field")].find((element) => element.textContent?.startsWith(label))!.querySelector("input")!;
   const save = (name: string) => row(name).querySelector<HTMLButtonElement>('button[type="submit"]')!;
   const discard = (name: string) => [...row(name).querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Discard");
   try {

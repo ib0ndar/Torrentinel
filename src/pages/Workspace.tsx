@@ -10,6 +10,7 @@ import { MenuButton, type MenuItem } from "../components/Menu";
 import { Drawer, DrawerActions, EmptyState, Field, FilterTabs, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, SubscriptionTypeIcon, TrackerTag } from "../components/UI";
 import { capitalize, errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
+import { usePageTitle } from "../pageTitle";
 import { MONITOR_FILTERS, type MonitorFilter, MONITOR_SORTS, type MonitorSort } from "../routing";
 import { SubscriptionInspector } from "./SubscriptionInspector";
 import type { Collection, Notify, SubscriptionSummary, TrackerKey, User } from "../types";
@@ -37,6 +38,7 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
   // Back/forward and collection links can change the search from outside the box.
   useEffect(() => { if (data.search !== sentSearch.current) { sentSearch.current = data.search; setSearch(data.search); } }, [data.search]);
   const selected = collections.find((collection) => collection.id === selectedId);
+  usePageTitle(selected?.name ?? t("Monitor"));
   useKeyboardShortcuts({ "?": onShowShortcuts, j: () => moveRowFocus(".subscription-open", 1), k: () => moveRowFocus(".subscription-open", -1),
     ...selected ? { "/": () => searchRef.current?.focus(), a: () => setCreateOpen(true) } : {} });
   async function deleteCollection() {
@@ -69,16 +71,19 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
   // Navigation is only useful with more than one page; the page size stays reachable below the list.
   const paged = user.paginationEnabled && pageCount > 1;
   const showAll = <button className="button button--quiet" onClick={() => setFilter("all")}>{t("Show all")}</button>;
+  const clearSearch = <button className="button button--quiet" onClick={() => { sentSearch.current = ""; setSearch(""); data.setSearch(""); }}>{t("Clear search")}</button>;
+  // An empty collection shows only the hint (the header keeps Add subscription), without filters or column headings.
   // An empty Unread or Errors view (often the one a collection opens with) is good news rather than a failed search.
-  const empty = !selected?.subscriptionCount ? { icon: "monitor", title: "No subscriptions yet", text: "Add a direct tracker link or a rule to begin monitoring.", action: <button className="button button--primary" onClick={() => setCreateOpen(true)}>{t("Add subscription")}</button> } as const
+  const hasSubscriptions = Boolean(selected?.subscriptionCount);
+  const empty = !hasSubscriptions ? { icon: "monitor", title: "No subscriptions yet", text: "Add a direct tracker link or a rule to begin monitoring.", action: undefined } as const
     : !data.search && filter === "unread" ? { icon: "check", title: "No unread subscriptions", text: "New changes in this collection will appear here.", action: showAll } as const
     : !data.search && filter === "errors" ? { icon: "check", title: "No errors", text: "No subscription in this collection needs attention.", action: showAll } as const
-    : { icon: "monitor", title: "Nothing matches this view", text: "Try a different status filter or search.", action: undefined } as const;
+    : { icon: "monitor", title: "Nothing matches this view", text: "Try a different status filter or search.", action: data.search ? clearSearch : filter !== "all" ? showAll : undefined } as const;
   return <div className="workspace">
-    <section className="subscription-pane">{selected ? <>
+    <main className="subscription-pane">{selected ? <>
       <header className="pane-header"><div><p className="eyebrow">{t("Collection")}</p><div className="pane-title"><h1>{selected.name}</h1><span className="collection-actions"><button className="icon-button header-action" aria-label={t("Edit collection")} title={t("Edit collection")} onClick={() => setEditOpen(true)}><Icon name="edit" /></button><button className="icon-button icon-button--danger header-action" aria-label={t("Delete collection")} title={t("Delete collection")} onClick={() => void deleteCollection()}><Icon name="trash" /></button></span></div></div><div className="header-actions">{unread && <button className="button button--quiet header-action header-read" onClick={() => void markCollectionRead()}><Icon name="check" size={16} />{t("Mark all read")}</button>}<button className="button button--primary" onClick={() => setCreateOpen(true)}><Icon name="plus" size={16} />{t("Add subscription")}</button>
         <MenuButton className="icon-button header-more" triggerLabel={t("Collection actions")} menuLabel={t("Collection actions")} items={collectionActions}><Icon name="more" /></MenuButton></div></header>
-      <div className="list-toolbar"><FilterTabs label={t("Filter subscriptions")} options={MONITOR_FILTERS.map((name) => ({ value: name, label: t(capitalize(name)), count: FILTER_COUNTS[name](selected), alert: name === "errors" }))} value={filter} onChange={setFilter} />
+      {hasSubscriptions ? <><div className="list-toolbar"><FilterTabs label={t("Filter subscriptions")} options={MONITOR_FILTERS.map((name) => ({ value: name, label: t(capitalize(name)), count: FILTER_COUNTS[name](selected), alert: name === "errors" }))} value={filter} onChange={setFilter} />
         <div className="list-toolbar__controls"><label className="sort-picker" title={t("Sort")}><Icon name="sort" size={15} /><select aria-label={t("Sort")} value={sort} onChange={(event) => setSort(event.target.value as MonitorSort)}>{MONITOR_SORTS.map((value) => <option key={value} value={value}>{t(SORT_LABELS[value])}</option>)}</select></label>
           <label className="search-box"><Icon name="search" size={16} /><input ref={searchRef} aria-label={t("Filter this collection")} placeholder={t("Search")} value={search} onChange={(event) => setSearch(event.target.value)} /></label></div></div>
       {paged && <nav className="pagination pagination--top" aria-label={t("Pagination")}>
@@ -87,12 +92,12 @@ export function Workspace({ user, onUserChange, notify, data, onNewCollection, o
       <div className="subscription-head"><span>{t("Subscription")}</span><span>{t("Source")}</span><span>{t("Last change")}</span><span>{t("Status")}</span></div>
       <div className="subscription-list" data-focus-list>{loading ? <ListSkeleton /> : subscriptions.map((item, index) => <SubscriptionRow key={item.id} item={item} index={index} onOpen={() => setSelectedSubscription(item.id)} />)}
         {!loading && subscriptions.length === 0 && <EmptyState icon={empty.icon} title={t(empty.title)} text={t(empty.text)} action={empty.action} />}
-      </div>
+      </div></> : <EmptyState icon={empty.icon} title={t(empty.title)} text={t(empty.text)} />}
       {user.paginationEnabled && total > 0 && <nav className="pagination pagination--bottom" aria-label={t("Bottom pagination")}>
         <label className="pagination-size-picker"><span>{t("Entries per page")}</span><select value={user.pageSize} disabled={savingSize} onChange={(event) => void changeSize(Number(event.target.value))}>{PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}</select></label>
         {paged && <PageNavigation page={page} pageCount={pageCount} total={total} loading={loading} onPageChange={setPage} announce={false} />}
       </nav>}
-    </> : !collectionsLoaded || collections.length ? <ListSkeleton /> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={onNewCollection}>{t("New collection")}</button>} />}</section>
+    </> : !collectionsLoaded || collections.length ? <ListSkeleton /> : <EmptyState icon="folder" title={t("Create your first collection")} text={t("Collections keep each user’s subscriptions separate and organized.")} action={<button className="button button--primary" onClick={onNewCollection}>{t("New collection")}</button>} />}</main>
     {createOpen && selected && <CreateSubscription collection={selected} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); setPage(1); await refresh(); }} notify={notify} />}
     {editOpen && selected && <CollectionEditor collection={selected} onClose={() => setEditOpen(false)} onSaved={async () => { await loadCollections(); setEditOpen(false); }} notify={notify} />}
     {selectedSubscription && <SubscriptionInspector key={selectedSubscription} id={selectedSubscription} collections={collections} onClose={() => setSelectedSubscription(null)} onChanged={refresh} notify={notify} />}
@@ -127,7 +132,7 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
     try { await api("/api/subscriptions", { method: "POST", ...jsonBody(payload) }); await onCreated(); notify(t(type === "direct" ? "Direct subscription added" : "Rule added and baseline scan started")); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
-  return <Drawer title={t("Add subscription")} subtitle={t("New monitor in {name}", { name: collection.name })} onClose={onClose} wide><div className="segmented"><button className={type === "direct" ? "active" : ""} aria-pressed={type === "direct"} onClick={() => setType("direct")} type="button"><Icon name="link" />{t("Direct link")}</button><button className={type === "rule" ? "active" : ""} aria-pressed={type === "rule"} onClick={() => setType("rule")} type="button"><Icon name="rule" />{t("Rule")}</button></div><form onSubmit={submit}>{type === "direct" ? <>
+  return <Drawer title={t("Add subscription")} eyebrow={collection.name} onClose={onClose} wide><div className="segmented"><button className={type === "direct" ? "active" : ""} aria-pressed={type === "direct"} onClick={() => setType("direct")} type="button"><Icon name="link" />{t("Direct link")}</button><button className={type === "rule" ? "active" : ""} aria-pressed={type === "rule"} onClick={() => setType("rule")} type="button"><Icon name="rule" />{t("Rule")}</button></div><form onSubmit={submit}>{type === "direct" ? <>
     <Field label={t("Tracker page URL")} hint={directSources}><input type="url" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} autoFocus required /></Field><InfoLine icon="clock">{t("The initial check creates a baseline. Later title, magnet, torrent-file, and metadata changes create events.")}</InfoLine>
   </> : <>
     <Field label={t("Trackers")}><div className="tracker-picker">{ruleTrackers.map((tracker) => <label key={tracker.key} className={selectedTrackers.includes(tracker.key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={selectedTrackers.includes(tracker.key)} onChange={() => toggleTracker(tracker.key)} /><TrackerTag tracker={tracker.key} /><span>{tracker.displayName}</span>{!tracker.credentialsConfigured && tracker.capabilities.authentication !== "none" && <small>{t(tracker.capabilities.ruleDiscovery === "feed" ? "gap recovery unavailable" : "credentials missing")}</small>}</label>)}</div></Field>

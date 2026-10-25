@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { getLanguage, LANGUAGE_STORAGE_KEY, preferredLanguage, russian, setLanguage, translate } from "./i18n";
+import { getLanguage, LANGUAGE_STORAGE_KEY, PLURALS, preferredLanguage, russian, setLanguage, translate } from "./i18n";
 import { formatPollInterval, relativeTime } from "./format";
 
 afterEach(() => setLanguage("en"));
@@ -22,5 +22,21 @@ describe("English and Russian localization", () => {
   it("maintains interpolation placeholders in every translation", () => {
     const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
     for (const [key, value] of Object.entries(russian)) { expect(value.trim(), key).not.toBe(""); expect(placeholders(value), key).toEqual(placeholders(key)); }
+  });
+  it("chooses singular and plural forms by count", () => {
+    expect(translate("{count} subscriptions", { count: 1 })).toBe("1 subscription"); expect(translate("{count} subscriptions", { count: 0 })).toBe("0 subscriptions");
+    expect(translate("{count} releases observed", { count: 1 })).toBe("1 release observed"); expect(translate("{count} new matches", { count: 21 })).toBe("21 new matches");
+    expect(translate("Page {page} of {pages} · {total} entries", { page: 1, pages: 1, total: 1 })).toBe("Page 1 of 1 · 1 entry");
+    setLanguage("ru");
+    expect([1, 2, 5, 11, 21, 22, 25].map((count) => translate("{count} subscriptions", { count }))).toEqual(["1 подписка", "2 подписки", "5 подписок", "11 подписок", "21 подписка", "22 подписки", "25 подписок"]);
+    // Without Russian forms the plain translation already avoids agreement.
+    expect(translate("{count} releases observed", { count: 1 })).toBe("Получено релизов: 1");
+  });
+  it("keeps the placeholders of every plural form and translates every plural message", () => {
+    const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+    for (const [key, forms] of Object.entries(PLURALS)) {
+      expect(russian[key], key).toBeTruthy();
+      for (const form of [forms.en.one, ...Object.values(forms.ru ?? {})]) expect(placeholders(form), form).toEqual(placeholders(key));
+    }
   });
 });

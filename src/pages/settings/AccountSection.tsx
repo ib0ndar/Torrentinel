@@ -1,6 +1,7 @@
 import { type FormEvent, type Ref, useEffect, useRef, useState } from "react";
 import { api, jsonBody } from "../../api";
 import { Icon } from "../../components/Icon";
+import { PasswordField } from "../../components/UI";
 import { errorMessage } from "../../format";
 import { useI18n } from "../../i18n";
 import type { Notify, User } from "../../types";
@@ -37,11 +38,8 @@ function AccountForm({ user, notify, focusRequest, onFocused }: { user: User; no
     } catch (failure) { setError(errorMessage(failure)); } finally { setBusy(false); }
   }
   const field = (label: string, value: string, change: (value: string) => void, autoComplete: string, ref?: Ref<HTMLInputElement>) =>
-    <label className="settings-field">
-      <span>{label}</span>
-      <input ref={ref} type="password" value={value} onChange={(event) => { change(event.target.value); setError(""); }} autoComplete={autoComplete} required maxLength={500}
-        aria-invalid={error ? true : undefined} aria-describedby={error ? "account-error" : undefined} />
-    </label>;
+    <PasswordField variant="settings" label={label} inputRef={ref} value={value} onChange={(event) => { change(event.target.value); setError(""); }} autoComplete={autoComplete} required maxLength={500}
+      aria-invalid={error ? true : undefined} aria-describedby={error ? "account-error" : undefined} />;
   return <form className="settings-control account-form" onSubmit={(event) => void submit(event)} noValidate>
     <input type="text" name="username" autoComplete="username" value={user.username} readOnly hidden />
     {field(t("Current password"), currentPassword, setCurrentPassword, "current-password", currentRef)}

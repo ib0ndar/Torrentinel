@@ -46,7 +46,7 @@ export function CollectionEditor({ collection, onClose, onSaved, notify }: { col
       else { const result = await api<{ collection: Collection }>("/api/collections", { method: "POST", ...jsonBody({ name: name.trim(), defaultFilter }) }); await onSaved(result.collection); notify(t("Collection created")); }
     } catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
-  return <Drawer title={t(collection ? "Edit collection" : "New collection")} subtitle={t(collection ? "Rename the collection or choose the view it opens with." : "Create an isolated place for related subscriptions.")} onClose={onClose}><form onSubmit={submit}>
+  return <Drawer title={t(collection ? "Edit collection" : "New collection")} description={t(collection ? "Rename the collection or choose the view it opens with." : "Create an isolated place for related subscriptions.")} onClose={onClose}><form onSubmit={submit}>
     <Field label={t("Collection name")}><input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} autoFocus required /></Field>
     <fieldset className="choice-field">
       <legend>{t("Default view")}</legend>

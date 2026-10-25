@@ -31,7 +31,8 @@ it("shows a persistent error for missing or inaccessible subscriptions instead o
   try {
     await act(async () => root.render(<DialogProvider><SubscriptionInspector id="missing /?#" collections={[]} onClose={onClose} onChanged={vi.fn()} notify={vi.fn()} standalone monitorHref="/collections/films?filter=unread" collectionHref={(id) => `/collections/${id}`} navigate={navigate} /></DialogProvider>));
     expect(api).toHaveBeenCalledWith("/api/subscriptions/missing%20%2F%3F%23/open", expect.objectContaining({ method: "POST" }));
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Subscription not found");
+    // A missing subscription says so once, in the page itself (no notification), with a way back.
+    expect([container.querySelector("h1")?.textContent, container.querySelector(".page-header p")?.textContent]).toEqual(["Subscription not found", "It may have been deleted, or the link is incomplete."]);
     expect(container.querySelector(".skeleton")).toBeNull();
     expect(document.querySelector(".drawer")).toBeNull();
     // Without a subscription there is no collection to name; the breadcrumb still leads back to the Monitor view.
@@ -39,6 +40,12 @@ it("shows a persistent error for missing or inaccessible subscriptions instead o
     expect(crumbs.map((crumb) => [crumb.textContent, crumb.getAttribute("href")])).toEqual([["Monitor", "/collections/films?filter=unread"]]);
     await act(async () => crumbs[0].click());
     expect(navigate).toHaveBeenCalledWith("/collections/films?filter=unread"); expect(onClose).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLButtonElement>(".missing-actions button")!.click());
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Other failures keep the message in an alert.
+    vi.mocked(api).mockRejectedValue(new ApiError("Not allowed", 403));
+    await act(async () => root.render(<DialogProvider><SubscriptionInspector key="other" id="other" collections={[]} onClose={onClose} onChanged={vi.fn()} notify={vi.fn()} standalone /></DialogProvider>));
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Not allowed");
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 

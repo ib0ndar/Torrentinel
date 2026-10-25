@@ -3,11 +3,12 @@ import { api, jsonBody } from "../api";
 import { useDialog } from "../components/Dialogs";
 import { CheckActivityContext } from "../components/contexts";
 import { Icon } from "../components/Icon";
-import { Page } from "../components/UI";
+import { Page, PageTabs } from "../components/UI";
 import { errorMessage, formatPollInterval, nearestPollIntervalIndex, POLL_INTERVAL_OPTIONS } from "../format";
 import { useTrackers } from "../hooks/useTrackers";
 import { useI18n } from "../i18n";
-import { ADMIN_TABS, adminPath, type AdminTab, type DiagnosticsView, isPlainClick, type Navigate } from "../routing";
+import { usePageTitle } from "../pageTitle";
+import { ADMIN_TABS, adminPath, type AdminTab, type DiagnosticsView, type Navigate } from "../routing";
 import type { AdminMirror, AdminUser, DiscoveryHealth, Notify, SchedulerStatus } from "../types";
 import { DiagnosticsTab } from "./admin/DiagnosticsTab";
 import { MirrorsTab } from "./admin/MirrorsTab";
@@ -20,6 +21,7 @@ type SystemStatus = { scheduler: SchedulerStatus; intervalMinutes: number; disco
 // One load serves every tab, so switching tabs keeps the data and an unapplied polling interval.
 export function Admin({ notify, tab, diagnostics, pageSize, navigate }: { notify: Notify; tab: AdminTab; diagnostics: DiagnosticsView; pageSize: number; navigate: Navigate }) {
   const { t } = useI18n();
+  usePageTitle(t("Administration"));
   const dialog = useDialog(), trackCheck = useContext(CheckActivityContext), { reload: reloadTrackers } = useTrackers();
   const [users, setUsers] = useState<AdminUser[]>([]), [mirrors, setMirrors] = useState<AdminMirror[]>([]), [status, setStatus] = useState<SchedulerStatus | null>(null), [discoveryHealth, setDiscoveryHealth] = useState<DiscoveryHealth[]>([]);
   const [intervalMinutes, setIntervalMinutes] = useState(60), [intervalIndex, setIntervalIndex] = useState(nearestPollIntervalIndex(60));
@@ -61,10 +63,7 @@ export function Admin({ notify, tab, diagnostics, pageSize, navigate }: { notify
     } catch (error) { notify(errorMessage(error), "bad"); } finally { setSavingInterval(false); }
   }
   // Sections are separate addresses, so the tab bar is navigation (links), not an ARIA tablist.
-  const tabs = <nav className="page-tabs" aria-label={t("Administration sections")}>{ADMIN_TABS.map((name) => {
-    const href = adminPath(name);
-    return <a key={name} href={href} aria-current={tab === name ? "page" : undefined} className={tab === name ? "page-tab page-tab--active" : "page-tab"} onClick={(event) => { if (!isPlainClick(event)) return; event.preventDefault(); navigate(href); }}>{t(TAB_LABELS[name])}</a>;
-  })}</nav>;
+  const tabs = <PageTabs label={t("Administration sections")} tabs={ADMIN_TABS} active={tab} hrefFor={adminPath} labelFor={(name) => t(TAB_LABELS[name])} navigate={navigate} />;
   return <Page title={t("Administration")} eyebrow={t("Local service")} description={t("Manage users, tracker access, polling, and diagnostic history.")} navigation={tabs}
     actions={tab === "users" ? <button className="button button--primary" onClick={() => setCreateUser(true)}><Icon name="plus" />{t("New user")}</button> : undefined}>
     {tab === "overview" && <OverviewTab status={status} intervalMinutes={intervalMinutes} intervalIndex={intervalIndex} onIntervalIndexChange={setIntervalIndex} discoveryHealth={discoveryHealth}

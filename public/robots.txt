@@ -1,0 +1,3 @@
+# Torrentinel is a private service: keep every page out of search engines.
+User-agent: *
+Disallow: /

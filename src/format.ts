@@ -39,11 +39,30 @@ export function formatCoverageMinutes(minutes: number): string {
   const hours = Math.floor(minutes / 60), remainder = Math.round(minutes % 60);
   return remainder ? t("{hours}h {minutes}m", { hours, minutes: remainder }) : t("{hours}h", { hours });
 }
+// Diagnostics stores outcomes, operations and queue states as identifiers. Routine results get a neutral badge,
+// so only changes, errors and waiting stand out.
 export function diagnosticStateClass(outcome: string): string {
   if (["error", "failed", "missing", "blocked", "auth", "parse", "network", "unsupported", "coverage-gap"].includes(outcome)) return "state--error";
   if (["changed", "new-matches"].includes(outcome)) return "state--changed";
   if (["skipped", "temporarily-unavailable", "challenge", "pending", "sending"].includes(outcome)) return "state--pending";
-  return "state--good";
+  return "";
+}
+const DIAGNOSTIC_LABELS: Record<string, string> = {
+  direct: "Direct link", "feed-poll": "Feed check", "rule-discovery": "Rule search", "rule-enrichment": "Release details",
+  unchanged: "Unchanged", changed: "Changed", "new-matches": "New matches", baseline: "Baseline saved", rebaseline: "Baseline refreshed", "cover-backfill": "Cover added",
+  "cover-baseline": "Cover saved", "schema-upgrade": "Snapshot format updated", enriched: "Details added", superseded: "Replaced by a newer check", removed: "Removed",
+  error: "Error", missing: "Not found", blocked: "Blocked", auth: "Login problem", parse: "Unreadable page", network: "Network error", unsupported: "Not supported",
+  challenge: "Access check", "temporarily-unavailable": "Temporarily unavailable", "coverage-gap": "Coverage gap",
+  skipped: "Skipped", delivered: "Delivered", failed: "Failed", pending: "Waiting", sending: "Sending",
+};
+/** A readable label for a diagnostics identifier; unknown identifiers are shown in sentence case. */
+export function diagnosticLabel(value: string): string {
+  const label = DIAGNOSTIC_LABELS[value];
+  return label ? t(label) : value ? capitalize(value.replaceAll("-", " ")) : value;
+}
+/** "Records expire after 7 days." from the server's retention in hours. */
+export function retentionNote(hours: number): string {
+  return hours % 24 === 0 ? t("Records expire after {count} days.", { count: hours / 24 }) : t("Records expire after {count} hours.", { count: hours });
 }
 export function deliveryMethodLabel(method: string): string { return t(method === "photo-url" ? "Photo by URL" : method === "photo-upload" ? "Uploaded photo" : method === "photo-cache" ? "Cached photo" : method === "none" ? "Not attempted" : "Text"); }
 export function formatDiagnosticDuration(durationMs: number): string { return durationMs < 1_000 ? `${durationMs} ms` : `${(durationMs / 1_000).toFixed(durationMs < 10_000 ? 1 : 0)} s`; }

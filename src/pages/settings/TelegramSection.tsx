@@ -2,7 +2,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { api, jsonBody } from "../../api";
 import { useDialog } from "../../components/Dialogs";
 import { Icon } from "../../components/Icon";
-import { ListSkeleton } from "../../components/UI";
+import { ListSkeleton, PasswordField } from "../../components/UI";
 import { errorMessage, relativeTime } from "../../format";
 import { useVisibleInterval } from "../../hooks/useVisibleInterval";
 import { useI18n } from "../../i18n";
@@ -58,10 +58,7 @@ export function TelegramSection({ notify }: { notify: Notify }) {
         <a className="button button--quiet" href="https://t.me/BotFather" target="_blank" rel="noreferrer"><Icon name="external" />{t("Create bot with BotFather")}</a>
       </div>
       <form className="telegram-token" onSubmit={(event) => void configureBot(event)}>
-        <label className="settings-field">
-          <span>{t(telegram.configured ? "Replace bot token" : "Bot token")}</span>
-          <input type="password" value={botToken} onChange={(event) => setBotToken(event.target.value)} placeholder={t(telegram.configured ? "Stored securely — paste a token to replace" : "Paste the HTTP API token from BotFather")} autoComplete="new-password" />
-        </label>
+        <PasswordField variant="settings" secret="token" label={t(telegram.configured ? "Replace bot token" : "Bot token")} value={botToken} onChange={(event) => setBotToken(event.target.value)} placeholder={t(telegram.configured ? "Stored securely — paste a token to replace" : "Paste the HTTP API token from BotFather")} autoComplete="new-password" />
         <div className="integration-actions">
           <small>{t("The token is validated with Telegram before it is encrypted and saved.")}</small>
           {telegram.configured && <button type="button" className="text-button text-button--danger" disabled={busy} onClick={() => void removeBot()}>{t("Remove bot")}</button>}

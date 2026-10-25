@@ -60,7 +60,7 @@ it.each([
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
-it("keeps collections available across pages and returns to the chosen collection without background subscription polling", async () => {
+it("keeps collections available on Activity and returns to the chosen collection without background subscription polling", async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.useFakeTimers();
   const collections = ["Films", "Books"].map((name) => ({ id: name.toLowerCase(), name, subscriptionCount: 0, unreadCount: 0, activityCount: 0 }));
@@ -69,6 +69,7 @@ it("keeps collections available across pages and returns to the chosen collectio
     if (path === "/api/system/status") return { scheduler: { running: false }, intervalMinutes: 30 };
     if (path === "/api/collections") return { collections };
     if (path.startsWith("/api/subscriptions?")) return { subscriptions: [] };
+    if (path.startsWith("/api/activity?")) return { events: [], total: 0, page: 1, pageCount: 1 };
     throw new Error(`Unexpected request: ${path}`);
   });
   const container = document.createElement("div"); document.body.append(container);
@@ -83,8 +84,12 @@ it("keeps collections available across pages and returns to the chosen collectio
     expect(container.querySelector(".collection-switcher")).toBeNull();
     await act(async () => collection("Books").click());
     expect(container.querySelector("h1")?.textContent).toBe("Books");
+    // Settings and Administration have no collection switcher.
     await act(async () => nav("/settings").click());
     expect(container.querySelector("h1")?.textContent).toBe("Settings page");
+    expect(container.querySelector(".collection-navigation--mobile, .collection-switcher")).toBeNull();
+    await act(async () => nav("/activity").click());
+    expect(container.querySelector("h1")?.textContent).toBe("Activity");
     expect(container.querySelector(".collection-navigation--mobile")).toBeNull();
     const toggle = container.querySelector<HTMLButtonElement>(".collection-switcher__toggle")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
@@ -107,6 +112,8 @@ it("keeps collections available across pages and returns to the chosen collectio
     expect(container.querySelector("h1")?.textContent).toBe("Books");
     await act(async () => nav("/admin").click());
     expect(container.querySelector("h1")?.textContent).toBe("Administration page");
+    expect(container.querySelector(".collection-switcher")).toBeNull();
+    await act(async () => nav("/activity").click());
     expect(container.querySelector(".collection-switcher__toggle")?.getAttribute("aria-expanded")).toBe("false");
     await act(async () => container.querySelector<HTMLButtonElement>(".collection-switcher__toggle")!.click());
     await act(async () => [...container.querySelectorAll<HTMLAnchorElement>(".collection-navigation--switcher .collection-item")].find((link) => link.textContent?.includes("Films"))!.click());
@@ -203,7 +210,7 @@ it("switches to the password form when a request reports that the password must 
     await act(async () => vi.advanceTimersByTime(30_000));
     expect(container.querySelector(".app-shell")).toBeNull();
     expect(container.querySelector(".password-panel .eyebrow")?.textContent).toBe("Password change required");
-    expect(container.querySelector(".password-panel h1")?.textContent).toBe("Choose a new password.");
+    expect(container.querySelector(".password-panel h1")?.textContent).toBe("Choose a new password");
     expect(container.querySelector(".password-panel label")?.textContent).toContain("Temporary password");
     expect([...container.querySelectorAll(".toast")].map((toast) => toast.textContent)).toEqual(["Choose a new password to continue."]);
 
@@ -551,7 +558,8 @@ it("opens a collection in its default filter from /, collection links, a deleted
     });
     await act(async () => drawer.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/collections", expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Series", defaultFilter: "unread" }) }));
-    expect([currentUrl(), heading(), activeFilter()]).toEqual(["/collections/series?filter=unread", "Series", "Unread"]);
+    // The new collection is empty, so it shows no filter tabs yet; the address keeps its default view.
+    expect([currentUrl(), heading(), activeFilter()]).toEqual(["/collections/series?filter=unread", "Series", undefined]);
   } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); }
 });
 

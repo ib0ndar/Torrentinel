@@ -133,6 +133,8 @@ export async function createApplication(options: ApplicationOptions = {}) {
     reply.header("x-frame-options", "DENY");
     reply.header("referrer-policy", "no-referrer");
     reply.header("permissions-policy", "camera=(), microphone=(), geolocation=()");
+    // A private service: an instance reachable from the internet stays out of search results (public/robots.txt says the same).
+    reply.header("x-robots-tag", "noindex, nofollow");
     reply.header("content-security-policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
   });
   registerAuth(app, db);
