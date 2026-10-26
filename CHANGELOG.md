@@ -2,7 +2,7 @@
 
 All notable changes to Torrentinel are documented in this file.
 
-## [Unreleased]
+## [1.0.1] - 2026-10-26
 
 ### Changed
 
@@ -663,7 +663,8 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
-[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v1.0.0
 [0.9.9]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.9
 [0.9.8]: https://github.com/ib0ndar/Torrentinel/releases/tag/v0.9.8
