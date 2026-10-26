@@ -318,6 +318,9 @@ describe("scheduler coordination", () => {
     const snapshot = (url: string): DirectSnapshot => ({
       trackerKey: url.includes("rutor.is") ? "rutor" : "rutracker", externalId: url.slice(-1), title: url, url, fingerprint: url,
     });
+    // RuTracker's lane reads its feed first; a real request would make the test depend on the network.
+    vi.spyOn(trackerRegistry.get("rutracker")!.rules!, "discover").mockResolvedValue({ releases: [], coverage: { source: "feed", complete: false } });
+    const network = vi.spyOn(globalThis, "fetch");
     for (const key of ["rutor", "rutracker"] as const) {
       vi.spyOn(trackerRegistry.get(key)!.direct!, "fetchSnapshot").mockImplementation((url) => {
         started.push(url);
@@ -337,6 +340,7 @@ describe("scheduler coordination", () => {
       const status = await run;
       expect(status).toMatchObject({ checked: 3, errors: 0 });
       expect(db.prepare("SELECT COUNT(*) AS count FROM subscriptions WHERE initialized = 1").get()).toEqual({ count: 3 });
+      expect(network).not.toHaveBeenCalled();
     } finally { db.close(); }
   });
 
@@ -353,6 +357,8 @@ describe("scheduler coordination", () => {
       `).run(id, user.id, collection.id, url, timestamp, timestamp);
       db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES (?, ?)").run(id, tracker);
     }
+    vi.spyOn(trackerRegistry.get("rutracker")!.rules!, "discover").mockResolvedValue({ releases: [], coverage: { source: "feed", complete: false } });
+    const network = vi.spyOn(globalThis, "fetch");
     vi.spyOn(trackerRegistry.get("rutracker")!.direct!, "fetchSnapshot").mockResolvedValue({
       trackerKey: "rutracker", externalId: "1", title: "Topic", url: "https://rutracker.org/forum/viewtopic.php?t=1", fingerprint: "topic",
     });
@@ -366,6 +372,7 @@ describe("scheduler coordination", () => {
       const status = await scheduler.run("test");
       expect(status).toMatchObject({ checked: 1, errors: 1 });
       expect(db.prepare("SELECT initialized FROM subscriptions WHERE id = 'rutracker-1'").get()).toEqual({ initialized: 1 });
+      expect(network).not.toHaveBeenCalled();
     } finally { db.close(); }
   });
 });
