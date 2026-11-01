@@ -263,6 +263,34 @@ describe("RuTracker plugin", () => {
     expect(detailProvider.get).toHaveBeenCalledWith("https://rutracker.net/forum/viewtopic.php?t=999", undefined, "https://rutracker.net");
     expect(detailProvider.close).toHaveBeenCalledOnce();
   });
+
+  it("takes the right-aligned poster over the badges and banners above it", async () => {
+    const plugin = createRutrackerPlugin(fakeDetailProvider(fixture("rutracker/fixtures/direct-poster-after-banners.html")));
+
+    const direct = await plugin.direct!.fetchSnapshot("https://rutracker.org/forum/viewtopic.php?t=6930934", { baseUrl: "https://rutracker.org" });
+
+    expect(direct.coverUrl).toBe("https://images.example.test/poster.jpg");
+  });
+
+  it.each([
+    [
+      "a right-aligned image after a banner",
+      '<img class="postImg" alt="pic" src="https://images.example.test/banner.jpg"><img class="postImg postImgAligned img-right" alt="pic" src="https://images.example.test/poster.jpg">',
+      "https://images.example.test/poster.jpg",
+    ],
+    [
+      "no right-aligned image",
+      '<img class="postImg" alt="pic" src="https://images.example.test/first.jpg"><img class="postImg" alt="pic" src="https://images.example.test/second.jpg">',
+      "https://images.example.test/first.jpg",
+    ],
+  ])("chooses the cover of a post with %s", async (_layout, images, coverUrl) => {
+    const page = `<h1 class="maintitle">Release</h1><div class="post_body">${images}</div>`;
+    const plugin = createRutrackerPlugin(fakeDetailProvider(page));
+
+    const direct = await plugin.direct!.fetchSnapshot("https://rutracker.org/forum/viewtopic.php?t=1", { baseUrl: "https://rutracker.org" });
+
+    expect(direct.coverUrl).toBe(coverUrl);
+  });
 });
 
 function fixture(path: string): string {
@@ -273,9 +301,9 @@ function browserPage(body: string, url: string): BrowserPage {
   return { body, url, status: 200 };
 }
 
-function fakeDetailProvider() {
+function fakeDetailProvider(body = fixture("rutracker/fixtures/direct.html")) {
   return {
-    get: vi.fn(async (url: string) => ({ body: fixture("rutracker/fixtures/direct.html"), status: 200, url })),
+    get: vi.fn(async (url: string) => ({ body, status: 200, url })),
     close: vi.fn(async () => undefined),
   };
 }

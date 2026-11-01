@@ -811,4 +811,31 @@ describe("feed-assisted RuTracker direct checks", () => {
       expect(outcomes()).toEqual(["baseline", "unchanged"]);
     } finally { cleanup(); }
   });
+
+  it("loads a topic stored by an older parser and saves its new cover without an alert", async () => {
+    const refresh = vi.fn<CoverCacheStore["refresh"]>(async (_subscriptionId, release) => ({
+      cachedAt: new Date().toISOString(), contentType: "image/jpeg", byteLength: 3, sourceUrl: release.coverUrl!,
+    }));
+    const coverCache: CoverCacheStore = { has: () => true, refresh, read: vi.fn(), remove: vi.fn(async () => undefined) };
+    const { db, scheduler, fetchSnapshot, outcomes, cleanup } = setup(coverCache);
+    const current = topic("Series 1-10", "AAA");
+    const previousVersion = (current.metadata!.snapshotVersion as number) - 1;
+    // The older parser took a quality badge above the poster as the cover.
+    fetchSnapshot.mockResolvedValueOnce({
+      ...current, coverUrl: "https://images.example/badge-2160p.jpg",
+      metadata: { ...current.metadata, snapshotVersion: previousVersion }, fingerprint: "older-parser",
+    });
+    fetchSnapshot.mockResolvedValue({ ...current, coverUrl: "https://images.example/poster.jpg" });
+    try {
+      await scheduler.run("baseline");
+      await scheduler.run("poll");
+      await scheduler.run("poll");
+      expect(outcomes()).toEqual(["baseline", "schema-upgrade", "feed-unchanged"]);
+      expect(refresh.mock.calls.map((call) => call[1].coverUrl))
+        .toEqual(["https://images.example/badge-2160p.jpg", "https://images.example/poster.jpg"]);
+      expect(db.prepare("SELECT kind FROM subscription_events").all()).toEqual([]);
+      const stored = db.prepare("SELECT current_snapshot FROM subscriptions WHERE id = 'topic'").get() as { current_snapshot: string };
+      expect(JSON.parse(stored.current_snapshot).coverUrl).toBe("https://images.example/poster.jpg");
+    } finally { cleanup(); }
+  });
 });

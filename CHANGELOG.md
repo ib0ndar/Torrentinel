@@ -2,6 +2,12 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- A RuTracker topic watched by link shows its poster instead of a banner above it. The cover was the first picture in the release description, which on some topics is a title banner or a link to the same release in another quality. It is now the picture the description floats to the right, as RuTracker's release templates place the poster, and still the first picture when none is floated right. Each RuTracker topic watched by link loads its page once at its next check to pick up the new cover, without reporting a change.
+
 ## [1.0.1] - 2026-10-26
 
 ### Changed

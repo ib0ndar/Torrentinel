@@ -25,7 +25,11 @@ export class RutrackerDirectMonitor implements DirectMonitor {
     const title = cleanText($("h1.maintitle, .maintitle, h1").first().text());
     if (!title) throw new TrackerError("parse", "RuTracker topic page did not contain a title", { trackerKey: "rutracker" });
     const magnet = magnetLink($("a.magnet-link[href^='magnet:'], a[href^='magnet:']").first().attr("href"));
-    const coverImage = $(".post_body").first().find("img.postImg").first();
+    const postImages = $(".post_body").first().find("img.postImg");
+    // Release templates float the poster right ([img=right]); images above it can be title banners or
+    // links to the release in other qualities. Without a right-aligned image the first image is the cover.
+    const alignedImage = postImages.filter(".img-right").first();
+    const coverImage = alignedImage.length > 0 ? alignedImage : postImages.first();
     const coverSource = coverImage.hasClass("post-img-broken")
       ? coverImage.attr("title")
       : coverImage.attr("data-src") || coverImage.attr("data-original") || coverImage.attr("src");
