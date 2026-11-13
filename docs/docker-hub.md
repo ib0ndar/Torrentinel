@@ -44,6 +44,6 @@ Use the release installation commands from the repository README. Stable images 
 - Do not publish or mount the integrated browser profile separately; protect it as part of the application-data volume.
 - With Docker, run the container with the repository's `deploy/torrentinel-seccomp.json` (`--security-opt seccomp=torrentinel-seccomp.json`), as the supplied Compose file does, so the integrated browser can use Chrome's sandbox; Podman's default profile already allows it. Without it, Chrome runs unsandboxed and Torrentinel logs a warning.
 - Back up the database and application-data volumes together because encrypted integrations require the matching generated key.
-- Read the changelog and create a backup before upgrading this pre-1.0 project.
+- Read the changelog and create a backup before every upgrade. Any release, including a patch release, may change the database structure, and rollback is not guaranteed.
 
 Torrentinel is licensed under the GNU Affero General Public License v3.0. Operators are responsible for following tracker rules and applicable law.

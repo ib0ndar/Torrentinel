@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Torrentinel is a pre-1.0 project. Security fixes are released for the latest published version only. Upgrade to the latest release before reporting a problem that may already be fixed.
+Security fixes are released for the latest published version only. Upgrade to the latest release before reporting a problem that may already be fixed.
 
 ## Reporting a vulnerability
 
