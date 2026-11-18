@@ -130,6 +130,7 @@ async function renderSettings(trackers: () => Tracker[] = () => [], extra: (path
     const handled = await extra(path, init);
     if (handled !== undefined) return handled;
     if (path === "/api/telegram") return { telegram: { configured: false, linked: false } };
+    if (path === "/api/telegram/preferences") return { preferences: { releases: "immediate", torrent: "immediate", appearance: "immediate", metadata: "immediate" } };
     if (path === "/api/trackers") return { trackers: trackers() };
     throw new Error(`Unexpected request: ${path}`);
   });
@@ -144,10 +145,11 @@ it("links every Settings tab, shows only that tab's sections and states how each
     account: [["account", "Password", "Save to apply"]],
     // Preferences says once, above its sections, that every change is saved.
     preferences: [["language", "Language", undefined], ["appearance", "Appearance", undefined], ["start-page", "Start page", undefined], ["pagination", "Pagination", undefined], ["source-markers", "Source markers", undefined]],
-    telegram: [["telegram-bot", "Bot and chat", "Save to apply"]],
+    telegram: [["telegram-bot", "Bot and chat", "Save to apply"], ["telegram-preferences", "Notification preferences", "Save to apply"]],
     trackers: [["tracker-access", "Logins and mirrors", "Save to apply"]],
+    watchlist: [["watchlist", "Import and export", undefined]],
   };
-  const labels: Record<SettingsTab, string> = { account: "Account", preferences: "Preferences", telegram: "Telegram bot", trackers: "Tracker access" };
+  const labels: Record<SettingsTab, string> = { account: "Account", preferences: "Preferences", telegram: "Telegram bot", trackers: "Tracker access", watchlist: "Watchlist" };
   for (const tab of SETTINGS_TABS) {
     const navigate = vi.fn();
     const { container, cleanup } = await renderSettings(() => [tracker("kinozal"), tracker("rutracker")], () => undefined, tab, navigate);
@@ -167,8 +169,41 @@ it("links every Settings tab, shows only that tab's sections and states how each
   const { container, cleanup } = await renderSettings(() => [], () => undefined, "preferences");
   try {
     await act(async () => setLanguage("ru"));
-    expect([...container.querySelectorAll('nav[aria-label="Разделы настроек"] a')].map((link) => link.textContent)).toEqual(["Учётная запись", "Предпочтения", "Бот Telegram", "Доступ к трекерам"]);
+    expect([...container.querySelectorAll('nav[aria-label="Разделы настроек"] a')].map((link) => link.textContent)).toEqual(["Учётная запись", "Предпочтения", "Бот Telegram", "Доступ к трекерам", "Список подписок"]);
     expect(container.querySelector(".save-note")?.textContent).toBe("Изменения на этой вкладке сохраняются автоматически.");
+  } finally { await cleanup(); }
+});
+
+it("previews the selected watchlist and requires a separate import action", async () => {
+  const input = { format: "torrentinel-watchlist", version: 1, collections: [] };
+  const summary = { collections: [{ name: "Series", create: false, adding: 1, duplicates: ["Already watched"], unsupported: [] }] };
+  const { container, notify, cleanup } = await renderSettings(() => [], (path) =>
+    ["/api/watchlist/preview", "/api/watchlist/import"].includes(path) ? summary : undefined, "watchlist");
+  try {
+    const picker = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(picker, "files", { value: [{ size: 80, text: async () => JSON.stringify(input) }] });
+    await act(async () => picker.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(container.querySelector(".watchlist-review")?.textContent).toContain("Already watched");
+    expect(api).toHaveBeenCalledWith("/api/watchlist/preview", expect.objectContaining({ method: "POST", body: JSON.stringify(input) }));
+    expect(vi.mocked(api).mock.calls.some(([path]) => path === "/api/watchlist/import")).toBe(false);
+    const apply = [...container.querySelectorAll("button")].find((button) => button.textContent === "Import watchlist")!;
+    await act(async () => apply.click());
+    expect(api).toHaveBeenCalledWith("/api/watchlist/import", expect.objectContaining({ method: "POST", body: JSON.stringify(input) }));
+    expect(notify).toHaveBeenCalledWith("Watchlist imported");
+  } finally { await cleanup(); }
+});
+
+it("saves Telegram delivery modes explicitly", async () => {
+  const preferences = { releases: "immediate", torrent: "immediate", appearance: "immediate", metadata: "immediate" };
+  const { container, notify, cleanup } = await renderSettings(() => [], (path, init) =>
+    path === "/api/telegram/preferences" ? { preferences: init?.method === "PUT" ? JSON.parse(String(init.body)) : preferences } : undefined, "telegram");
+  try {
+    const form = container.querySelector<HTMLFormElement>("#telegram-preferences form")!;
+    const appearance = [...form.querySelectorAll("label")].find((label) => label.textContent?.includes("Title and cover changes"))!.querySelector("select")!;
+    await act(async () => { appearance.value = "digest"; appearance.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => form.requestSubmit());
+    expect(api).toHaveBeenCalledWith("/api/telegram/preferences", expect.objectContaining({ method: "PUT", body: JSON.stringify({ ...preferences, appearance: "digest" }) }));
+    expect(notify).toHaveBeenCalledWith("Telegram preferences saved");
   } finally { await cleanup(); }
 });
 

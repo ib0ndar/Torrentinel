@@ -7,6 +7,7 @@ import { useDialog } from "../components/Dialogs";
 import { CollectionEditor } from "../components/CollectionsNavigation";
 import { Icon } from "../components/Icon";
 import { MenuButton, type MenuItem } from "../components/Menu";
+import { RulePreview } from "../components/RulePreview";
 import { Drawer, DrawerActions, EmptyState, Field, FilterTabs, InfoLine, ListSkeleton, PhraseDisplay, PhraseInput, SubscriptionTypeIcon, TrackerTag } from "../components/UI";
 import { capitalize, errorMessage, relativeTime } from "../format";
 import { useI18n } from "../i18n";
@@ -138,6 +139,7 @@ function CreateSubscription({ collection, onClose, onCreated, notify }: { collec
     <Field label={t("Trackers")}><div className="tracker-picker">{ruleTrackers.map((tracker) => <label key={tracker.key} className={selectedTrackers.includes(tracker.key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={selectedTrackers.includes(tracker.key)} onChange={() => toggleTracker(tracker.key)} /><TrackerTag tracker={tracker.key} /><span>{tracker.displayName}</span>{!tracker.credentialsConfigured && tracker.capabilities.authentication !== "none" && <small>{t(tracker.capabilities.ruleDiscovery === "feed" ? "gap recovery unavailable" : "credentials missing")}</small>}</label>)}</div></Field>
     <Field label={t("Required phrases")} hint={t("Press Enter after each phrase. Every phrase must appear.")}><PhraseInput ariaLabel={t("Required phrases")} value={required} onChange={setRequired} placeholder={t("Type a phrase and press Enter")} /></Field>
     <Field label={t("Ignored phrases")} hint={t("Press Enter after each phrase. Any match is rejected.")}><PhraseInput ariaLabel={t("Ignored phrases")} value={ignored} onChange={setIgnored} placeholder={t("Type a phrase and press Enter")} /></Field>
+    <RulePreview trackerKeys={selectedTrackers} requiredTerms={required} ignoredTerms={ignored} />
     <InfoLine icon="monitor">{t("The first successful poll is a silent baseline. Only releases discovered afterward produce events.")}</InfoLine>
   </>}<DrawerActions onCancel={onClose} busy={busy} label={t(type === "direct" ? "Add direct link" : "Create rule")} disabled={type === "rule" && (!selectedTrackers.length || !required.length)} /></form></Drawer>;
 }

@@ -53,6 +53,7 @@ export interface Subscription {
   ignoredTerms: string[];
   trackerKeys: TrackerKey[];
   enabled: boolean;
+  telegramMuted?: boolean;
   initialized: boolean;
   lastCheckedAt?: string | null;
   lastChangedAt?: string | null;
@@ -89,6 +90,8 @@ export interface RuleMatch {
   magnet?: string | null;
   torrentUrl?: string | null;
   discoveredAt: string;
+  canWatch?: boolean;
+  watchedSubscriptionId?: string;
 }
 
 export interface Tracker {

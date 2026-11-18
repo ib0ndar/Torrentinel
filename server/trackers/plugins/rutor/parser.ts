@@ -9,6 +9,7 @@ import {
   labeledValue,
   magnetLink,
   normalizeTrackerChangeMarker,
+  parseTrackerReleaseDay,
   uniqueReleases,
 } from "../../core/parsing.js";
 import { rutorManifest } from "./manifest.js";
@@ -58,6 +59,7 @@ export function parseRutorRecent(body: string, baseUrl: string): Release[] {
       url,
       magnet: magnetLink(row.find("a[href^='magnet:']").first().attr("href")),
       torrentUrl: absoluteHttpUrl(row.find("a[href*='/download/']").first().attr("href"), baseUrl),
+      publishedAt: parseTrackerReleaseDay(row.children("td").first().text()),
       metadata: { size: cleanText(row.find("td").eq(-2).text()) || null },
     });
   });

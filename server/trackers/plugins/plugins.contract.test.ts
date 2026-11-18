@@ -255,7 +255,7 @@ describe("Rutor plugin", () => {
       metadata: { coverObserved: true, changeMarker: "2026-08-07 10:30" },
     });
     expect(batch.coverage).toEqual({ source: "recent-list", complete: false });
-    expect(batch.releases[0]).toMatchObject({ externalId: "901", title: "Release One" });
+    expect(batch.releases[0]).toMatchObject({ externalId: "901", title: "Release One", publishedAt: "2026-11-18" });
   });
 
   it("requests a direct subscription from the mirror even when its path names another host", async () => {

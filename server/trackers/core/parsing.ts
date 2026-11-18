@@ -142,6 +142,17 @@ const RUSSIAN_MONTHS: Record<string, number> = {
   декабря: 12, дек: 12,
 };
 
+export function parseTrackerReleaseDay(value: string): string | undefined {
+  const date = cleanText(value).match(/^(\d{1,2})\s+([а-яё]+)\s+(\d{2}|\d{4})$/iu);
+  if (!date) return;
+  const month = RUSSIAN_MONTHS[date[2].toLocaleLowerCase("ru-RU")];
+  if (!month) return;
+  const year = date[3].length === 2 ? `20${date[3]}` : date[3];
+  const day = `${year}-${pad(month)}-${pad(Number(date[1]))}`;
+  const utc = new Date(day);
+  return Number.isFinite(utc.getTime()) && utc.toISOString().startsWith(day) ? day : undefined;
+}
+
 function normalizeLabel(value: string): string {
   return cleanText(value).toLocaleLowerCase("ru-RU").replace(/:$/, "");
 }

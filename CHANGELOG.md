@@ -7,6 +7,10 @@ All notable changes to Torrentinel are documented in this file.
 ### Added
 
 - Change history for direct subscriptions shows which files were added, removed, or resized when the tracker exposes a file list. The first available list establishes a baseline silently.
+- Preview a rule before creating or editing it. Each tracker shows its sample coverage, matching titles, and examples of why other titles were excluded.
+- Watch a topic directly from a rule match, or open the existing subscription when the topic is already watched.
+- Choose immediate delivery, a daily digest at 09:00 UTC, or no Telegram alerts for each event category. Subscriptions can also be muted individually while retaining their Activity history.
+- Export collections, direct topic links, and rules as a portable watchlist. Preview imports to see duplicate and unsupported entries before applying them. Imported subscriptions begin checking at the next poll.
 
 ## [1.0.2] - 2026-11-01
 

@@ -9,8 +9,10 @@ export const SETTINGS_SECTIONS = [
   { id: "account", title: "Password", auto: false, tab: "account" }, { id: "language", title: "Language", auto: true, tab: "preferences" }, { id: "appearance", title: "Appearance", auto: true, tab: "preferences" },
   { id: "start-page", title: "Start page", auto: true, tab: "preferences" }, { id: "pagination", title: "Pagination", auto: true, tab: "preferences" }, { id: "source-markers", title: "Source markers", auto: true, tab: "preferences" },
   { id: "telegram-bot", title: "Bot and chat", auto: false, tab: "telegram" }, { id: "tracker-access", title: "Logins and mirrors", auto: false, tab: "trackers" },
+  { id: "telegram-preferences", title: "Notification preferences", auto: false, tab: "telegram" },
+  { id: "watchlist", title: "Import and export", auto: true, tab: "watchlist" },
 ] as const satisfies ReadonlyArray<{ id: string; title: string; auto: boolean; tab: SettingsTab }>;
-export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = { account: "Account", preferences: "Preferences", telegram: "Telegram bot", trackers: "Tracker access" };
+export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = { account: "Account", preferences: "Preferences", telegram: "Telegram bot", trackers: "Tracker access", watchlist: "Watchlist" };
 /** The tab holding a section, for addresses such as /settings#telegram-bot. */
 export function settingsTabForSection(id: string): SettingsTab | undefined { return SETTINGS_SECTIONS.find((section) => section.id === id)?.tab; }
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];

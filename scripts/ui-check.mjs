@@ -30,6 +30,7 @@ const ROUTES = [
   { name: "settings-preferences", path: "/settings/preferences", heading: "Settings" },
   { name: "settings-telegram", path: "/settings/telegram", heading: "Settings" },
   { name: "settings-trackers", path: "/settings/trackers", heading: "Settings" },
+  { name: "settings-watchlist", path: "/settings/watchlist", heading: "Settings" },
   { name: "admin-overview", path: "/admin/overview", heading: "Administration" },
   { name: "admin-users", path: "/admin/users", heading: "Administration" },
   { name: "admin-mirrors", path: "/admin/mirrors", heading: "Administration" },

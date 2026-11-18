@@ -1,5 +1,6 @@
 export type NotificationLanguage = "en" | "ru";
 const russian: Record<string, string> = {
+  "Daily digest": "Ежедневная сводка", "New release": "Новый релиз",
   "Tracker": "Трекер", "Rule": "Правило", "Changed": "Изменения", "Size": "Размер", "Category": "Категория",
   "All releases": "Все релизы", "Tracker page": "Страница трекера", "Torrent file": "Торрент-файл",
   "Subscription": "Подписка",

@@ -40,6 +40,45 @@ describe("persistent notification outbox", () => {
     expect(() => db.transaction(() => { enqueueNotification(db, userId, "rollback", notification); throw new Error("crash"); })()).toThrow("crash");
     expect(queued()).toBeUndefined();
   });
+  it("sends one localized digest for the due window and retries the whole batch after Telegram throttles it", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-18T08:59:00Z"));
+    const vault = new SecretVault(Buffer.alloc(32, 2));
+    db.prepare("UPDATE users SET language = 'ru' WHERE id = ?").run(userId);
+    db.prepare("INSERT INTO telegram_preferences VALUES (?, ?)").run(userId, JSON.stringify({
+      releases: "immediate", torrent: "immediate", appearance: "digest", metadata: "off",
+    }));
+    db.prepare("INSERT INTO telegram_bots (user_id, token_encrypted, bot_username, configured_at, updated_at) VALUES (?, ?, 'test', ?, ?)")
+      .run(userId, vault.encrypt("123456789:test-secret", telegramTokenAad(userId)), nowIso(), nowIso());
+    db.prepare("INSERT INTO telegram_accounts (user_id, chat_id, linked_at) VALUES (?, '42', ?)").run(userId, nowIso());
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: true, result: { message_id: 1 } })));
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, description: "Too many requests", parameters: { retry_after: 120 } }), { status: 429 }));
+    const telegram = new TelegramService(db, vault, fetcher, "https://torrentinel.example");
+    const queue = new NotificationQueue(db, telegram);
+    enqueueNotification(db, userId, "cover", { ...notification, changes: ["cover changed"], release: { ...notification.release, title: "A < B" } });
+    enqueueNotification(db, userId, "title", { ...notification, changes: ["title changed"] });
+    enqueueNotification(db, userId, "meta", { ...notification, changes: ["metadata changed"] });
+    db.prepare("UPDATE subscriptions SET telegram_muted = 1 WHERE id = 'test'").run();
+    enqueueNotification(db, userId, "muted", { ...notification, changes: ["torrent file changed"] });
+    db.prepare("UPDATE subscriptions SET telegram_muted = 0 WHERE id = 'test'").run();
+
+    await queue.drain();
+    expect(fetcher).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(60_000);
+    await queue.drain();
+    expect(db.prepare("SELECT attempts, next_attempt_at FROM notification_queue").all()).toEqual(
+      Array.from({ length: 2 }, () => ({ attempts: 1, next_attempt_at: "2026-11-18T09:02:00.000Z" })),
+    );
+    vi.advanceTimersByTime(120_000);
+    await queue.drain();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(String(fetcher.mock.calls[1][1]?.body));
+    expect(body.text).toContain("Ежедневная сводка");
+    expect(body.text).toContain('href="https://torrentinel.example/subscriptions/test">A &lt; B</a>');
+    expect(body.text).toContain("изменена обложка");
+    expect(body.text).toContain("изменено название");
+    expect(db.prepare("SELECT COUNT(*) as count FROM notification_queue WHERE delivered_at IS NOT NULL").get()).toEqual({ count: 2 });
+  });
   it("never acknowledges a send that resolves without an explicit receipt", async () => {
     enqueueNotification(db, userId, "missing-receipt", notification);
     const telegram = { notifyRelease: vi.fn(async () => undefined) } as unknown as TelegramService;

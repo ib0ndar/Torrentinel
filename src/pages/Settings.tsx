@@ -10,10 +10,12 @@ import { AccountSection } from "./settings/AccountSection";
 import { PreferencesSections } from "./settings/PreferencesSections";
 import { SETTINGS_SECTIONS, SETTINGS_TAB_LABELS } from "./settings/SettingsSection";
 import { TelegramSection } from "./settings/TelegramSection";
+import { TelegramPreferences } from "./settings/TelegramPreferences";
 import { TrackerAccessSection } from "./settings/TrackerAccessSection";
+import { WatchlistSection } from "./settings/WatchlistSection";
 
 // Tabs are separate addresses like Administration's, so the tab bar is navigation (links), not an ARIA tablist.
-export function Settings({ user, onUserChange, notify, tab = "account", navigate, accountFocusRequest = 0, onAccountFocused }: { user: User; onUserChange: (user: User) => void; notify: Notify; tab?: SettingsTab; navigate?: Navigate; accountFocusRequest?: number; onAccountFocused?: () => void }) {
+export function Settings({ user, onUserChange, notify, tab = "account", navigate, accountFocusRequest = 0, onAccountFocused, onWatchlistChanged }: { user: User; onUserChange: (user: User) => void; notify: Notify; tab?: SettingsTab; navigate?: Navigate; accountFocusRequest?: number; onAccountFocused?: () => void; onWatchlistChanged?: () => Promise<void> }) {
   const { t } = useI18n();
   usePageTitle(t("Settings"));
   const { trackers, reload: reloadTrackers } = useTrackers((error) => notify(errorMessage(error), "bad"));
@@ -23,7 +25,8 @@ export function Settings({ user, onUserChange, notify, tab = "account", navigate
   return <Page title={t("Settings")} eyebrow={t("Preferences & access")} description={t("Personalize the appearance and source markers, and configure private tracker access and Telegram delivery.")} navigation={tabs}>
     {tab === "account" && <AccountSection user={user} notify={notify} focusRequest={accountFocusRequest} onFocused={onAccountFocused} />}
     {tab === "preferences" && <PreferencesSections user={user} onUserChange={onUserChange} notify={notify} trackers={trackers} />}
-    {tab === "telegram" && <TelegramSection notify={notify} />}
+    {tab === "telegram" && <><TelegramSection notify={notify} /><TelegramPreferences notify={notify} /></>}
     {tab === "trackers" && <TrackerAccessSection trackers={trackers} reload={reloadTrackers} notify={notify} />}
+    {tab === "watchlist" && <WatchlistSection notify={notify} onChanged={onWatchlistChanged} />}
   </Page>;
 }

@@ -11,6 +11,8 @@ import { registerActivityRoutes } from "./routes/activity.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerSystemRoutes } from "./routes/system.js";
+import { registerRulePreviewRoute } from "./routes/rule-preview.js";
+import { registerWatchlistRoutes } from "./routes/watchlist.js";
 
 export function registerRoutes(app: FastifyInstance, db: SqliteDatabase, scheduler: Scheduler, telegram: TelegramService, vault: SecretVault, coverCache: CoverCacheStore, initialAdminFile: string): void {
   const services = { app, db, scheduler, telegram, vault, coverCache, initialAdminFile };
@@ -21,4 +23,6 @@ export function registerRoutes(app: FastifyInstance, db: SqliteDatabase, schedul
   registerSettingsRoutes(services);
   registerAdminRoutes(services);
   registerSystemRoutes(services);
+  registerRulePreviewRoute(services);
+  registerWatchlistRoutes(services);
 }

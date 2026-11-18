@@ -4,6 +4,7 @@ import { ChangeDetails } from "../components/ChangeDetails";
 import { useDialog } from "../components/Dialogs";
 import { CheckActivityContext } from "../components/contexts";
 import { Icon } from "../components/Icon";
+import { RulePreview } from "../components/RulePreview";
 import { useTrackers } from "../hooks/useTrackers";
 import { useVisibleInterval } from "../hooks/useVisibleInterval";
 import { Drawer, EmptyCompact, Field, ListSkeleton, Page, PhraseInput, ReleaseCover, TrackerTag } from "../components/UI";
@@ -23,6 +24,7 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
   const { t } = useI18n(), dialog = useDialog(), trackCheck = useContext(CheckActivityContext);
   const [item, setItem] = useState<Subscription | null>(null), [events, setEvents] = useState<SubscriptionEvent[]>([]), [matches, setMatches] = useState<RuleMatch[]>([]);
   const [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
+  const [watching, setWatching] = useState<string | null>(null);
   // A failed first load is shown in place of the details, once; a missing subscription gets a way back.
   const [loadError, setLoadError] = useState<{ message: string; missing: boolean } | null>(null);
   const endpoint = `/api/subscriptions/${encodeURIComponent(id)}`;
@@ -56,6 +58,16 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
     try { await api(`${endpoint}/read`, { method: "POST", ...jsonBody({ read: item.isUnread }) }); await Promise.all([load(), onChanged()]); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
+  async function watch(match: RuleMatch) {
+    setWatching(match.id);
+    try {
+      const result = await api<{ id: string; created: boolean }>(`${endpoint}/matches/${encodeURIComponent(match.id)}/watch`, { method: "POST" });
+      setMatches((current) => current.map((entry) => entry.id === match.id ? { ...entry, watchedSubscriptionId: result.id } : entry));
+      await onChanged();
+      if (result.created) notify(t("Direct subscription added"));
+    } catch (error) { notify(errorMessage(error), "bad"); }
+    finally { setWatching(null); }
+  }
   async function remove() {
     if (!item) return;
     if (!await dialog.confirm({ eyebrow: t(item.type === "rule" ? "Delete rule" : "Delete subscription"),
@@ -76,9 +88,16 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
       </dl>}</section>
       {item.type === "direct" && <section className="detail-section"><div className="release-actions"><h3>{t("Release")}</h3><div className="source-links"><a href={item.currentSnapshot?.url || item.directUrl || "#"} target="_blank" rel="noreferrer"><Icon name="external" />{t("Tracker page")}</a>{item.currentSnapshot?.magnet && <a href={item.currentSnapshot.magnet}><Icon name="magnet" />{t("Magnet")}</a>}{item.currentSnapshot?.torrentUrl && <a href={item.currentSnapshot.torrentUrl} target="_blank" rel="noreferrer"><Icon name="download" />{t("Torrent file")}</a>}</div></div></section>}
       {item.type === "rule" && <section className="detail-section"><div className="section-heading"><h3>{t("Matches")}</h3><span>{matches.length}</span></div>{matches.length ? <div className="match-list">{matches.map((match) => <div className="match-row" key={match.id}><TrackerTag tracker={match.trackerKey} /><a className="match-row__title" href={match.url} target="_blank" rel="noreferrer"><span><span className="match-row__name"><strong>{match.title}</strong><Icon name="external" size={13} /></span><small>{relativeTime(match.discoveredAt)}</small></span></a>
-        {actionSlots.magnet || actionSlots.torrent ? <span className="match-row__actions">{actionSlots.magnet && (match.magnet ? <a href={match.magnet} aria-label={t("Open magnet for {title}", { title: match.title })} title={t("Magnet")}><Icon name="magnet" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}{actionSlots.torrent && (match.torrentUrl ? <a href={match.torrentUrl} target="_blank" rel="noreferrer" aria-label={t("Download torrent file for {title}", { title: match.title })} title={t("Torrent file")}><Icon name="download" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}</span> : null}</div>)}</div> : <EmptyCompact text={t(item.initialized ? "No new releases matched this rule yet." : "The first baseline scan is pending.")} />}</section>}
+        {actionSlots.magnet || actionSlots.torrent ? <span className="match-row__actions">{actionSlots.magnet && (match.magnet ? <a href={match.magnet} aria-label={t("Open magnet for {title}", { title: match.title })} title={t("Magnet")}><Icon name="magnet" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}{actionSlots.torrent && (match.torrentUrl ? <a href={match.torrentUrl} target="_blank" rel="noreferrer" aria-label={t("Download torrent file for {title}", { title: match.title })} title={t("Torrent file")}><Icon name="download" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}</span> : null}
+        {match.watchedSubscriptionId ? <a className="text-button match-row__watch" href={`/subscriptions/${encodeURIComponent(match.watchedSubscriptionId)}`}>{t("Open watched topic")}</a>
+          : match.canWatch && <button type="button" className="text-button match-row__watch" disabled={watching !== null} onClick={() => void watch(match)}>
+            {t(watching === match.id ? "Adding topic…" : "Watch this topic")}
+          </button>}
+      </div>)}</div> : <EmptyCompact text={t(item.initialized ? "No new releases matched this rule yet." : "The first baseline scan is pending.")} />}</section>}
       <section className="detail-section"><div className="section-heading"><h3>{t("Change history")}</h3><span>{events.length}</span></div>{events.length ? <div className="timeline">{events.map((event) => <div className="timeline-item" key={event.id}><span className={!event.readAt ? "timeline-dot timeline-dot--new" : "timeline-dot"} /><div><ChangeDetails event={event} /><small title={absoluteTime(event.createdAt)}>{relativeTime(event.createdAt)}</small></div></div>)}</div> : <EmptyCompact text={t("Changes will appear here after the baseline.")} />}</section>
-      <section className="detail-section detail-section--actions"><button className="button button--quiet" disabled={busy} onClick={markRead}>{t(item.isUnread ? "Mark read" : "Mark unread")}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, t(item.enabled ? "Subscription paused" : "Subscription resumed"))}>{t(item.enabled ? "Pause" : "Resume")}</button><button className="button button--danger" disabled={busy} onClick={() => void remove()}><Icon name="trash" />{t("Delete")}</button></section>
+      <section className="detail-section detail-section--actions"><button className="button button--quiet" disabled={busy} onClick={markRead}>{t(item.isUnread ? "Mark read" : "Mark unread")}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, t(item.enabled ? "Subscription paused" : "Subscription resumed"))}>{t(item.enabled ? "Pause" : "Resume")}</button>
+        <button className="button button--quiet" disabled={busy} onClick={() => void update({ telegramMuted: !item.telegramMuted }, t(item.telegramMuted ? "Telegram alerts unmuted" : "Telegram alerts muted"))}>{t(item.telegramMuted ? "Unmute Telegram" : "Mute Telegram")}</button>
+        <button className="button button--danger" disabled={busy} onClick={() => void remove()}><Icon name="trash" />{t("Delete")}</button></section>
     </div>;
   const title = item?.label || t(loadError?.missing ? "Subscription not found" : "Subscription");
   const subtitle = item ? t(item.type === "direct" ? "Direct subscription" : "Rule subscription") : loadError ? undefined : t("Loading details");
@@ -115,5 +134,6 @@ function EditSubscriptionForm({ item, collections, busy, notify, onCancel, onSav
   return <form className="edit-subscription" onSubmit={submit}>{collectionField}{item.type === "direct" ? <Field label={t("Tracker page URL")}><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} required /></Field> : <>
     <Field label={t("Trackers")}><div className="tracker-picker">{trackers?.filter((tracker) => tracker.capabilities.rules).map(({ key, displayName }) => <label key={key} className={trackerKeys.includes(key) ? "tracker-choice tracker-choice--active" : "tracker-choice"}><input type="checkbox" checked={trackerKeys.includes(key)} onChange={() => setTrackerKeys((current) => current.includes(key) ? current.filter((selected) => selected !== key) : [...current, key])} /><TrackerTag tracker={key} /><span>{displayName}</span></label>)}</div></Field>
     <Field label={t("Required phrases")} hint={t("Press Enter to add")}><PhraseInput ariaLabel={t("Required phrases")} value={required} onChange={setRequired} placeholder={t("Type a phrase and press Enter")} /></Field><Field label={t("Ignored phrases")} hint={t("Press Enter to add")}><PhraseInput ariaLabel={t("Ignored phrases")} value={ignored} onChange={setIgnored} placeholder={t("Type a phrase and press Enter")} /></Field>
+    <RulePreview trackerKeys={trackerKeys} requiredTerms={required} ignoredTerms={ignored} />
   </>}<div className="inline-actions"><button type="button" className="button button--quiet" onClick={onCancel}>{t("Cancel")}</button><button className="button button--primary" disabled={busy || (item.type === "rule" && (!required.length || !trackerKeys.length))}>{t("Save changes")}</button></div></form>;
 }

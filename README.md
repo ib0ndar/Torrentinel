@@ -86,6 +86,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - **File changes** in direct subscription history show added, removed, and resized files when the tracker exposes file lists. The first available list is a silent baseline.
 - **Silent baselines:** the first check of a page or rule records a baseline without notifying, and when an update changes how Torrentinel reads a tracker page, existing subscriptions are re-baselined without false alerts
 - **Rule subscriptions** across several trackers with required and ignored phrases, matched case-insensitively in Latin and Cyrillic; ignored phrases start with trailer, teaser, and soundtrack in English and Russian, and every rule keeps its matches with tracker links, magnets, and torrent files
+- Preview rules against tracker samples and watch a matching topic directly from the rule's matches
 - **Discovery suited to each tracker:** RuTracker's rolling feed, Rutor's recent-release list, and Kinozal's search
 - **RuTracker feed continuity:** a persistent release buffer, overlap tracking between polls, gap detection, and authenticated catch-up search when a RuTracker login is configured, with a warning when the polling interval comes too close to the feed window
 - **Per-subscription controls:** Check now, pause and resume, edit the link or the phrases and trackers, and move between collections
@@ -100,12 +101,14 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 - **Telegram notifications per account:** each account links its own bot with a short-lived code and receives messages in its own language, with cover art (from the cache, the image's address, or an upload, falling back to text), what changed or which rule matched, size, and category
 - **One-tap buttons** for the tracker page and the magnet link, served through your Torrentinel address because Telegram buttons cannot open magnet links directly, or the torrent file when there is no magnet
 - **Reliable delivery:** notifications are queued in SQLite, delivered at least once, and retried with exponential backoff (up to six hours) that honors Telegram's rate limits; administrators see the delivery log and the queue
+- Choose immediate delivery, a daily digest at 09:00 UTC, or no Telegram delivery by event category. Mute individual subscriptions while continuing to track their changes in Activity.
 
 ### Interface
 
 - Collections with server-side search (case-insensitive in Latin and Cyrillic), All, Unread, and Errors filters with counts, sorting by last change, name, or needs attention first, and optional pagination with 10 to 100 entries per page
 - **Every view has an address:** collection, filter, search, page, and sort survive reloads, bookmarks, and Back/Forward, and reloads and Back/Forward also restore the scroll position
 - **Your own starting point:** a start page per account (Monitor or Activity) and a default view per collection (All, Unread, or Errors)
+- Move collections and subscriptions between accounts or instances under **Settings › Watchlist**, with an import preview for duplicate or unsupported entries
 - Keyboard shortcuts: `/` search, `j`/`k` move between rows, `Enter` opens, `a` adds a subscription, `?` lists the shortcuts, `Esc` closes
 - Keyboard-operable menus, dialogs, and panels with managed focus, and a phone and tablet layout with bottom navigation, checked automatically at widths from 320 to 1440 pixels
 - English (default) and Russian interfaces and Telegram messages, selected per account

@@ -7,6 +7,7 @@ import { globalMirrorUrl, origin, parse, resolvedMirrors, trackerKeySchema, urlS
 import { START_PAGES, THEME_PREFERENCES, type TrackerKey } from "../types.js";
 import { personalMirrorAllowed } from "../mirrors.js";
 import type { SqliteDatabase } from "../db.js";
+import { telegramPreferences, telegramPreferencesSchema } from "../telegram-preferences.js";
 
 const MIRROR_NOT_ALLOWED = "Personal mirrors are limited to the tracker's own domains and the global mirror";
 function mirrorRejected(db: SqliteDatabase, trackerKey: TrackerKey, baseUrl: string): boolean {
@@ -79,6 +80,14 @@ export function registerSettingsRoutes({ app, db, vault, telegram }: RouteServic
     return { ok: true };
   });
   app.get("/api/telegram", { preHandler: requireReadyUser }, async (request) => ({ telegram: telegram.statusForUser(request.user!.id) }));
+  app.get("/api/telegram/preferences", { preHandler: requireReadyUser }, async (request) => ({ preferences: telegramPreferences(db, request.user!.id) }));
+  app.put("/api/telegram/preferences", { preHandler: requireReadyUser }, async (request, reply) => {
+    const preferences = parse(telegramPreferencesSchema, request.body, reply);
+    if (!preferences || !request.user) return;
+    db.prepare(`INSERT INTO telegram_preferences (user_id, modes) VALUES (?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET modes = excluded.modes`).run(request.user.id, JSON.stringify(preferences));
+    return { preferences };
+  });
   app.post("/api/telegram/bot", { preHandler: requireReadyUser }, async (request, reply) => {
     // BotFather tokens are <bot id>:<secret>; anything else is rejected before it reaches a Telegram API URL.
     const input = parse(z.object({ token: z.string().trim().regex(/^\d{3,20}:[A-Za-z0-9_-]{30,100}$/u) }), request.body, reply);

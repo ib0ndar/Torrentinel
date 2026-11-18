@@ -266,6 +266,11 @@ export function createDatabase(databasePath = config.databasePath): SqliteDataba
     CREATE INDEX IF NOT EXISTS idx_notification_queue_due
       ON notification_queue(next_attempt_at) WHERE delivered_at IS NULL;
 
+    CREATE TABLE IF NOT EXISTS telegram_preferences (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      modes TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS telegram_deliveries (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -404,6 +409,14 @@ function migrate(db: SqliteDatabase): void {
   if (!subscriptionColumns.some((column) => column.name === "detail_verified_at")) {
     db.exec("ALTER TABLE subscriptions ADD COLUMN detail_verified_at TEXT");
   }
+  if (!subscriptionColumns.some((column) => column.name === "telegram_muted")) {
+    db.exec("ALTER TABLE subscriptions ADD COLUMN telegram_muted INTEGER NOT NULL DEFAULT 0 CHECK(telegram_muted IN (0, 1))");
+  }
+  const queueColumns = db.prepare("PRAGMA table_info(notification_queue)").all() as Array<{ name: string }>;
+  if (!queueColumns.some((column) => column.name === "digest_at")) {
+    db.exec("ALTER TABLE notification_queue ADD COLUMN digest_at TEXT");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_notification_queue_digest ON notification_queue(user_id, digest_at, next_attempt_at) WHERE delivered_at IS NULL AND digest_at IS NOT NULL");
 
   const telegramDeliveryColumns = db.prepare("PRAGMA table_info(telegram_deliveries)")
     .all() as Array<{ name: string }>;

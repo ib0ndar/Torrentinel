@@ -98,6 +98,20 @@ it("shows file paths and before and after sizes in change history", async () => 
   } finally { await act(async () => root.unmount()); }
 });
 
+it("watches a rule match and provides a direct link to its subscription", async () => {
+  const match: RuleMatch = { id: "m1", trackerKey: "rutor", externalId: "42", title: "Series", url: "https://rutor.info/torrent/42",
+    discoveredAt: "2026-11-18T00:00:00Z", canWatch: true };
+  const { root, drawer } = await open({ subscription: subscription({ type: "rule", requiredTerms: ["Series"] }), matches: [match], events: [] });
+  try {
+    vi.mocked(api).mockResolvedValueOnce({ id: "42", created: true });
+    const action = drawer.querySelector<HTMLButtonElement>(".match-row__watch")!;
+    expect(action.textContent).toBe("Watch this topic");
+    await act(async () => action.click());
+    expect(api).toHaveBeenCalledWith("/api/subscriptions/1/matches/m1/watch", { method: "POST" });
+    expect(drawer.querySelector("a.match-row__watch")?.getAttribute("href")).toBe("/subscriptions/42");
+  } finally { await act(async () => root.unmount()); }
+});
+
 it("lists matched releases and offers magnet and torrent actions on rule matches without nesting links", async () => {
   const releases = Array.from({ length: 7 }, (_, index) => ({ title: `Dune release ${index + 1}` }));
   const { root, drawer } = await open({ subscription: subscription({ type: "rule", label: "Dune", requiredTerms: ["Dune"], trackerKeys: ["rutracker", "kinozal"] }), events: [

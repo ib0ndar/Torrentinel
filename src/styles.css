@@ -388,6 +388,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .match-row__actions a, .match-row__slot { width: 34px; height: 34px; flex: 0 0 auto; }
 .match-row__actions a { display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); transition: border-color .14s ease, color .14s ease; }
 .match-row__actions a:hover { border-color: var(--line-strong); color: var(--ink); }
+.match-row:has(.match-row__watch) { row-gap: 0; }
+.match-row__watch { grid-column: 2 / -1; justify-self: start; margin-bottom: 10px; }
 .match-list strong { overflow: hidden; font-size: var(--text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; transition: color .14s ease; }
 .match-list small { color: var(--dim); font-size: var(--text-xs); }
 .match-row__title .icon { color: var(--dim); }
@@ -417,6 +419,14 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .edit-subscription { margin-top: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--overlay) 1.8%, transparent); }
 .edit-subscription .tracker-choice { min-height: 48px; }
 .inline-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
+.feature-form, .rule-preview, .watchlist-review { display: grid; gap: 12px; min-width: 0; }
+.feature-form input[type="file"] { max-width: 100%; }
+.rule-preview > button { justify-self: start; }
+.rule-preview__tracker, .watchlist-review__collection { border-top: 1px solid var(--line); padding-block: 10px; overflow-wrap: anywhere; }
+.rule-preview__heading { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.rule-preview ul, .watchlist-review ul { padding-inline-start: 20px; }
+.rule-preview li small { display: block; color: var(--muted); }
+.rule-preview summary, .watchlist-review summary { cursor: pointer; }
 .missing-actions { display: flex; gap: 8px; }
 
 .page { min-height: 100vh; }

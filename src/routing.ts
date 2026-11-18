@@ -22,8 +22,8 @@ export type Navigate = (path: string, options?: { replace?: boolean }) => void;
 /** Monitor in the last used collection, whatever the start page is. */
 export const MONITOR_HOME = "/collections";
 
-export type SettingsTab = "account" | "preferences" | "telegram" | "trackers";
-export const SETTINGS_TABS: readonly SettingsTab[] = ["account", "preferences", "telegram", "trackers"];
+export type SettingsTab = "account" | "preferences" | "telegram" | "trackers" | "watchlist";
+export const SETTINGS_TABS: readonly SettingsTab[] = ["account", "preferences", "telegram", "trackers", "watchlist"];
 export function settingsPath(tab: SettingsTab): string { return `/settings/${tab}`; }
 
 export type AdminTab = "overview" | "users" | "mirrors" | "diagnostics";

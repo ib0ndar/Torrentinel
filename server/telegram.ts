@@ -211,7 +211,7 @@ export class TelegramService {
     return Boolean(this.notificationDestination(userId));
   }
 
-  async notifyUser(userId: string, html: string): Promise<void> {
+  async notifyDigest(userId: string, notifications: ReleaseNotification[]): Promise<DeliveryResult> {
     const startedMs = Date.now();
     const destination = this.notificationDestination(userId);
     if (!destination) {
@@ -222,9 +222,19 @@ export class TelegramService {
         durationMs: Date.now() - startedMs,
         error: new Error("Telegram bot or account link is not configured"),
       });
-      return;
+      return { delivered: false, error: "Telegram bot or account link is not configured" };
     }
     try {
+      const language = this.languageForUser(userId);
+      const baseUrl = httpUrl(this.publicUrl)?.replace(/\/+$/, "");
+      const lines = notifications.map(({ release, subscriptionId, changes }) => {
+        const title = escapeTelegram(truncate(release.title, 240));
+        const url = baseUrl && subscriptionId ? `${baseUrl}/subscriptions/${encodeURIComponent(subscriptionId)}` : httpUrl(release.url);
+        const link = url && url.length <= 400 ? `<a href="${escapeTelegram(url).replace(/"/g, "&quot;")}">${title}</a>` : title;
+        const detail = changes?.length ? changes.map((change) => notificationText(language, change)).join(", ") : notificationText(language, "New release");
+        return `• ${link} — ${escapeTelegram(truncate(detail, 140))}`;
+      });
+      const html = [`<b>${notificationText(language, "Daily digest")}</b>`, "", ...lines].join("\n");
       const token = this.vault.decrypt(destination.tokenEncrypted, telegramTokenAad(userId));
       const message = await this.call<TelegramMessage>(token, "sendMessage", {
         chat_id: destination.chatId,
@@ -239,6 +249,7 @@ export class TelegramService {
         telegramMessageId: message.message_id,
         durationMs: Date.now() - startedMs,
       });
+      return { delivered: true };
     } catch (error) {
       this.recordDelivery({
         userId,
@@ -248,6 +259,7 @@ export class TelegramService {
         error,
       });
       console.error(`Telegram notification failed for user ${userId}:`, safeError(error));
+      return { delivered: false, error: safeError(error), retryAfterSeconds: error instanceof TelegramError ? error.retryAfterSeconds : undefined };
     }
   }
 
