@@ -4,6 +4,8 @@ All notable changes to Torrentinel are documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-18
+
 ### Added
 
 - Change history for direct subscriptions shows which files were added, removed, or resized when the tracker exposes a file list. The first available list establishes a baseline silently.
@@ -11,6 +13,11 @@ All notable changes to Torrentinel are documented in this file.
 - Watch a topic directly from a rule match with the link-and-plus icon. A link with a checkmark opens the existing subscription.
 - Choose immediate delivery, a daily digest at 09:00 UTC, or no Telegram alerts for each event category. Subscriptions can also be muted individually while retaining their Activity history.
 - Export collections, direct topic links, and rules as a portable watchlist. Preview imports to see duplicate and unsupported entries before applying them. Imported subscriptions begin checking at the next poll.
+
+### Upgrade notes
+
+- Back up the database and application-data directory together before updating. Torrentinel adds the notification preference and digest fields during startup.
+- Immediate delivery is the default for existing accounts. Change it under **Settings › Telegram bot**.
 
 ## [1.0.2] - 2026-11-01
 
@@ -679,7 +686,8 @@ All notable changes to Torrentinel are documented in this file.
 - Tracker diagnostics in the Administration interface with a fixed 168-hour retention window.
 - Explicit Rutor missing-release detection that preserves the last valid direct-subscription snapshot.
 
-[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/ib0ndar/Torrentinel/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v1.1.0
 [1.0.2]: https://github.com/ib0ndar/Torrentinel/releases/tag/v1.0.2
 [1.0.1]: https://github.com/ib0ndar/Torrentinel/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ib0ndar/Torrentinel/releases/tag/v1.0.0
