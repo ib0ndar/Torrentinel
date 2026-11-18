@@ -25,11 +25,16 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
   const [item, setItem] = useState<Subscription | null>(null), [events, setEvents] = useState<SubscriptionEvent[]>([]), [matches, setMatches] = useState<RuleMatch[]>([]);
   const [busy, setBusy] = useState(false), [editing, setEditing] = useState(false);
   const [watching, setWatching] = useState<string | null>(null);
+  const focusWatchedTopic = useRef<string | null>(null);
   // A failed first load is shown in place of the details, once; a missing subscription gets a way back.
   const [loadError, setLoadError] = useState<{ message: string; missing: boolean } | null>(null);
   const endpoint = `/api/subscriptions/${encodeURIComponent(id)}`;
   // Fixed action columns: a column exists when any match has that action, so icons line up across rows.
-  const actionSlots = { magnet: matches.some((match) => match.magnet), torrent: matches.some((match) => match.torrentUrl) };
+  const actionSlots = {
+    magnet: matches.some((match) => match.magnet),
+    torrent: matches.some((match) => match.torrentUrl),
+    watch: matches.some((match) => match.canWatch || match.watchedSubscriptionId),
+  };
   const load = useCallback(async (opening = false, signal?: AbortSignal) => {
     const result = await api<{ subscription: Subscription; events: SubscriptionEvent[]; matches: RuleMatch[] }>(`${endpoint}${opening ? "/open" : ""}`, { ...(opening ? { method: "POST" } : {}), signal });
     if (signal?.aborted) return;
@@ -58,10 +63,12 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
     try { await api(`${endpoint}/read`, { method: "POST", ...jsonBody({ read: item.isUnread }) }); await Promise.all([load(), onChanged()]); }
     catch (error) { notify(errorMessage(error), "bad"); } finally { setBusy(false); }
   }
-  async function watch(match: RuleMatch) {
+  async function watch(match: RuleMatch, trigger: HTMLButtonElement) {
+    if (watching !== null) return;
     setWatching(match.id);
     try {
       const result = await api<{ id: string; created: boolean }>(`${endpoint}/matches/${encodeURIComponent(match.id)}/watch`, { method: "POST" });
+      if (document.activeElement === trigger) focusWatchedTopic.current = match.id;
       setMatches((current) => current.map((entry) => entry.id === match.id ? { ...entry, watchedSubscriptionId: result.id } : entry));
       await onChanged();
       if (result.created) notify(t("Direct subscription added"));
@@ -87,13 +94,41 @@ export function SubscriptionInspector({ id, collections, onClose, onChanged, not
         {item.type === "rule" && <><div><dt>{t("Required")}</dt><dd>{item.requiredTerms.join(" · ")}</dd></div><div><dt>{t("Ignored")}</dt><dd>{item.ignoredTerms.join(" · ") || t("None")}</dd></div></>}
       </dl>}</section>
       {item.type === "direct" && <section className="detail-section"><div className="release-actions"><h3>{t("Release")}</h3><div className="source-links"><a href={item.currentSnapshot?.url || item.directUrl || "#"} target="_blank" rel="noreferrer"><Icon name="external" />{t("Tracker page")}</a>{item.currentSnapshot?.magnet && <a href={item.currentSnapshot.magnet}><Icon name="magnet" />{t("Magnet")}</a>}{item.currentSnapshot?.torrentUrl && <a href={item.currentSnapshot.torrentUrl} target="_blank" rel="noreferrer"><Icon name="download" />{t("Torrent file")}</a>}</div></div></section>}
-      {item.type === "rule" && <section className="detail-section"><div className="section-heading"><h3>{t("Matches")}</h3><span>{matches.length}</span></div>{matches.length ? <div className="match-list">{matches.map((match) => <div className="match-row" key={match.id}><TrackerTag tracker={match.trackerKey} /><a className="match-row__title" href={match.url} target="_blank" rel="noreferrer"><span><span className="match-row__name"><strong>{match.title}</strong><Icon name="external" size={13} /></span><small>{relativeTime(match.discoveredAt)}</small></span></a>
-        {actionSlots.magnet || actionSlots.torrent ? <span className="match-row__actions">{actionSlots.magnet && (match.magnet ? <a href={match.magnet} aria-label={t("Open magnet for {title}", { title: match.title })} title={t("Magnet")}><Icon name="magnet" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}{actionSlots.torrent && (match.torrentUrl ? <a href={match.torrentUrl} target="_blank" rel="noreferrer" aria-label={t("Download torrent file for {title}", { title: match.title })} title={t("Torrent file")}><Icon name="download" size={16} /></a> : <span className="match-row__slot" aria-hidden="true" />)}</span> : null}
-        {match.watchedSubscriptionId ? <a className="text-button match-row__watch" href={`/subscriptions/${encodeURIComponent(match.watchedSubscriptionId)}`}>{t("Open watched topic")}</a>
-          : match.canWatch && <button type="button" className="text-button match-row__watch" disabled={watching !== null} onClick={() => void watch(match)}>
-            {t(watching === match.id ? "Adding topic…" : "Watch this topic")}
-          </button>}
-      </div>)}</div> : <EmptyCompact text={t(item.initialized ? "No new releases matched this rule yet." : "The first baseline scan is pending.")} />}</section>}
+      {item.type === "rule" && <section className="detail-section">
+        <div className="section-heading"><h3>{t("Matches")}</h3><span>{matches.length}</span></div>
+        {matches.length ? <div className="match-list">{matches.map((match) => <div className="match-row" key={match.id}>
+          <TrackerTag tracker={match.trackerKey} />
+          <a className="match-row__title" href={match.url} target="_blank" rel="noreferrer"><span>
+            <span className="match-row__name"><strong>{match.title}</strong><Icon name="external" size={13} /></span>
+            <small>{relativeTime(match.discoveredAt)}</small>
+          </span></a>
+          {(actionSlots.magnet || actionSlots.torrent || actionSlots.watch) && <span className="match-row__actions">
+            {actionSlots.magnet && (match.magnet
+              ? <a href={match.magnet} aria-label={t("Open magnet for {title}", { title: match.title })} title={t("Magnet")}><Icon name="magnet" size={16} /></a>
+              : <span className="match-row__slot" aria-hidden="true" />)}
+            {actionSlots.torrent && (match.torrentUrl
+              ? <a href={match.torrentUrl} target="_blank" rel="noreferrer" aria-label={t("Download torrent file for {title}", { title: match.title })} title={t("Torrent file")}><Icon name="download" size={16} /></a>
+              : <span className="match-row__slot" aria-hidden="true" />)}
+            {actionSlots.watch && (match.watchedSubscriptionId
+              ? <a className="match-row__watch match-row__watch--saved" href={`/subscriptions/${encodeURIComponent(match.watchedSubscriptionId)}`}
+                aria-label={t("Open subscription for “{title}”", { title: match.title })} title={t("Open subscription")}
+                ref={(link) => {
+                  if (link && focusWatchedTopic.current === match.id) {
+                    focusWatchedTopic.current = null;
+                    link.focus();
+                  }
+                }}><Icon name="link" size={18} /><span className="match-row__watch-badge" aria-hidden="true" /></a>
+              : match.canWatch
+                ? <button type="button" className="match-row__watch" aria-disabled={watching !== null}
+                  aria-busy={watching === match.id} aria-label={t("Watch “{title}”", { title: match.title })}
+                  title={t(watching === match.id ? "Adding topic…" : "Watch this topic")} onClick={(event) => void watch(match, event.currentTarget)}>
+                  {watching === match.id ? <span className="button-spinner" aria-hidden="true" />
+                    : <><Icon name="link" size={18} /><span className="match-row__watch-badge" aria-hidden="true" /></>}
+                </button>
+                : <span className="match-row__slot" aria-hidden="true" />)}
+          </span>}
+        </div>)}</div> : <EmptyCompact text={t(item.initialized ? "No new releases matched this rule yet." : "The first baseline scan is pending.")} />}
+      </section>}
       <section className="detail-section"><div className="section-heading"><h3>{t("Change history")}</h3><span>{events.length}</span></div>{events.length ? <div className="timeline">{events.map((event) => <div className="timeline-item" key={event.id}><span className={!event.readAt ? "timeline-dot timeline-dot--new" : "timeline-dot"} /><div><ChangeDetails event={event} /><small title={absoluteTime(event.createdAt)}>{relativeTime(event.createdAt)}</small></div></div>)}</div> : <EmptyCompact text={t("Changes will appear here after the baseline.")} />}</section>
       <section className="detail-section detail-section--actions"><button className="button button--quiet" disabled={busy} onClick={markRead}>{t(item.isUnread ? "Mark read" : "Mark unread")}</button><button className="button button--quiet" disabled={busy} onClick={() => void update({ enabled: !item.enabled }, t(item.enabled ? "Subscription paused" : "Subscription resumed"))}>{t(item.enabled ? "Pause" : "Resume")}</button>
         <button className="button button--quiet" disabled={busy} onClick={() => void update({ telegramMuted: !item.telegramMuted }, t(item.telegramMuted ? "Telegram alerts unmuted" : "Telegram alerts muted"))}>{t(item.telegramMuted ? "Unmute Telegram" : "Mute Telegram")}</button>

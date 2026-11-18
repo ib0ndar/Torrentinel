@@ -98,17 +98,37 @@ it("shows file paths and before and after sizes in change history", async () => 
   } finally { await act(async () => root.unmount()); }
 });
 
-it("watches a rule match and provides a direct link to its subscription", async () => {
+it("watches a rule match from its icon and keeps focus when the action becomes a link", async () => {
   const match: RuleMatch = { id: "m1", trackerKey: "rutor", externalId: "42", title: "Series", url: "https://rutor.info/torrent/42",
-    discoveredAt: "2026-11-18T00:00:00Z", canWatch: true };
-  const { root, drawer } = await open({ subscription: subscription({ type: "rule", requiredTerms: ["Series"] }), matches: [match], events: [] });
+    discoveredAt: "2026-11-18T00:00:00Z", canWatch: true, magnet: "magnet:?series", torrentUrl: "https://rutor.info/series.torrent" };
+  const unsupported = { ...match, id: "m2", canWatch: false, magnet: null, torrentUrl: null };
+  const { root, drawer } = await open({ subscription: subscription({ type: "rule", requiredTerms: ["Series"] }), matches: [match, unsupported], events: [] });
   try {
-    vi.mocked(api).mockResolvedValueOnce({ id: "42", created: true });
+    let finish!: (result: { id: string; created: boolean }) => void;
+    vi.mocked(api).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const action = drawer.querySelector<HTMLButtonElement>(".match-row__watch")!;
-    expect(action.textContent).toBe("Watch this topic");
+    expect(action.textContent).toBe("");
+    expect(action.title).toBe("Watch this topic");
+    expect(action.getAttribute("aria-label")).toBe("Watch “Series”");
+    expect(action.querySelector("use")?.getAttribute("href")).toMatch(/#ti-link$/);
+    expect(action.parentElement?.lastElementChild).toBe(action);
+    expect(drawer.querySelectorAll(".match-row")[1].querySelectorAll(".match-row__slot")).toHaveLength(3);
+    await act(async () => { action.focus(); action.click(); });
+    expect(action.getAttribute("aria-busy")).toBe("true");
+    expect(action.title).toBe("Adding topic…");
     await act(async () => action.click());
     expect(api).toHaveBeenCalledWith("/api/subscriptions/1/matches/m1/watch", { method: "POST" });
-    expect(drawer.querySelector("a.match-row__watch")?.getAttribute("href")).toBe("/subscriptions/42");
+    expect(vi.mocked(api).mock.calls.filter(([path]) => path.endsWith("/watch"))).toHaveLength(1);
+    await act(async () => finish({ id: "42", created: true }));
+    const watched = drawer.querySelector<HTMLAnchorElement>("a.match-row__watch--saved")!;
+    expect(watched.getAttribute("href")).toBe("/subscriptions/42");
+    expect(watched.title).toBe("Open subscription");
+    expect(watched.getAttribute("aria-label")).toBe("Open subscription for “Series”");
+    expect(watched.textContent).toBe("");
+    expect(document.activeElement).toBe(watched);
+    await act(async () => setLanguage("ru"));
+    expect(watched.title).toBe("Открыть подписку");
+    expect(watched.getAttribute("aria-label")).toBe("Открыть подписку на тему «Series»");
   } finally { await act(async () => root.unmount()); }
 });
 
