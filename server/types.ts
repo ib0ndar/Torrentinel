@@ -56,4 +56,10 @@ export interface Release {
 
 export interface DirectSnapshot extends Release {
   fingerprint: string;
+  files?: TorrentFile[];
+}
+
+export interface TorrentFile {
+  path: string;
+  size: number | string;
 }

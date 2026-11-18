@@ -83,6 +83,7 @@ Open the configured URL and complete the [first sign-in](#first-sign-in).
 ### Monitoring and discovery
 
 - **Direct subscriptions** to tracker topics: the title, cover, magnet, torrent file, and tracker metadata are fingerprinted on every check, and any change is recorded with its previous and new values
+- **File changes** in direct subscription history show added, removed, and resized files when the tracker exposes file lists. The first available list is a silent baseline.
 - **Silent baselines:** the first check of a page or rule records a baseline without notifying, and when an update changes how Torrentinel reads a tracker page, existing subscriptions are re-baselined without false alerts
 - **Rule subscriptions** across several trackers with required and ignored phrases, matched case-insensitively in Latin and Cyrillic; ignored phrases start with trailer, teaser, and soundtrack in English and Russian, and every rule keeps its matches with tracker links, magnets, and torrent files
 - **Discovery suited to each tracker:** RuTracker's rolling feed, Rutor's recent-release list, and Kinozal's search

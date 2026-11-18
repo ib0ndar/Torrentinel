@@ -76,6 +76,28 @@ it("shows what changed in direct events, with old and new titles and links, and 
   } finally { await act(async () => root.unmount()); }
 });
 
+it("shows file paths and before and after sizes in change history", async () => {
+  const { root, drawer } = await open({ subscription: subscription({}), matches: [], events: [
+    event("files", "direct-change", "torrent file changed", {
+      changes: ["torrent file changed"], fileChanges: {
+        added: { count: 2, files: [{ path: "Season 1/Episode 7.mkv", after: 900 }] },
+        removed: { count: 0, files: [] },
+        resized: { count: 1, files: [{ path: "Season 1/Episode 3.mkv", before: 700, after: 800 }] },
+      },
+    }),
+  ] });
+  try {
+    const details = drawer.querySelector<HTMLDetailsElement>(".change-files")!;
+    expect(details.querySelector("summary")?.textContent).toBe("File changes · 2 added · 1 resized");
+    await act(async () => details.querySelector("summary")!.click());
+    expect(details.open).toBe(true);
+    expect(details.textContent).toContain("Season 1/Episode 7.mkv 900 B");
+    expect(details.textContent).toContain("Season 1/Episode 3.mkv 700 B → 800 B");
+    expect(details.textContent).toContain("+1 more");
+    expect(details.textContent).not.toContain("removed");
+  } finally { await act(async () => root.unmount()); }
+});
+
 it("lists matched releases and offers magnet and torrent actions on rule matches without nesting links", async () => {
   const releases = Array.from({ length: 7 }, (_, index) => ({ title: `Dune release ${index + 1}` }));
   const { root, drawer } = await open({ subscription: subscription({ type: "rule", label: "Dune", requiredTerms: ["Dune"], trackerKeys: ["rutracker", "kinozal"] }), events: [

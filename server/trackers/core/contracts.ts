@@ -50,7 +50,7 @@ export interface RuleDiscoveryQuery {
 }
 
 export interface DirectMonitor {
-  fetchSnapshot(url: string, context: TrackerContext): Promise<DirectSnapshot>;
+  fetchSnapshot(url: string, context: TrackerContext, includeFiles?: boolean): Promise<DirectSnapshot>;
 }
 
 export interface RuleDiscoveryProvider {

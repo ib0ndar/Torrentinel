@@ -662,6 +662,53 @@ describe("direct subscription title synchronization", () => {
       db.close();
     }
   });
+
+  it("learns file lists silently and records a file-only update after a temporary listing failure", async () => {
+    const db = createDatabase(":memory:");
+    const user = db.prepare("SELECT id FROM users WHERE username = 'admin'").get() as { id: string };
+    const collection = db.prepare("SELECT id FROM collections WHERE user_id = ?").get(user.id) as { id: string };
+    const timestamp = new Date().toISOString();
+    const snapshot = directSnapshot("Series", "unchanged-release-fingerprint", "cover.jpg");
+    db.prepare(`INSERT INTO subscriptions (id, user_id, collection_id, type, name, direct_url,
+      initialized, current_fingerprint, current_snapshot, created_at, updated_at)
+      VALUES ('files', ?, ?, 'direct', ?, ?, 1, ?, ?, ?, ?)`)
+      .run(user.id, collection.id, snapshot.title, snapshot.url, snapshot.fingerprint, JSON.stringify(snapshot), timestamp, timestamp);
+    db.prepare("INSERT INTO subscription_trackers (subscription_id, tracker_key) VALUES ('files', 'rutor')").run();
+
+    const original = [{ path: "S1/01.mkv", size: 1_000 }, { path: "S1/02 sample.mkv", size: 50 }];
+    const updated = [{ path: "S1/02.mkv", size: 1_000 }, { path: "S1/01.mkv", size: 1_200 }];
+    const fetchSnapshot = vi.spyOn(trackerRegistry.get("rutor")!.direct!, "fetchSnapshot")
+      .mockResolvedValueOnce({ ...snapshot, files: original })
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce({ ...snapshot, files: updated })
+      .mockResolvedValue({ ...snapshot, files: [...updated].reverse() });
+    const notifyRelease = vi.fn(async () => ({ delivered: true }));
+    const scheduler = new Scheduler(db, { notifyRelease } as unknown as TelegramService, new SecretVault(Buffer.alloc(32, 7)));
+    const events = db.prepare("SELECT summary, payload FROM subscription_events WHERE subscription_id = 'files'");
+    try {
+      await scheduler.checkSubscription("files", user.id);
+      await scheduler.checkSubscription("files", user.id);
+      expect(events.all()).toHaveLength(0);
+      expect(notifyRelease).not.toHaveBeenCalled();
+      await scheduler.checkSubscription("files", user.id);
+      await scheduler.checkSubscription("files", user.id);
+      expect(events.all()).toHaveLength(1);
+      const event = events.get() as { summary: string; payload: string };
+      expect(event.summary).toBe("torrent file changed");
+      const payload = JSON.parse(event.payload);
+      expect(payload.fileChanges).toEqual({
+        added: { count: 1, files: [{ path: "S1/02.mkv", after: 1000 }] },
+        removed: { count: 1, files: [{ path: "S1/02 sample.mkv", before: 50 }] },
+        resized: { count: 1, files: [{ path: "S1/01.mkv", before: 1000, after: 1200 }] },
+      });
+      expect(payload.previous.files).toBeUndefined();
+      expect(payload.current.files).toBeUndefined();
+      expect(notifyRelease).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSnapshot.mockRestore();
+      db.close();
+    }
+  });
 });
 
 function release(externalId: string): Release {

@@ -3,7 +3,7 @@ import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { BrowserContext, Page, Response } from "patchright";
+import type { BrowserContext, Locator, Page, Response } from "patchright";
 import { IntegratedBrowserClient, topLevelNavigationAllowed } from "./core/transport/browser.js";
 
 const temporaryDirectories: string[] = [];
@@ -43,6 +43,28 @@ describe("integrated browser client", () => {
     expect(launch).toHaveBeenCalledTimes(1);
     expect(fixture.goto).toHaveBeenCalledTimes(2);
     expect(fixture.close).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])("keeps the topic readable when optional expansion completes: %s", async (loaded) => {
+    const topic = "<h1>Topic</h1>";
+    const expanded = `${topic}<ul id="files"><li>Episode 1.mkv</li></ul>`;
+    const fixture = fakeBrowser([[topic, topic, expanded]]);
+    const waitFor = vi.fn(async () => { if (!loaded) throw new Error("File list unavailable"); });
+    const button = { first: () => button, count: async () => 1, click: vi.fn(async () => undefined) };
+    const result = { first: () => result, count: async () => 0, waitFor };
+    vi.spyOn(fixture.context.pages()[0], "locator")
+      .mockImplementation((selector) => (selector === "#show" ? button : result) as unknown as Locator);
+    const client = new IntegratedBrowserClient("expand-session", {
+      launchContext: async () => fixture.context, profileRoot: await tempDirectory(), allowedHosts: ["rutracker.org"],
+    });
+    try {
+      const page = await client.get("https://rutracker.org/forum/viewtopic.php?t=1", undefined, undefined, { button: "#show", result: "#files li" });
+      expect(button.click).toHaveBeenCalledOnce();
+      expect(waitFor).toHaveBeenCalledOnce();
+      expect(page.body).toBe(loaded ? expanded : topic);
+    } finally {
+      await client.close();
+    }
   });
 
   it("closes Chrome once it has been idle and starts it again with the same profile", async () => {

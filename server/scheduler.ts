@@ -2,7 +2,8 @@ import { nanoid } from "nanoid";
 import type { SqliteDatabase } from "./db.js";
 import { nowIso } from "./db.js";
 import { config } from "./config.js";
-import type { DirectSnapshot, Release, TrackerKey } from "./types.js";
+import type { DirectSnapshot, Release, TorrentFile, TrackerKey } from "./types.js";
+import { diffTorrentFiles } from "./torrent-files.js";
 import { trackerRegistry } from "./trackers/index.js";
 import type { TrackerContext, TrackerPlugin } from "./trackers/core/contracts.js";
 import { TrackerError } from "./trackers/core/errors.js";
@@ -405,7 +406,7 @@ export class Scheduler {
     }
     const checkedAt = nowIso();
     try {
-      snapshot = await plugin.direct.fetchSnapshot(row.direct_url, this.context(row.user_id, row.tracker_key, row.base_url));
+      snapshot = await plugin.direct.fetchSnapshot(row.direct_url, this.context(row.user_id, row.tracker_key, row.base_url), true);
       status.checked += 1;
       if (!this.directRowStillCurrent(row)) {
         outcome = "superseded";
@@ -465,11 +466,15 @@ export class Scheduler {
         return outcome;
       }
 
-      if (snapshot.fingerprint !== row.current_fingerprint) {
+      const { files: previousFiles, ...previous } = safeJson(row.current_snapshot);
+      const { files: observedFiles, ...current } = snapshot;
+      const knownFiles = Array.isArray(previousFiles) ? previousFiles as TorrentFile[] : undefined;
+      const fileChanges = diffTorrentFiles(knownFiles, observedFiles);
+      // If the listing is unavailable, keep the last observed manifest for the next successful comparison.
+      const storedSnapshot = { ...current, files: observedFiles ?? knownFiles };
+      if (snapshot.fingerprint !== row.current_fingerprint || fileChanges) {
         outcome = "changed";
-        const currentSnapshot = snapshot;
-        const previous = safeJson(row.current_snapshot);
-        const changes = describeChanges(previous, currentSnapshot as unknown as Record<string, unknown>);
+        const changes = describeChanges(previous, current, Boolean(fileChanges));
         const eventId = nanoid();
         this.db.transaction(() => {
           this.db.prepare(`
@@ -477,14 +482,14 @@ export class Scheduler {
             SET name = ?, current_fingerprint = ?, current_snapshot = ?, detail_verified_at = ?, last_checked_at = ?,
                 last_changed_at = ?, last_error = NULL, updated_at = ?
             WHERE id = ?
-          `).run(currentSnapshot.title, currentSnapshot.fingerprint, JSON.stringify(currentSnapshot), checkedAt, checkedAt, checkedAt, checkedAt, row.id);
+          `).run(current.title, current.fingerprint, JSON.stringify(storedSnapshot), checkedAt, checkedAt, checkedAt, checkedAt, row.id);
           this.db.prepare(`
             INSERT INTO subscription_events
               (id, subscription_id, user_id, kind, summary, payload, created_at)
             VALUES (?, ?, ?, 'direct-change', ?, ?, ?)
-          `).run(eventId, row.id, row.user_id, changes.join(", "), JSON.stringify({ previous, current: currentSnapshot, changes }), checkedAt);
+          `).run(eventId, row.id, row.user_id, changes.join(", "), JSON.stringify({ previous, current, changes, fileChanges }), checkedAt);
           enqueueNotification(this.db, row.user_id, `direct:${eventId}`, {
-            subscriptionId: row.id, release: currentSnapshot,
+            subscriptionId: row.id, release: current,
             trackerName: plugin.manifest.displayName, changes, coverRefreshError,
           });
         })();
@@ -495,7 +500,7 @@ export class Scheduler {
         this.db.prepare(`
           UPDATE subscriptions SET name = ?, current_snapshot = ?, detail_verified_at = ?, last_checked_at = ?, last_error = NULL, updated_at = ?
           WHERE id = ?
-        `).run(snapshot.title, JSON.stringify(snapshot), checkedAt, checkedAt, checkedAt, row.id);
+        `).run(snapshot.title, JSON.stringify(storedSnapshot), checkedAt, checkedAt, checkedAt, row.id);
       }
     } catch (error) {
       observationError = error;
@@ -1116,12 +1121,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function describeChanges(previous: Record<string, unknown>, current: Record<string, unknown>): string[] {
+function describeChanges(previous: Record<string, unknown>, current: Omit<DirectSnapshot, "files">, filesChanged: boolean): string[] {
   const changes: string[] = [];
   if (previous.title !== current.title) changes.push("title changed");
   if (previous.coverUrl !== current.coverUrl) changes.push("cover changed");
   if (previous.magnet !== current.magnet) changes.push("magnet changed");
-  if (previous.torrentUrl !== current.torrentUrl) changes.push("torrent file changed");
+  if (previous.torrentUrl !== current.torrentUrl || filesChanged) changes.push("torrent file changed");
   if (JSON.stringify(previous.metadata || null) !== JSON.stringify(current.metadata || null)) changes.push("metadata changed");
   return changes.length > 0 ? changes : ["release data changed"];
 }

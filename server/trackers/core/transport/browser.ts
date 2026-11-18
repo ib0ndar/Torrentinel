@@ -43,6 +43,26 @@ export interface BrowserFormSubmission {
   values: Record<string, string>;
 }
 
+export interface BrowserExpansion {
+  button: string;
+  result: string;
+}
+
+async function expandPage(page: Page, { button, result }: BrowserExpansion, deadline: number, signal?: AbortSignal) {
+  const trigger = page.locator(button).first();
+  const content = page.locator(result).first();
+  try {
+    if (await content.count() === 0) {
+      if (await trigger.count() === 0) return;
+      await trigger.click({ timeout: remaining(deadline) });
+      await content.waitFor({ state: "attached", timeout: remaining(deadline) });
+    }
+    return await readPageContent(page, deadline, signal);
+  } catch {
+    signal?.throwIfAborted();
+  }
+}
+
 export class IntegratedBrowserError extends TrackerError {
   constructor(
     message: string,
@@ -82,10 +102,10 @@ export class IntegratedBrowserClient {
   }
 
   /** Opens url, which must be on the tracker's own domains or on mirrorUrl, the mirror the request is made for. */
-  get(url: string, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage> {
+  get(url: string, signal?: AbortSignal, mirrorUrl?: string, expansion?: BrowserExpansion): Promise<BrowserPage> {
     const refused = this.refuseUntrusted(url, mirrorUrl);
     if (refused) return Promise.reject(refused);
-    return this.serialized(() => this.getPage(url, signal));
+    return this.serialized(() => this.getPage(url, signal, expansion));
   }
 
   submitForm(submission: BrowserFormSubmission, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage> {
@@ -98,9 +118,9 @@ export class IntegratedBrowserClient {
     return this.serialized(() => this.resetContext());
   }
 
-  private async getPage(url: string, signal?: AbortSignal): Promise<BrowserPage> {
+  private async getPage(url: string, signal?: AbortSignal, expansion?: BrowserExpansion): Promise<BrowserPage> {
     return this.withContextRetry(
-      (context) => this.requestPage(context, url, signal),
+      (context) => this.requestPage(context, url, signal, undefined, expansion),
       signal,
     );
   }
@@ -186,6 +206,7 @@ export class IntegratedBrowserClient {
     url: string,
     signal?: AbortSignal,
     navigate?: (page: Page, deadline: number) => Promise<void>,
+    expansion?: BrowserExpansion,
   ): Promise<BrowserPage> {
     const page = await this.sessionPage(context);
     const timeoutMs = this.options.timeoutMs || config.browserTimeoutMs;
@@ -210,10 +231,13 @@ export class IntegratedBrowserClient {
           timeout: remaining(deadline),
         });
       }
-      const body = await this.ensureChallengeCleared(page, deadline, signal);
+      let body = await this.ensureChallengeCleared(page, deadline, signal);
       const status = documentStatus ?? 200;
       if (status < 200 || status >= 300) {
         throw this.browserError(`returned HTTP ${status}`);
+      }
+      if (expansion) {
+        body = await expandPage(page, expansion, Math.min(deadline, Date.now() + 3_000), signal) ?? body;
       }
       const cookies = (await context.cookies(page.url()))
         .map(({ name, value, domain }) => ({ name, value, domain }));

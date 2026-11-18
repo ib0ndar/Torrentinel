@@ -209,7 +209,9 @@ function nextNumericSubscriptionId(db: SqliteDatabase): string {
   return String((db.prepare(`SELECT COALESCE(MAX(CASE WHEN id <> '' AND id NOT GLOB '*[^0-9]*' THEN CAST(id AS INTEGER) ELSE NULL END), 0) + 1 AS id FROM subscriptions`).get() as { id: number }).id);
 }
 function serializeSubscription(row: SubscriptionDbRow) {
-  const currentSnapshot = jsonObject(row.current_snapshot);
+  const snapshot = jsonObject(row.current_snapshot);
+  const { files: _files, ...summary } = snapshot ?? {};
+  const currentSnapshot = snapshot ? summary : null;
   const requiredTerms = jsonArray(row.required_terms);
   return { id: row.id, collectionId: row.collection_id, collectionName: row.collection_name, type: row.type,
     label: subscriptionLabel(row.type, requiredTerms, row.current_title ?? currentSnapshot?.title, row.name), directUrl: row.direct_url,

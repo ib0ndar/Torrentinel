@@ -170,6 +170,26 @@ describe("Kinozal plugin", () => {
     )).rejects.toMatchObject({ code: "unsupported" } satisfies Partial<TrackerError>);
   });
 
+  it("reads Kinozal file paths and sizes without putting topic checks into backoff when the listing fails", async () => {
+    const topic = "https://kinozal.me/details.php?id=71";
+    const list = "https://kinozal.me/get_srv_details.php?id=71&action=2";
+    const get = vi.fn(async (url: string) => browserPage(url === topic
+      ? fixture("kinozal/fixtures/direct.html") : "<a href='/logout.php'>Online</a>", url));
+    get.mockImplementationOnce(async (url) => browserPage("<a href='/logout.php'>Online</a>", url))
+      .mockImplementationOnce(async (url) => browserPage(fixture("kinozal/fixtures/direct.html"), url))
+      .mockRejectedValueOnce(new TrackerError("temporary", "File list is unavailable"))
+      .mockImplementationOnce(async (url) => browserPage(fixture("kinozal/fixtures/direct.html"), url))
+      .mockImplementationOnce(async (url) => browserPage(
+        '<div class="treeview"><ul><li><span>Episodes</span><ul><li>Episode 1.mkv <i>2 kB (2048)</i></li></ul></li></ul></div>', url,
+      ));
+    const direct = createKinozalPlugin(new KinozalSessionManager(() => ({ get, submitForm: vi.fn() }))).direct!;
+    const context = { baseUrl: "https://kinozal.me", username: "test", password: "test" };
+
+    expect((await direct.fetchSnapshot(topic, context, true)).files).toBeUndefined();
+    expect((await direct.fetchSnapshot(topic, context, true)).files).toEqual([{ path: "Episodes/Episode 1.mkv", size: 2048 }]);
+    expect(get.mock.calls.map(([url]) => url)).toEqual([context.baseUrl, topic, list, topic, list]);
+  });
+
   it("treats an empty search as a successful result and ignores unrelated topic links", () => {
     expect(parseKinozalSearch(`
       <div class="menu"><a href="details.php?id=900">Unrelated menu topic</a></div>
@@ -181,6 +201,25 @@ describe("Kinozal plugin", () => {
 });
 
 describe("Rutor plugin", () => {
+  it("reads file list rows from the configured mirror and ignores incomplete listings", async () => {
+    const baseUrl = "https://rutor.info";
+    const url = `${baseUrl}/torrent/472`;
+    const listUrl = `${baseUrl}/descriptions/472.files`;
+    const row = '<tr><td>Season 1/Новая серия.mkv</td><td>2&nbsp;kB (2048)</td></tr>';
+    const topic = fixture("rutor/fixtures/direct.html") + '<span>Файлы (2)</span><table><tbody id="filelist"></tbody></table>';
+    const fetch = vi.fn(async (input: string | URL | Request) => new Response(String(input) === listUrl
+      ? row + "<tr><td>Readme.txt</td><td>0 B (0)</td></tr>" : topic));
+    vi.stubGlobal("fetch", fetch);
+    const direct = createRutorPlugin().direct!;
+    expect((await direct.fetchSnapshot(url, { baseUrl })).files).toBeUndefined();
+    expect((await direct.fetchSnapshot(url, { baseUrl }, true)).files).toEqual([
+      { path: "Season 1/Новая серия.mkv", size: 2048 }, { path: "Readme.txt", size: 0 },
+    ]);
+    fetch.mockResolvedValueOnce(new Response(topic)).mockResolvedValueOnce(new Response(row));
+    expect((await direct.fetchSnapshot(url, { baseUrl }, true)).files).toBeUndefined();
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([url, url, listUrl, url, listUrl]);
+  });
+
   it("recognizes a deleted torrent response even when Rutor returns HTTP 200", () => {
     expect(rutorMissing({
       body: "<html><title>Rutor.info - Раздача не существует!</title><h1>Раздача не существует!</h1></html>",
@@ -260,8 +299,25 @@ describe("RuTracker plugin", () => {
     expect(batch.coverage).toMatchObject({ source: "feed", complete: false, oldestObservedAt: "2026-08-08T08:20:00Z" });
     expect(batch.cursor).toBe("2026-08-08T08:30:00Z");
     // The browser trusts the mirror it is told about, never the host of the page it opens.
-    expect(detailProvider.get).toHaveBeenCalledWith("https://rutracker.net/forum/viewtopic.php?t=999", undefined, "https://rutracker.net");
+    expect(detailProvider.get).toHaveBeenCalledWith("https://rutracker.net/forum/viewtopic.php?t=999", undefined, "https://rutracker.net", undefined);
     expect(detailProvider.close).toHaveBeenCalledOnce();
+  });
+
+  it("requests the RuTracker file tree for direct checks and keeps folders in paths", async () => {
+    const detailProvider = fakeDetailProvider(fixture("rutracker/fixtures/direct.html") + `
+      <div id="tor-filelist"><ul>
+        <li class="dir"><div><span class="b">Season 1</span></div><ul>
+          <li class="file"><div><b>Episode 1.mkv</b><s>1 GB</s><i>1073741824</i></div></li>
+        </ul></li>
+        <li class="file"><div><b>Episode 1.mkv</b><s>1.2 GB</s></div></li>
+      </ul></div>`);
+    const direct = createRutrackerPlugin(detailProvider).direct!;
+    const context = { baseUrl: "https://rutracker.org" };
+    const url = "https://rutracker.org/forum/viewtopic.php?t=999";
+    expect((await direct.fetchSnapshot(url, context, true)).files).toEqual([
+      { path: "Season 1/Episode 1.mkv", size: 1073741824 }, { path: "Episode 1.mkv", size: "1.2 GB" },
+    ]);
+    expect(detailProvider.get).toHaveBeenCalledWith(url, undefined, context.baseUrl, { button: "#tor-filelist-btn", result: "#tor-filelist li.file" });
   });
 
   it("takes the right-aligned poster over the badges and banners above it", async () => {

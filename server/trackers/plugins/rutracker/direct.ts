@@ -2,12 +2,13 @@ import * as cheerio from "cheerio";
 import type { DirectMonitor } from "../../core/contracts.js";
 import { TrackerError } from "../../core/errors.js";
 import { absoluteImageUrl, cleanText, externalIdFromUrl, fingerprintRelease, magnetInfoHash, magnetLink } from "../../core/parsing.js";
-import { IntegratedBrowserClient, type BrowserPage } from "../../core/transport/browser.js";
+import { IntegratedBrowserClient, type BrowserExpansion, type BrowserPage } from "../../core/transport/browser.js";
 import type { Release } from "../../../types.js";
+import { fileManifest, fileSize } from "../../../torrent-files.js";
 import { rutrackerManifest } from "./manifest.js";
 
 export interface RutrackerDetailProvider {
-  get(url: string, signal?: AbortSignal, mirrorUrl?: string): Promise<BrowserPage>;
+  get(url: string, signal?: AbortSignal, mirrorUrl?: string, expansion?: BrowserExpansion): Promise<BrowserPage>;
   close?(): Promise<void>;
 }
 
@@ -17,10 +18,11 @@ export class RutrackerDirectMonitor implements DirectMonitor {
     private readonly detailProvider: RutrackerDetailProvider = new IntegratedBrowserClient(undefined, { allowedHosts: rutrackerManifest.canonicalHosts }),
   ) {}
 
-  async fetchSnapshot(url: string, context: Parameters<DirectMonitor["fetchSnapshot"]>[1]) {
+  async fetchSnapshot(url: string, context: Parameters<DirectMonitor["fetchSnapshot"]>[1], includeFiles?: boolean) {
     const normalized = this.normalizeUrl(new URL(url), context.baseUrl);
     const externalId = externalIdFromUrl(normalized, [/[?&]t=(\d+)/i]);
-    const page = await this.detailProvider.get(normalized, context.signal, context.baseUrl);
+    const expansion = includeFiles ? { button: "#tor-filelist-btn", result: "#tor-filelist li.file" } : undefined;
+    const page = await this.detailProvider.get(normalized, context.signal, context.baseUrl, expansion);
     const $ = cheerio.load(page.body);
     const title = cleanText($("h1.maintitle, .maintitle, h1").first().text());
     if (!title) throw new TrackerError("parse", "RuTracker topic page did not contain a title", { trackerKey: "rutracker" });
@@ -47,10 +49,24 @@ export class RutrackerDirectMonitor implements DirectMonitor {
         infoHash: magnetInfoHash(magnet) || null,
       },
     };
-    return { ...release, fingerprint: fingerprintRelease(release) };
+    const files = includeFiles ? parseRutrackerFiles($) : undefined;
+    return { ...release, fingerprint: fingerprintRelease(release), ...(files ? { files } : {}) };
   }
 
   close(): Promise<void> | undefined {
     return this.detailProvider.close?.();
   }
+}
+
+function parseRutrackerFiles($: cheerio.CheerioAPI) {
+  const tree = $("#tor-filelist");
+  const name = (element: ReturnType<typeof $>) => element.children("div").first().find("b, span.b").first().text().trim();
+  return fileManifest(tree.find("li.file").toArray().map((entry) => {
+    const element = $(entry);
+    const folders = element.parentsUntil(tree, "li.dir").toArray().reverse().map((folder) => name($(folder)));
+    const path = [...folders, name(element)];
+    const label = element.children("div").first();
+    const size = fileSize(label.find("i").first().text()) ?? fileSize(label.find("s").first().text());
+    return { path: path.every(Boolean) ? path.join("/") : "", size };
+  }));
 }

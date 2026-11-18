@@ -408,6 +408,10 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .change-links .change-links__previous { border-style: dashed; color: var(--dim); }
 .change-releases { display: grid; gap: 3px; margin: 0; padding-left: 16px; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
 .change-releases__more { color: var(--dim); list-style: none; margin-left: -16px; }
+.change-files { font-size: var(--text-xs); min-width: 0; overflow-wrap: anywhere; }
+.change-files summary { cursor: pointer; color: var(--ink); padding-block: 5px; }
+.change-files p { margin: 8px 0 3px; font-weight: 600; }
+.change-files__size { color: var(--dim); white-space: nowrap; }
 .detail-section--actions { display: flex; flex-wrap: wrap; gap: 8px; border: 0; }
 .detail-section--actions .button--danger { margin-left: auto; }
 .edit-subscription { margin-top: 8px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--overlay) 1.8%, transparent); }

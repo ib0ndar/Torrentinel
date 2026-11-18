@@ -6,6 +6,13 @@ import { Icon } from "./Icon";
 
 type Translate = ReturnType<typeof useI18n>["t"];
 type Snapshot = { title?: unknown; magnet?: unknown; torrentUrl?: unknown };
+type FileChange = { path: string; before?: number | string; after?: number | string };
+type FileChangeGroup = { count: number; files: FileChange[] };
+const FILE_CHANGE_LABELS = {
+  added: "{count} added",
+  removed: "{count} removed",
+  resized: "{count} resized",
+} as const;
 const RELEASE_LIMIT = 5;
 const text = (value: unknown) => typeof value === "string" && value.trim() ? value : undefined;
 const snapshot = (value: unknown) => value && typeof value === "object" ? value as Snapshot : undefined;
@@ -39,6 +46,33 @@ function TitleChange({ previous, current }: { previous: string; current: string 
   return <span className="change-title"><del><span className="visually-hidden">{t("Previous title:")} </span>{previous}</del><span className="change-title__arrow" aria-hidden="true">→</span><ins><span className="visually-hidden">{t("New title:")} </span>{current}</ins></span>;
 }
 
+function TorrentFileChanges({ value }: { value: unknown }) {
+  const { t, language } = useI18n();
+  if (!value || typeof value !== "object") return null;
+  const changes = value as Partial<Record<keyof typeof FILE_CHANGE_LABELS, FileChangeGroup>>;
+  const groups = (Object.keys(FILE_CHANGE_LABELS) as (keyof typeof FILE_CHANGE_LABELS)[])
+    .filter((key) => changes[key]?.count && Array.isArray(changes[key]?.files));
+  if (!groups.length) return null;
+  const size = (value?: number | string) => typeof value === "number"
+    ? t("{size} B", { size: value.toLocaleString(language) }) : value;
+  const groupLabel = (key: keyof typeof FILE_CHANGE_LABELS) => t(FILE_CHANGE_LABELS[key], { count: changes[key]!.count });
+  return <details className="change-files">
+    <summary>{t("File changes")} · {groups.map(groupLabel).join(" · ")}</summary>
+    {groups.map((key) => {
+      const { files, count } = changes[key]!;
+      return <section key={key}>
+        <p>{groupLabel(key)}</p>
+        <ul className="change-releases">
+          {files.map(({ path, before, after }) => <li key={path}>{path} <span className="change-files__size">
+            {key === "resized" ? <>{size(before)} <span aria-hidden="true">→</span> {size(after)}</> : size(after ?? before)}
+          </span></li>)}
+          {count > files.length && <li className="change-releases__more">{t("+{count} more", { count: count - files.length })}</li>}
+        </ul>
+      </section>;
+    })}
+  </details>;
+}
+
 // Full change details for the inspector's change history.
 export function ChangeDetails({ event }: { event: SubscriptionEvent }) {
   const { t } = useI18n();
@@ -59,9 +93,10 @@ export function ChangeDetails({ event }: { event: SubscriptionEvent }) {
   if (changes.includes("torrent file changed")) {
     const next = webHref(current?.torrentUrl), old = webHref(previous?.torrentUrl);
     if (next) links.push(<a key="torrent" href={next} target="_blank" rel="noreferrer"><Icon name="download" size={15} />{t("Torrent file")}</a>);
-    if (old) links.push(<a key="previous-torrent" className="change-links__previous" href={old} target="_blank" rel="noreferrer"><Icon name="download" size={15} />{t("Previous torrent file")}</a>);
+    if (old && old !== next) links.push(<a key="previous-torrent" className="change-links__previous" href={old} target="_blank" rel="noreferrer"><Icon name="download" size={15} />{t("Previous torrent file")}</a>);
   }
-  return <>{headline}{title && <TitleChange {...title} />}{links.length > 0 && <span className="source-links change-links">{links}</span>}</>;
+  return <>{headline}{title && <TitleChange {...title} />}{links.length > 0 && <span className="source-links change-links">{links}</span>}
+    <TorrentFileChanges value={event.payload?.fileChanges} /></>;
 }
 
 // One-line form for the Activity list.

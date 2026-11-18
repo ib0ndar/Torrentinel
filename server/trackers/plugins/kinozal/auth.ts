@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fileListSignal } from "../../../torrent-files.js";
 import type { TrackerContext } from "../../core/contracts.js";
 import { challengeDetected, TrackerError } from "../../core/errors.js";
 import {
@@ -13,6 +14,7 @@ const DEFAULT_RETRY_BACKOFF_MS = 15 * 60 * 1_000;
 
 export interface KinozalPageSession {
   get(url: string, context: TrackerContext): Promise<BrowserPage>;
+  getOptional?(url: string, context: TrackerContext): Promise<BrowserPage | undefined>;
   close?(): Promise<void>;
 }
 
@@ -69,6 +71,20 @@ export class KinozalSessionManager {
       throw error;
     }
     return result;
+  }
+
+  // A file listing can fail independently of the authenticated topic check.
+  async getOptional(url: string, context: TrackerContext): Promise<BrowserPage | undefined> {
+    const entry = await this.entry(context);
+    if (!entry.authenticated || entry.retryAfter > this.now()) return;
+    try {
+      const result = await entry.client.get(url, fileListSignal(context.signal), context.baseUrl);
+      this.rejectChallenge(result.body);
+      if (!looksLikeLoginPage(result.body)) return result;
+      entry.authenticated = false;
+    } catch {
+      context.signal?.throwIfAborted();
+    }
   }
 
   async close(): Promise<void> {

@@ -3,6 +3,9 @@ import { useSyncExternalStore } from "react";
 export type Language = "en" | "ru";
 // English text is the stable message key; user-provided content is never translated.
 export const russian: Record<string, string> = {
+  "File changes": "Изменения файлов",
+  "{count} added": "Добавлено: {count}", "{count} removed": "Удалено: {count}", "{count} resized": "Изменился размер: {count}",
+  "{size} B": "{size} Б",
   "Bottom pagination": "Навигация под списком",
   "Default entries per page": "Записей на странице по умолчанию",
   "New match: {title}": "Новое совпадение: {title}", "title changed": "изменено название", "cover changed": "изменена обложка",

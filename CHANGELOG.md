@@ -2,6 +2,12 @@
 
 All notable changes to Torrentinel are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Change history for direct subscriptions shows which files were added, removed, or resized when the tracker exposes a file list. The first available list establishes a baseline silently.
+
 ## [1.0.2] - 2026-11-01
 
 ### Fixed
